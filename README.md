@@ -29,7 +29,9 @@ codex
 - 已完成 Phase 02 记录：[`openspec/changes/archive/phase-02-search-fix/plan.md`](./openspec/changes/archive/phase-02-search-fix/plan.md)
 - 已完成 Phase 03 记录：[`openspec/changes/archive/phase-03-application-boundary/plan.md`](./openspec/changes/archive/phase-03-application-boundary/plan.md)
 - 已完成 Phase 04 记录：[`openspec/changes/archive/phase-04-windows-client-foundation/plan.md`](./openspec/changes/archive/phase-04-windows-client-foundation/plan.md)
+- 已完成 Phase 05 记录：[`openspec/changes/archive/phase-05-ai-adapter/plan.md`](./openspec/changes/archive/phase-05-ai-adapter/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
+- Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -98,7 +100,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–04 已完成，Phase 05 尚未开始。** Phase 04 已在内层仓库新增正式 `Terraria_Wiki.Windows` Avalonia WinExe 与独立 tests：Windows Host 可确认原位 data root、阻止旧/新客户端并发、组合唯一 `WikiApplication`，并完成搜索、选择结果、NativeWebView 页面、CSS/JS、图片、音频、Redirect/anchor、返回与主题最小链路。动态 loopback Viewer 和 framework-dependent/self-contained `win-x64` 产物均已在 Windows 11 x64 实测；当前客户端仍是最小 Foundation，不包含 AI、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
+**Phase 00–05 已完成，Phase 06 尚未开始。** Phase 05 新增独立 `net10.0` `Terraria_Wiki.WikiTools` Adapter：官方 MCP Streamable HTTP 以无状态、动态 `127.0.0.1:0`、临时 bearer token 和严格 Host 边界暴露且只暴露 `search_wiki` / `read_wiki`，全部查询委托现有 Application。Windows Release build 与 Core 89、Application 54、Windows 28、WikiTools 25 个测试共 196/196 通过；官方 C# client 已完成 initialize、工具发现、Search 与 Read。Python Agent、模型调用和 Windows Client 生命周期接线仍分别属于 Phase 06/07，当前客户端仍不包含 AI 交互、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
 
 ## 工作区结构
 
@@ -116,7 +118,8 @@ terraria_aiwiki/
 │  └─ adr/
 │     ├─ 0001-use-avalonia-client.md # 客户端技术决策与验证门槛
 │     ├─ 0002-portable-core-and-data-root.md # Core 与数据根决策
-│     └─ 0003-use-loopback-local-viewer-transport.md # Windows Viewer transport
+│     ├─ 0003-use-loopback-local-viewer-transport.md # Windows Viewer transport
+│     └─ 0004-use-loopback-mcp-wiki-tool-transport.md # Wiki Tool transport
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约
@@ -128,7 +131,7 @@ terraria_aiwiki/
 
 现有源码位于 `terraria-wiki-offline/`，它的基线技术包括 C#、.NET 10、.NET MAUI、Blazor Hybrid / Razor、SQLite / FTS5、HtmlAgilityPack 和 MediaWiki API。MAUI/Blazor 是旧宿主事实，不再是 Windows 目标架构。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；依赖升级、安装器、WebView2 bootstrap 与发布渠道仍须在对应后续 Phase 验证。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter。Python Agent、客户端 Runtime 接线、依赖升级、安装器、WebView2 bootstrap 与发布渠道仍须在对应后续 Phase 验证。
 
 | 环境 | 职责 |
 |---|---|

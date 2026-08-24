@@ -51,6 +51,7 @@ MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 
 - Avalonia Presentation / client host（Phase 04 已建立正式 Windows Foundation）；
 - NativeWebView 通过受限动态 loopback 承载现有 Local Wiki Viewer；
 - Windows data-root、设置、锁、外链和 Viewer Adapters 已实现最小链路，Android Adapters 后续实现；
+- 独立 Wiki Tool Adapter 通过无状态、动态 loopback MCP 只暴露 Application Search / Read，Windows Runtime 接线留 Phase 07；
 - Python Agent 业务逻辑与 Windows/Android Runtime 分离。
 
 产品平台范围是 Windows（当前）与 Android（未来）；iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他平台均为明确非目标。WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。源码中存在某个平台 target、条件编译或框架能力，不代表该平台已经成为产品承诺；扩大平台范围必须由用户重新授权并更新架构决策。
@@ -83,7 +84,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–04 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-04-*` 计划；Phase 05 尚未开始。Phase 01–03 已建立 portable Core、七级 FTS5 Search 和薄 Application。Phase 04 新增正式 `net10.0-windows10.0.17763.0` / `win-x64` Avalonia WinExe、独立 Windows tests、原子 host settings、data-root 选择和并发锁、唯一 `WikiApplication` 组合，以及通过 Application Read/Asset/Library 的 NativeWebView loopback Viewer。Windows 11 x64 的 Release build、171 个全量 tests、正式 run 和 framework-dependent/self-contained publish smoke 已通过；当前仍是最小客户端 Foundation，AI、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–05 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-05-*` 计划；Phase 06 尚未开始。Phase 01–03 已建立 portable Core、七级 FTS5 Search 和薄 Application，Phase 04 已建立正式 Avalonia Windows Foundation 与受限 Viewer。Phase 05 新增只在 project 层引用 Application 的 `net10.0` Wiki Tool Adapter，以官方 MCP SDK 2.2.0 的无状态动态 loopback、临时 bearer token 和严格 Host 边界只暴露 `search_wiki` / `read_wiki`。Windows Release build 0 warning/error，Core 89、Application 54、Windows 28、WikiTools 25 共 196/196 tests 通过；官方 C# client 已覆盖 initialize、工具发现、Search/Read。Python Agent、模型调用、Windows Runtime 接线、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 
