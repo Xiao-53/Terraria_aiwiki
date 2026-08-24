@@ -6,7 +6,7 @@
 
 Terraria AI Wiki 将现有 Terraria Wiki Offline 逐步改造成新的 Terraria AI 应用：复用成熟的本地 Wiki 数据核心，建立可移植 C# Core、薄 Application、新客户端 Presentation 和 Python Agent。
 
-Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebView 已通过 Phase 00 的 Windows 11 x64 工具链、SQLite/WAL/FTS5、Local Viewer、数据包、平台路径与发布硬门槛，成为已验证的首选客户端方向。WPF + Blazor Hybrid 仍只作为未来出现独立硬阻断后的回退，不并行建设第二套客户端。
+Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebView 已通过 Phase 00 的宿主选择门槛，并在 Phase 04 进入正式 Windows WinExe；动态 loopback Viewer、Application 组合、data-root/设置/锁 adapters 和两种 `win-x64` 发布形态已在 Windows 11 x64 验证。WPF + Blazor Hybrid 仍只作为未来出现独立硬阻断后的回退，不并行建设第二套客户端。
 
 本地 Wiki 数据是 Terraria 机制、物品、配方和进度问题的主要事实来源。远程 LLM 负责决定查询步骤、阅读相关页面、执行多步分析并组织回答；不能只依赖模型记忆回答事实问题。
 
@@ -48,9 +48,9 @@ MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 
 
 - Portable C#/.NET 10 Wiki Core；
 - 薄 Application 用例边界；
-- Avalonia Presentation / client host（Phase 00 Windows 11 x64 已验证）；
-- NativeWebView 承载现有 Local Wiki Viewer；
-- Windows Platform Adapters 当前实现，Android Adapters 后续实现；
+- Avalonia Presentation / client host（Phase 04 已建立正式 Windows Foundation）；
+- NativeWebView 通过受限动态 loopback 承载现有 Local Wiki Viewer；
+- Windows data-root、设置、锁、外链和 Viewer Adapters 已实现最小链路，Android Adapters 后续实现；
 - Python Agent 业务逻辑与 Windows/Android Runtime 分离。
 
 产品平台范围是 Windows（当前）与 Android（未来）；iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他平台均为明确非目标。WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。源码中存在某个平台 target、条件编译或框架能力，不代表该平台已经成为产品承诺；扩大平台范围必须由用户重新授权并更新架构决策。
@@ -83,7 +83,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–03 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-03-*` 计划；Phase 04 尚未开始。Phase 01 已建立单一 `net10.0` portable Core、Core-only 测试面和旧 MAUI 兼容 façade，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。Phase 02 已在同一 SQLite FTS5 trigram 上固定七级 Search 排序、多词/短词语义、`MaxResults 1..100`、纯文本摘要与安全高亮。Phase 03 已新增只引用 Core 的单一 `net10.0` Application、五组具体用例、两个宿主 ports、无持久化泄漏的公共 DTO 和独立测试；活动 Wiki 热切换与破坏性流程共用 Core 数据门闩和消费者暂停 lease。Master Architecture v0.6 的 Phase 顺序和边界不变；生产客户端、AI、Windows Runtime 与 Android 均未进入实施。
+Phase 00–04 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-04-*` 计划；Phase 05 尚未开始。Phase 01–03 已建立 portable Core、七级 FTS5 Search 和薄 Application。Phase 04 新增正式 `net10.0-windows10.0.17763.0` / `win-x64` Avalonia WinExe、独立 Windows tests、原子 host settings、data-root 选择和并发锁、唯一 `WikiApplication` 组合，以及通过 Application Read/Asset/Library 的 NativeWebView loopback Viewer。Windows 11 x64 的 Release build、171 个全量 tests、正式 run 和 framework-dependent/self-contained publish smoke 已通过；当前仍是最小客户端 Foundation，AI、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

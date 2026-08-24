@@ -1,6 +1,6 @@
 # Local Wiki Viewer 能力契约
 
-- 状态：confirmed baseline
+- 状态：confirmed baseline；Windows Phase 04 transport 已确认
 - 适用范围：Application/Core 读取边界、Local Viewer Adapter、Windows 与后续 Android 客户端
 - 来源：现有 Local Wiki Viewer P0 行为；Master Architecture v0.6
 
@@ -30,6 +30,16 @@
 - 本地资源映射只有在目标平台实际支持响应内容、相对 URL、媒体、脚本和消息桥后才可采用；平台支持表不能替代项目验证。
 - WebView 的 origin、CORS、外部导航和消息来源必须限制到完成 Viewer 所需的最小范围。
 
+### Windows 已确认实现
+
+- Windows 使用动态 `127.0.0.1:0` loopback，只接受精确当前 Host 的 GET/HEAD；拒绝 absolute target、路径穿越、反斜线、冒号和 NUL，不提供宽松 CORS。
+- build/publish 从旧项目直接复制 Viewer HTML/CSS/JS、公共资源和 `iframe-bridge.js`，不维护第二份站点资产。
+- `/src/*` 只通过 Application `Query.ReadAssetAsync`；页面与 Redirect 只通过 `Query.ReadAsync`；页面成功读取后由宿主显式调用 `Library.RecordVisitAsync`。
+- outer host 与 C# 分别校验精确 origin/source、`req/res`、request ID 和方法；HTTP(S) 外链交给系统浏览器，未知或未支持方法返回可观察错误。
+- pause lease 停止 listener；释放后仅在宿主仍存活时按当前活动 Wiki 重启。退出后不得遗留 listener 或继续访问已释放 Application。
+- Windows 默认依赖系统 Evergreen WebView2；framework-dependent/self-contained .NET 均不等于捆绑 WebView2。安装器、bootstrap 和签名仍属于 Phase 11。
+- 以上行为由 Windows 11 x64 验证支持；Android transport 仍保持开放，不能从 Windows 结论外推。
+
 ### 接管与回退
 
 - 新 Viewer 通过页面、资源、内部链接、主题、消息和生命周期回归前，旧 Viewer backend 不得删除。
@@ -42,7 +52,8 @@
 3. C# 调用 JS、JS 向宿主发消息，来源和错误路径可观察。
 4. transport 端口冲突或初始化失败时，应用报告明确错误且可以恢复或回退。
 5. 多次打开/关闭、前后台切换和应用退出后，不留下不可控的 listener 或错误活动数据源。
+6. Windows 精确拒绝错误 Host、非 GET/HEAD、路径穿越、非法消息来源/ID 和未知方法；缺失 WebView2、数据源不可用与 transport 失败均可观察。
 
 ## 变更规则
 
-本 spec 只定义持续行为。NativeWebView 包版本、端口选择、资源映射 API 和具体 Adapter 结构写入对应 Phase 计划或 ADR。
+本 spec 只定义持续行为。Windows transport 长期决策见 `docs/adr/0003-use-loopback-local-viewer-transport.md`；NativeWebView 包版本与具体 Adapter 文件结构仍写入对应 Phase 计划。
