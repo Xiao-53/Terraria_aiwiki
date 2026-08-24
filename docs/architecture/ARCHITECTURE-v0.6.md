@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–02 已完成，Phase 03 尚未开始
+> **项目状态**：实施中；Phase 00–03 已完成，Phase 04 尚未开始
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -176,7 +176,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **00 — Migration Baseline & Host Spike** | 锁定 P0 基线，以 Windows 垂直切片验证首选轻量宿主；不正式迁移 Core | 无 | 已完成：Avalonia + NativeWebView 通过 Windows 11 x64 门槛 | `openspec/changes/archive/phase-00-migration-baseline/plan.md` |
 | **01 — Portable Wiki Core** | 逐步移动持久化模型和平台无关 Wiki 能力，只适配已证实的宿主边缘 | 00 | 已完成：单一 `net10.0` Core 在无 MAUI/UI 引用下通过兼容回归 | `openspec/changes/archive/phase-01-portable-wiki-core/plan.md` |
 | **02 — Search Fix** | 在可测试 Core 上修正已确认搜索问题，保留 SQLite FTS5 | 01 | 已完成：手动搜索与未来 AI 共用的七级查询行为有 Core 回归证据 | `openspec/changes/archive/phase-02-search-fix/plan.md` |
-| **03 — Application Boundary** | 建立 UI 所需的薄用例边界，移除新 UI 对数据库和全局状态的直接依赖 | 01；通常在 02 后 | 查询、阅读、同步、数据管理和设置可由稳定用例调用 | `openspec/changes/phase-03-application-boundary/plan.md` |
+| **03 — Application Boundary** | 建立 UI 所需的薄用例边界，移除新 UI 对数据库和全局状态的直接依赖 | 01；通常在 02 后 | 已完成：查询、阅读、同步、数据管理和设置可由稳定用例调用 | `openspec/changes/archive/phase-03-application-boundary/plan.md` |
 | **04 — Windows Client Foundation** | 建立 Avalonia Windows 壳、Windows Adapters 和 Viewer 最小链路 | 00、03 | Windows 可完成启动、搜索、打开页面和加载本地资源 | `openspec/changes/phase-04-windows-client-foundation/plan.md` |
 | **05 — AI Adapter** | 以最小侵入向 AI 暴露 Wiki Search / Read | 02、03 | AI 可通过稳定边界查询和读取现有 Wiki | `openspec/changes/phase-05-ai-adapter/plan.md` |
 | **06 — AI Backend** | 建立最小 Python Agent 与多步 Tool Calling；不做最终 UI | 05 | 代表性问题完成 Search → Read → Answer | `openspec/changes/phase-06-ai-backend/plan.md` |

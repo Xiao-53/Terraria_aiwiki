@@ -83,7 +83,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00、Phase 01 与 Phase 02 已完成，验证记录位于 `openspec/changes/archive/phase-00-migration-baseline/plan.md`、`openspec/changes/archive/phase-01-portable-wiki-core/plan.md` 和 `openspec/changes/archive/phase-02-search-fix/plan.md`；Phase 03 尚未开始。Phase 01 已建立单一 `net10.0` portable Core、Core-only 测试面和旧 MAUI 兼容 façade，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。Phase 02 已在同一 SQLite FTS5 trigram 上固定七级 Search 排序、多词/短词语义、`MaxResults 1..100`、纯文本摘要与安全高亮，旧手动 UI 与未来 AI 共用同一 `WikiReader` 查询边界。Master Architecture v0.6 确定的 Phase 00–13 顺序和边界不变；Application、生产客户端、AI、Windows Runtime 与 Android 均未进入实施。
+Phase 00–03 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-03-*` 计划；Phase 04 尚未开始。Phase 01 已建立单一 `net10.0` portable Core、Core-only 测试面和旧 MAUI 兼容 façade，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。Phase 02 已在同一 SQLite FTS5 trigram 上固定七级 Search 排序、多词/短词语义、`MaxResults 1..100`、纯文本摘要与安全高亮。Phase 03 已新增只引用 Core 的单一 `net10.0` Application、五组具体用例、两个宿主 ports、无持久化泄漏的公共 DTO 和独立测试；活动 Wiki 热切换与破坏性流程共用 Core 数据门闩和消费者暂停 lease。Master Architecture v0.6 的 Phase 顺序和边界不变；生产客户端、AI、Windows Runtime 与 Android 均未进入实施。
 
 ## 治理关系
 

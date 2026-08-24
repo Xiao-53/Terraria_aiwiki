@@ -27,6 +27,7 @@ codex
 - 已完成 Phase 00 记录：[`openspec/changes/archive/phase-00-migration-baseline/plan.md`](./openspec/changes/archive/phase-00-migration-baseline/plan.md)
 - 已完成 Phase 01 记录：[`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`](./openspec/changes/archive/phase-01-portable-wiki-core/plan.md)
 - 已完成 Phase 02 记录：[`openspec/changes/archive/phase-02-search-fix/plan.md`](./openspec/changes/archive/phase-02-search-fix/plan.md)
+- 已完成 Phase 03 记录：[`openspec/changes/archive/phase-03-application-boundary/plan.md`](./openspec/changes/archive/phase-03-application-boundary/plan.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -95,7 +96,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00、Phase 01 与 Phase 02 已完成，Phase 03 尚未开始。** Windows 退出 MAUI 是已确定约束；Avalonia + NativeWebView 已通过 Phase 00 的 Windows 11 x64 宿主门槛。Phase 01 已在内层源码仓库建立单一 `net10.0` portable Core、Core-only 自动化测试和旧 MAUI 兼容 façade，并用真实 SQLite/WAL 数据与 3.58 GB golden `.pkg` 验证原位兼容。Phase 02 在保留 SQLite FTS5 trigram 和现有数据格式的前提下，固定了七级 Search 排序、短词策略、结果上限、纯文本摘要和安全高亮，并修正旧手动搜索面板的查询竞态与渲染边界。Application、AI、生产 Presentation、Windows Runtime 与 Android 均尚未按新路线实施；已完成的 PoC、Core 与 Search Fix 均不得被误报为生产客户端。
+**Phase 00–03 已完成，Phase 04 尚未开始。** Windows 退出 MAUI 是已确定约束；Avalonia + NativeWebView 已通过 Phase 00 的 Windows 11 x64 宿主门槛。Phase 01 建立单一 `net10.0` portable Core 与旧 MAUI 兼容 façade，Phase 02 固定同一 SQLite FTS5 上的七级 Search 行为。Phase 03 新增只引用 Core 的单一 `net10.0` Application、五组具体用例、两个宿主 ports 和独立自动化测试；设置、活动 Wiki 热切换、Search/Read、页面/历史/收藏、同步维护及 package 两阶段流程现在可在不访问 `App.*`、SQLite API 或平台 API 的情况下调用。AI、生产 Presentation、Windows Runtime 与 Android 尚未按新路线实施；已完成的 Application 边界不得被误报为生产客户端。
 
 ## 工作区结构
 
