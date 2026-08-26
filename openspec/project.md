@@ -40,7 +40,7 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 - SQLite、FTS5、sqlite-net-pcl
 - HtmlAgilityPack
 - MediaWiki API
-- Python 3.12–3.14 Agent，PydanticAI 2.31 与首个 OpenAI Responses provider
+- Python 3.12–3.14 Agent，PydanticAI 2.31 与可配置 OpenAI-compatible Responses / Chat provider 边界
 
 MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 Windows 目标技术承诺。现有 Razor Presentation 作为行为参考和过渡基线；Local Viewer 的 HTML/CSS/JS、页面与 WikiAsset 链路仍是需要保留的资产。
 
@@ -84,7 +84,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–05 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-05-*` 计划。Phase 06 的 Python 3.12–3.14 单轮 Agent、来源/预算/错误边界、解析锁、测试专用真实 C# MCP Host 和跨语言链路已实现；WSL、Windows Python 与 Windows .NET 的非付费门槛已通过。三场固定 `gpt-5.6-luna` 真实评估仍缺环境 `OPENAI_API_KEY` 和最多 0.30 美元付费授权，因此 Phase 06 保持进行中且未归档。Windows Runtime 接线、流式、多轮、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–06 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-06-*` 计划。Phase 06 已交付 Python 3.12–3.14 单轮 Agent、来源/预算/错误边界、解析锁、测试专用真实 C# MCP Host 和跨语言链路；provider 使用显式 OpenAI-compatible endpoint、模型与 Responses / Chat 线协议，不内置供应商默认值。WSL/Windows Python 门槛、Windows .NET 199/199 和 DeepSeek `deepseek-v4-flash` Responses 三场真实验收均通过；该实测不自动证明其他兼容 endpoint 可用。Windows Runtime 接线、流式、多轮、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

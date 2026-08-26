@@ -1,6 +1,6 @@
 # AI Backend 能力契约
 
-- 状态：confirmed baseline；Phase 06 真实 OpenAI 验收待外部前置
+- 状态：confirmed baseline；通用 OpenAI-compatible 边界与 DeepSeek V4 Flash 三场验收通过
 - 适用范围：Python Agent、AI Runtime Adapter、Windows Runtime lifecycle；不包含客户端 UI 或目标平台打包
 - 来源：Master Architecture v0.6、Wiki Search / Read 边界、Wiki Tools、Phase 06、ADR 0005
 
@@ -18,10 +18,12 @@
 
 ## 模型与运行设置
 
-- 首个 provider 使用 OpenAI Responses API；默认模型为 `openai:gpt-5.6-luna`、reasoning effort 为 `medium`、`store=false`、parallel tool calls 为 false、truncation 为 disabled。
-- 公共设置允许调用方把安全上限向下收紧，不允许把它们调高。provider 必须保持 `openai:*`，API 固定为 Responses，store 不得开启。
-- API key 只由 provider 从运行环境取得，不进入公共设置、connection、错误、日志、测试 fixture 或仓库文件。
-- PydanticAI 及首个 provider 是 Agent 内部实现选择；客户端和 Application 只能依赖本能力的 typed 结果与稳定错误，不依赖 PydanticAI 类型。
+- Agent 不绑定单一模型供应商。Runtime 必须显式提供 OpenAI-compatible `base_url`、非空模型名和 `responses` / `chat_completions` 线协议；没有隐式生产 provider 或模型默认值。
+- 远程 provider endpoint 必须使用 HTTPS。HTTP 只允许字面 IPv4/IPv6 loopback 地址；拒绝 userinfo、query、fragment、非法端口和带首尾空白的配置。
+- API key 固定只从 `TERRARIA_AI_API_KEY` 环境变量取得，不进入公共 settings、connection、URL、错误、日志、测试 fixture 或仓库文件。库不读取 `.env`。
+- 通用兼容 profile 不请求 strict tool schema 或 required tool choice，把系统规则保持为单一 `system` message，并避免假设 Chat endpoint 接受 `max_completion_tokens`。可选 reasoning effort 只在调用方显式配置时发送。
+- `store`、`truncation`、并行工具、reasoning 和 token 预计算并非所有兼容 endpoint 的共同能力；本契约不把被忽略的请求字段描述成保证。远程服务的数据保留、并行行为与定价仍须按具体 provider 实测和披露。
+- 公共设置允许调用方把安全上限向下收紧，不允许调高。PydanticAI 与 OpenAI-compatible model classes 是 Agent 内部实现；客户端和 Application 只能依赖 typed 结果与稳定错误。
 
 ## 证据工作流与不可信内容
 
@@ -53,9 +55,9 @@
 - 最多 300000 累计 tokens；
 - 单次模型请求最多 256000 输入 tokens；
 - 最多 120 秒；
-- 最多 0.10 美元。
+- 最多 0.10 美元（provider 可被定价时强制；未知定价时为 best-effort 并返回未知成本）。
 
-超限必须返回稳定预算或 context 错误，不得静默截断或继续付费。完整 Wiki HTML 继续沿用 Wiki Tools 契约；超大页面导致 context limit 时明确失败，Reader/HTML 转换必须由后续独立证据和决策引入。
+请求、工具和 provider 返回后的 token 超限必须返回稳定预算或 context 错误，不得静默截断。为了兼容不提供预计算 endpoint 的服务，输入 token 上限不承诺请求前拦截；美元成本也不能替代 provider 自身余额/限额。完整 Wiki HTML 继续沿用 Wiki Tools 契约；超大页面导致 context limit 时明确失败，Reader/HTML 转换必须由后续独立证据和决策引入。
 
 ## 错误、取消与脱敏
 
@@ -78,11 +80,12 @@
 ## 验收场景
 
 1. 离线模型测试全局禁止真实 provider 请求，覆盖配置、连接、来源派生、Redirect/anchor、去重、证据不足、工具错误、取消、超时、预算、脱敏与提示注入。
-2. Windows Python 通过真实 C# TestHost 发现恰好两个工具，完成 Search → 多 Read → typed Answer；fixture 覆盖 Redirect 配方、两项材料、无结果和恶意页面。
-3. WSL Python 3.12 与 Windows Python 3.14 使用同一解析锁通过 lint、格式、strict mypy 与适用测试；Windows .NET Release build 和全部测试通过。
-4. 首次真实模型验收固定运行多跳配方、无证据拒答和提示注入抵抗三场；每场满足事实、轨迹与来源约束。总授权上限为 0.30 美元，额外重跑需重新授权。
-5. 静态依赖门确认生产 Agent 不接触 SQLite/Core/Application/UI/平台路径，生产 .NET 项目不引用测试 Host，仓库不含 secret、用户数据、虚拟环境或缓存。
+2. 离线配置测试覆盖 Responses / Chat 两种 model classes、远程 HTTPS / loopback HTTP、保守兼容 profile、缺失 secret 和脱敏；具体兼容 endpoint 未实测时不得宣称可用。
+3. Windows Python 通过真实 C# TestHost 发现恰好两个工具，完成 Search → 多 Read → typed Answer；fixture 覆盖 Redirect 配方、两项材料、无结果和恶意页面。
+4. WSL Python 3.12 与 Windows Python 3.14 使用同一解析锁通过 lint、格式、strict mypy 与适用测试；Windows .NET Release build 和全部测试通过。
+5. 首个真实 endpoint 使用 DeepSeek `deepseek-v4-flash` Responses，固定运行多跳配方、无证据拒答和提示注入抵抗三场；每场满足事实、轨迹与来源约束。最终验收 3/3 通过；其他 endpoint/model 不继承该实测结论。
+6. 静态依赖门确认生产 Agent 不接触 SQLite/Core/Application/UI/平台路径，生产 .NET 项目不引用测试 Host，仓库不含 secret、用户数据、虚拟环境或缓存。
 
 ## 变更规则
 
-公共 answer/source/usage/error 语义、证据规则、预算上限、安全边界、首个 provider 或 Runtime 分层变化时更新本 spec，并在需要时新增 ADR。具体依赖版本、类、fixture、命令和验证记录进入对应 Phase 计划；Wiki Tool JSON 契约变化同时更新 `wiki-tools` spec。
+公共 answer/source/usage/error 语义、证据规则、预算上限、provider 配置/endpoint/secret 安全边界或 Runtime 分层变化时更新本 spec，并在需要时新增 ADR。具体供应商与模型验收、依赖版本、类、fixture、命令和验证记录进入对应 Phase 计划；Wiki Tool JSON 契约变化同时更新 `wiki-tools` spec。

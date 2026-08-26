@@ -30,7 +30,7 @@ codex
 - 已完成 Phase 03 记录：[`openspec/changes/archive/phase-03-application-boundary/plan.md`](./openspec/changes/archive/phase-03-application-boundary/plan.md)
 - 已完成 Phase 04 记录：[`openspec/changes/archive/phase-04-windows-client-foundation/plan.md`](./openspec/changes/archive/phase-04-windows-client-foundation/plan.md)
 - 已完成 Phase 05 记录：[`openspec/changes/archive/phase-05-ai-adapter/plan.md`](./openspec/changes/archive/phase-05-ai-adapter/plan.md)
-- 进行中 Phase 06 计划：[`openspec/changes/phase-06-ai-backend/plan.md`](./openspec/changes/phase-06-ai-backend/plan.md)
+- 已完成 Phase 06 记录：[`openspec/changes/archive/phase-06-ai-backend/plan.md`](./openspec/changes/archive/phase-06-ai-backend/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
@@ -103,7 +103,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–05 已完成；Phase 06 实现与非付费验证已完成，正等待真实 OpenAI 验收门槛。** Phase 06 新增 Python 3.12–3.14 单轮 Agent，通过受限 MCP 执行 Search → 多次 Read → typed Answer，来源只从成功 Read 派生，并固定请求、工具、token、时间和成本上限。WSL Python 3.12、Windows Python 3.14、真实 C# MCP TestHost 与 Windows .NET 回归已通过计划内的非付费门槛；三场 `gpt-5.6-luna` 真实评估仍需环境提供 `OPENAI_API_KEY` 及用户对最多 0.30 美元调用的明确授权，因此本 Phase 尚未标记完成或归档。Phase 07 的 Windows Runtime/流式/打包尚未开始，当前客户端仍不包含 AI 交互、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
+**Phase 00–06 已完成。** Phase 06 Agent 通过受限 MCP 执行 Search → 多次 Read → typed Answer，来源只从成功 Read 派生；Runtime 可显式配置 Responses 或 Chat Completions endpoint、模型与通用环境密钥，不内置单一供应商。WSL Python 3.12、Windows Python 3.14、真实 C# Host 与 Windows .NET 199/199 回归均通过；`deepseek-v4-flash` Responses 的多跳配方、无证据拒答和提示注入三场真实验收为 3/3。该结果只确认这个 endpoint/model 组合，其他 OpenAI-compatible 服务仍须独立验收。Phase 07 的 Windows Runtime/流式/打包尚未开始，当前客户端仍不包含 AI 交互、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
 
 ## 工作区结构
 
