@@ -30,8 +30,11 @@ codex
 - 已完成 Phase 03 记录：[`openspec/changes/archive/phase-03-application-boundary/plan.md`](./openspec/changes/archive/phase-03-application-boundary/plan.md)
 - 已完成 Phase 04 记录：[`openspec/changes/archive/phase-04-windows-client-foundation/plan.md`](./openspec/changes/archive/phase-04-windows-client-foundation/plan.md)
 - 已完成 Phase 05 记录：[`openspec/changes/archive/phase-05-ai-adapter/plan.md`](./openspec/changes/archive/phase-05-ai-adapter/plan.md)
+- 进行中 Phase 06 计划：[`openspec/changes/phase-06-ai-backend/plan.md`](./openspec/changes/phase-06-ai-backend/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
+- AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
+- AI Backend 能力契约：[`openspec/specs/ai-backend/spec.md`](./openspec/specs/ai-backend/spec.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -100,7 +103,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–05 已完成，Phase 06 尚未开始。** Phase 05 新增独立 `net10.0` `Terraria_Wiki.WikiTools` Adapter：官方 MCP Streamable HTTP 以无状态、动态 `127.0.0.1:0`、临时 bearer token 和严格 Host 边界暴露且只暴露 `search_wiki` / `read_wiki`，全部查询委托现有 Application。Windows Release build 与 Core 89、Application 54、Windows 28、WikiTools 25 个测试共 196/196 通过；官方 C# client 已完成 initialize、工具发现、Search 与 Read。Python Agent、模型调用和 Windows Client 生命周期接线仍分别属于 Phase 06/07，当前客户端仍不包含 AI 交互、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
+**Phase 00–05 已完成；Phase 06 实现与非付费验证已完成，正等待真实 OpenAI 验收门槛。** Phase 06 新增 Python 3.12–3.14 单轮 Agent，通过受限 MCP 执行 Search → 多次 Read → typed Answer，来源只从成功 Read 派生，并固定请求、工具、token、时间和成本上限。WSL Python 3.12、Windows Python 3.14、真实 C# MCP TestHost 与 Windows .NET 回归已通过计划内的非付费门槛；三场 `gpt-5.6-luna` 真实评估仍需环境提供 `OPENAI_API_KEY` 及用户对最多 0.30 美元调用的明确授权，因此本 Phase 尚未标记完成或归档。Phase 07 的 Windows Runtime/流式/打包尚未开始，当前客户端仍不包含 AI 交互、正式导航/视觉、完整 P0 管理 UI、安装器或 Android。
 
 ## 工作区结构
 
@@ -119,7 +122,8 @@ terraria_aiwiki/
 │     ├─ 0001-use-avalonia-client.md # 客户端技术决策与验证门槛
 │     ├─ 0002-portable-core-and-data-root.md # Core 与数据根决策
 │     ├─ 0003-use-loopback-local-viewer-transport.md # Windows Viewer transport
-│     └─ 0004-use-loopback-mcp-wiki-tool-transport.md # Wiki Tool transport
+│     ├─ 0004-use-loopback-mcp-wiki-tool-transport.md # Wiki Tool transport
+│     └─ 0005-use-pydantic-ai-openai-backend.md # AI Backend
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约

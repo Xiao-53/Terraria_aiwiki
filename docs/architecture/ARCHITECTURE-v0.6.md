@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–05 已完成，Phase 06 尚未开始
+> **项目状态**：实施中；Phase 00–05 已完成，Phase 06 已实现并等待真实模型验收
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -179,7 +179,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **03 — Application Boundary** | 建立 UI 所需的薄用例边界，移除新 UI 对数据库和全局状态的直接依赖 | 01；通常在 02 后 | 已完成：查询、阅读、同步、数据管理和设置可由稳定用例调用 | `openspec/changes/archive/phase-03-application-boundary/plan.md` |
 | **04 — Windows Client Foundation** | 建立 Avalonia Windows 壳、Windows Adapters 和 Viewer 最小链路 | 00、03 | 已完成：Windows 可启动、搜索、打开页面并加载本地资源 | `openspec/changes/archive/phase-04-windows-client-foundation/plan.md` |
 | **05 — AI Adapter** | 以最小侵入向 AI 暴露 Wiki Search / Read | 02、03 | 已完成：无状态 loopback MCP 可通过 Application 查询和读取现有 Wiki | `openspec/changes/archive/phase-05-ai-adapter/plan.md` |
-| **06 — AI Backend** | 建立最小 Python Agent 与多步 Tool Calling；不做最终 UI | 05 | 代表性问题完成 Search → Read → Answer | `openspec/changes/phase-06-ai-backend/plan.md` |
+| **06 — AI Backend** | 建立最小 Python Agent 与多步 Tool Calling；不做最终 UI | 05 | 验证中：实现与非付费门槛已通过；三场真实模型验收待 key 与付费授权 | `openspec/changes/phase-06-ai-backend/plan.md` |
 | **07 — Windows Runtime Smoke Test** | 接通客户端、AI Runtime、流式交互、生命周期和最小发布产物 | 04、06 | 发布环境中客户端、AI 与本地 Wiki 最小链路可启动 | `openspec/changes/phase-07-windows-runtime-smoke-test/plan.md` |
 | **08 — Presentation Rebuild** | 建设新的产品信息架构和核心页面，通过 Application 使用后端 | 04、07 | 新 Presentation 可承载 Chat、Wiki 和后续接管流程 | `openspec/changes/phase-08-presentation-rebuild/plan.md` |
 | **09 — P0 UI Takeover** | 新 UI 逐项接管 Wiki、数据管理、设置、导入导出、维护和错误流程 | 08 | 新客户端覆盖计划内 P0 入口和目标用户流程 | `openspec/changes/phase-09-p0-ui-takeover/plan.md` |
