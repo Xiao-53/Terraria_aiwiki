@@ -1,7 +1,7 @@
 # Windows AI Runtime 能力契约
 
 - 状态：implemented baseline；无外网、两种发布 smoke 与发布版 DeepSeek 真实验收通过
-- 适用范围：Avalonia Windows Host、Wiki Tool lifecycle、Python Sidecar、AI 配置与临时 AI 面板；不外推 Android
+- 适用范围：Avalonia Windows Host、Wiki Tool lifecycle、Python Sidecar、AI 配置与 Presentation Runtime 边界；不外推 Android
 - 来源：Master Architecture v0.6、Phase 07、ADR 0003–0006、AI Backend 与 Wiki Tools 能力契约
 
 ## 目的
@@ -49,9 +49,9 @@
 - Sidecar fatal、协议错误或意外退出后，停止其关联 WikiToolServer；不无限自动重启。用户显式“重试 AI”时先释放旧 Runtime，再创建新的 MCP server，因此必须轮换端口与 bearer。
 - 只有宿主启动并保存句柄的 Python `Process` 可以在 shutdown 超时后使用 `Kill(entireProcessTree: true)`；不得按进程名扫描或终止其他 Python。
 
-## UI 与故障隔离
+## Presentation Runtime 边界与故障隔离
 
-- Phase 07 临时面板只提供单轮问题、发送、停止、重试 AI、Search/Read 工具状态、只读流式正文、可信来源与 usage；不引入 Markdown UI 依赖或最终视觉体系。
+- Phase 08 Presentation 提供单轮问题、发送、停止、重试 AI、Search/Read 工具状态、安全流式 Markdown、可信来源与 usage；具体布局、Markdown allowlist 和共享 Reader 行为由 `openspec/specs/windows-presentation/spec.md` 约束。
 - 每次发送前清除上次正文、工具状态、来源与 usage；问题之间不传递、不显示为会话历史，也不持久化。
 - 缺少配置、key、Python、锁定依赖或 provider 不可用时，只把 AI 面板置为 Disabled/Failed；离线 Search、Viewer 与已有数据能力继续可操作。
 - 向用户显示的 Runtime 错误只来自固定安全 code/message。provider 原始错误、stderr、路径、bearer、HTML、工具参数和响应不进入 UI。
@@ -67,6 +67,6 @@
 
 ## 非目标与变更规则
 
-本能力不包含多轮、凭据 UI/Windows Credential Manager、内置 Python、自动安装、Reader/HTML 精简、安装器、签名、WebView2 bootstrap、正式 Presentation、Android、Vector/Embedding 或数据格式变化。
+本能力不包含多轮、凭据 UI/Windows Credential Manager、内置 Python、自动安装、Reader/HTML 精简、安装器、签名、WebView2 bootstrap、Android、Vector/Embedding 或数据格式变化。
 
 协议版本、消息字段/顺序、配置 schema、Python/依赖范围、secret 边界、进程终止策略或启动退出顺序变化时必须更新本 spec 与 ADR 0006。Android Runtime 必须另行决定，不能继承 Windows stdio、路径、loopback 或打包假设。

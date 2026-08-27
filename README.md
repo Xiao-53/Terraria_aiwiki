@@ -32,12 +32,14 @@ codex
 - 已完成 Phase 05 记录：[`openspec/changes/archive/phase-05-ai-adapter/plan.md`](./openspec/changes/archive/phase-05-ai-adapter/plan.md)
 - 已完成 Phase 06 记录：[`openspec/changes/archive/phase-06-ai-backend/plan.md`](./openspec/changes/archive/phase-06-ai-backend/plan.md)
 - 已完成 Phase 07 记录：[`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`](./openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md)
+- 已完成 Phase 08 记录：[`openspec/changes/archive/phase-08-presentation-rebuild/plan.md`](./openspec/changes/archive/phase-08-presentation-rebuild/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
 - Windows AI Runtime 决策：[`docs/adr/0006-use-stdio-python-sidecar.md`](./docs/adr/0006-use-stdio-python-sidecar.md)
 - AI Backend 能力契约：[`openspec/specs/ai-backend/spec.md`](./openspec/specs/ai-backend/spec.md)
 - Windows AI Runtime 能力契约：[`openspec/specs/windows-ai-runtime/spec.md`](./openspec/specs/windows-ai-runtime/spec.md)
+- Windows Presentation 能力契约：[`openspec/specs/windows-presentation/spec.md`](./openspec/specs/windows-presentation/spec.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -106,7 +108,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–07 已完成。** Windows Avalonia Client 已接入动态 WikiToolServer 与长驻 stdio Python Sidecar，可显示 Search/Read 状态、流式正文、可信来源和 usage，并支持停止、独立再次提问与手动重试。WSL/Windows Python 3.12、Windows .NET 219/219、真实无外网跨语言链路、正式 WinExe、framework-dependent/self-contained `win-x64` 发布 smoke，以及发布版 DeepSeek `deepseek-v4-flash` 单次真实验收均已通过；AI 缺少配置、密钥或 Runtime 故障时离线 Search/Viewer 仍可用。客户端仍不包含多轮、正式导航/视觉、完整 P0 管理 UI、内置 Python、安装器或 Android。
+**Phase 00–08 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation：窄导航栏、独立单轮 Chat、安全流式 Markdown、工具进度、可信来源、usage、Wiki 搜索和唯一共享 Reader 已接通；宽屏默认 AI/Reader 双栏，窄屏默认保留 AI 画布并按需覆盖 Reader。Windows .NET 237/237、真实无外网跨语言链路、正式 WinExe、framework-dependent/self-contained `win-x64` 发布 smoke，以及发布版 DeepSeek `deepseek-v4-flash` 单次真实验收均已通过；AI 缺少配置、密钥或 Runtime 故障时离线 Search/Viewer 仍可用。客户端仍不包含多轮、完整 P0 管理 UI、内置 Python、安装器或 Android。
 
 ## 工作区结构
 
@@ -139,7 +141,7 @@ terraria_aiwiki/
 
 现有源码位于 `terraria-wiki-offline/`，它的基线技术包括 C#、.NET 10、.NET MAUI、Blazor Hybrid / Razor、SQLite / FTS5、HtmlAgilityPack 和 MediaWiki API。MAUI/Blazor 是旧宿主事实，不再是 Windows 目标架构。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar、严格非密钥配置、最小 AI 面板与发布复制。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar、严格非密钥配置与发布复制；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|

@@ -1,7 +1,7 @@
 # ADR 0001：新客户端首选 Avalonia，Windows 退出 MAUI
 
-- 状态：accepted；Phase 00 Windows 11 x64 宿主验证通过
-- 日期：2026-08-20；Phase 00 验证结论更新于 2026-08-23
+- 状态：accepted；Phase 00 宿主与 Phase 08 Presentation 验证通过
+- 日期：2026-08-20；Phase 00 验证更新于 2026-08-23；Phase 08 更新于 2026-08-28
 - 决策范围：Windows 客户端宿主、Presentation 技术与后续 Android 路线；不包含其他产品平台
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/changes/archive/phase-00-migration-baseline/plan.md`
 
@@ -94,6 +94,17 @@ Portable .NET 10 Wiki Core
 Windows WebView2 策略收敛为：产品默认依赖系统 Evergreen Runtime，宿主在启动时检测并对缺失给出可操作错误；self-contained .NET 不等于捆绑 WebView2。固定 runtime 目录仅用于干净环境验证，不是当前产品分发决定。Evergreen 安装/bootstrap、签名和发布渠道由 Windows Productization Phase 决定。
 
 没有历史 `.pak` 样本，因此不对旧 README 中该扩展名作额外格式承诺；当前源码实际 `.pkg` 契约和 golden 样本已通过。Windows 10、ARM64 与 Android 不在本次已授权验证矩阵。
+
+## Phase 08 Presentation 实施结论（2026-08-28）
+
+正式 Windows WinExe 已从代码构造临时壳重建为 XAML AI-first Presentation，并保持 ADR 原有分层：状态模型、commands、Markdig AST renderer 与布局全部位于 Windows assembly 内部，Application/Core、Viewer 内容协议、Python Agent 和 NDJSON v1 未新增 UI 依赖。
+
+- 默认宽屏使用固定窄导航栏和 AI/共享 Reader 双栏；窄于 1100 DIP 时默认只显示 AI，可信来源或 Wiki 阅读按需以覆盖层打开同一个 Reader。
+- Chat 保持独立单轮、流式工具/正文/来源/usage、停止和安全故障隔离；Markdown 只由 Markdig 1.3.2 产生 AST，再用原生 Avalonia 控件显式允许列表渲染，不生成 HTML、不加载图片、不启用模型链接。
+- 整个 Presentation 只有一个 `NativeWebView` 与一个 `ViewerWebViewSession`；Chat 来源按 resolved title/anchor 打开，Wiki 搜索复用同一 Reader，Viewer 内部历史、主题和资源链路保持不变。
+- Windows Release build 为 0 warning/0 error，完整测试 237/237；无外网 Python Sidecar、两种 `win-x64` 发布 smoke、正式 WinExe 和 1280×820/窄窗、浅/深主题窗口检查均通过。当前验收显示器为 225% 缩放，因此不把精确 100%/150% 人工检查记为已执行。
+
+Phase 08 证明 Avalonia 能在不复制 Core/Viewer、也不建立第二客户端的前提下承载正式 AI/Wiki 核心 Presentation。Phase 09 仍负责收藏、历史、全部页面、数据管理、设置和 Wiki 切换等 P0 UI 接管；本结论不批准提前实现这些入口。
 
 ## 正面后果
 
