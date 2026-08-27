@@ -1,6 +1,6 @@
 # Wiki Tools 能力契约
 
-- 状态：confirmed baseline
+- 状态：confirmed baseline；Phase 07 Windows Runtime lifecycle 已接入并通过无外网/发布 smoke
 - 适用范围：Wiki Tool Adapter、AI Backend、Windows Runtime lifecycle；Android transport 另行决定
 - 来源：Master Architecture v0.6、Wiki Search / Read 边界、Phase 05 AI Adapter、ADR 0004
 
@@ -69,15 +69,15 @@
 - HTTP `Host` 必须精确匹配实际 `127.0.0.1:<port>`；缺失或错误 bearer token 返回 401，错误 Host 在进入 MCP 前拒绝。
 - token 每次启动使用密码学安全随机数重新生成，只存内存并以固定时间比较；旧 token 不得用于后续 server 实例。
 - 不提供远程监听、固定端口、TLS、OAuth、CORS、legacy SSE、resources 或 prompts。
-- 本 transport 是可嵌入 runtime，不由 Phase 05 修改 `Terraria_Wiki.Windows` 或接入 Python；Windows 生命周期属于 Phase 07。
+- 本 transport 是可嵌入 runtime。Phase 07 Windows Host 在 Viewer enable 后启动 server，把 endpoint/bearer 仅经 Sidecar initialize stdin 交给 Python，并在 Sidecar fatal、手动重试和应用退出时停止对应 server。
 - Android 不继承本 loopback/ASP.NET transport 决策，必须在 Android Phase 根据目标环境独立决定和验证。
 
 ## 非目标
 
-- Python/PydanticAI、模型 API、Search → Read → Answer 质量测试和来源生成；
+- Python/PydanticAI、模型 API、Search → Read → Answer 质量规则和来源生成；
 - 页面 HTML 转换、摘要管线、token/context 截断和 Reader 模式；
 - Vector Search、Embedding Retrieval、Vector Database 或第二套 Wiki 数据；
-- Windows UI、Runtime 打包、publish/安装器和 Android 验证。
+- Windows UI、Python Sidecar 协议与安装器；Android transport/Runtime 验证。
 
 ## 验收场景
 
@@ -88,6 +88,7 @@
 5. 缺失/错误 token、错误 Host、非法参数、未知工具、数据源不可用和内部异常均安全拒绝。
 6. 并发、调用方取消、pause/release、重复 stop/dispose、token 轮换、在途清理和端口释放有自动化回归。
 7. 静态/反射门确认 Adapter project 不引用 Core project，且不访问 SQLite、Core service、持久化模型、MAUI、Avalonia、Windows API 或 Python。
+8. Windows 组合 consumer 在数据操作前同时排空 Viewer 与 WikiTools，失败时逆序释放已取得 lease；Sidecar 崩溃/重试会停止旧 server 并轮换端口/token。
 
 ## 变更规则
 

@@ -51,8 +51,9 @@ MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 
 - Avalonia Presentation / client host（Phase 04 已建立正式 Windows Foundation）；
 - NativeWebView 通过受限动态 loopback 承载现有 Local Wiki Viewer；
 - Windows data-root、设置、锁、外链和 Viewer Adapters 已实现最小链路，Android Adapters 后续实现；
-- 独立 Wiki Tool Adapter 通过无状态、动态 loopback MCP 只暴露 Application Search / Read，Windows Runtime 接线留 Phase 07；
-- Python 单轮 Agent 通过受限 MCP 执行 Search → Read → typed Answer，实际来源由成功 Read 派生；业务逻辑与 Windows/Android Runtime 分离。
+- 独立 Wiki Tool Adapter 通过无状态、动态 loopback MCP 只暴露 Application Search / Read，并由 Phase 07 Windows Runtime 在 Viewer 之后按需启停；
+- Python 单轮 Agent 通过受限 MCP 执行 Search → Read → typed Answer，实际来源由成功 Read 派生；业务逻辑与 Windows/Android Runtime 分离；
+- Windows Avalonia Host 通过严格 NDJSON v1 长驻 stdio Sidecar 组合 WikiTools 与 Python Agent，使用外部配置 Python 环境和非密钥 `ai-runtime.json`，AI 故障不影响离线 Search/Viewer。
 
 产品平台范围是 Windows（当前）与 Android（未来）；iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他平台均为明确非目标。WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。源码中存在某个平台 target、条件编译或框架能力，不代表该平台已经成为产品承诺；扩大平台范围必须由用户重新授权并更新架构决策。
 
@@ -84,7 +85,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–06 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-06-*` 计划。Phase 06 已交付 Python 3.12–3.14 单轮 Agent、来源/预算/错误边界、解析锁、测试专用真实 C# MCP Host 和跨语言链路；provider 使用显式 OpenAI-compatible endpoint、模型与 Responses / Chat 线协议，不内置供应商默认值。WSL/Windows Python 门槛、Windows .NET 199/199 和 DeepSeek `deepseek-v4-flash` Responses 三场真实验收均通过；该实测不自动证明其他兼容 endpoint 可用。Windows Runtime 接线、流式、多轮、完整 Presentation/P0 接管、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–07 已完成，验证记录位于对应的 `openspec/changes/archive/phase-00-*` 至 `phase-07-*` 计划。Phase 07 交付安全流式 Agent 事件、Viewer/WikiTools 组合、长驻 Python Sidecar、严格配置/协议/进程生命周期和最小 AI 面板；WSL 与 Windows Python 3.12 门槛、Windows .NET 219/219、无外网真实跨语言链路、正式 WinExe、两种 `win-x64` 发布 smoke 和发布版 DeepSeek `deepseek-v4-flash` 单次真实验收均已通过。多轮、完整 Presentation/P0 接管、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

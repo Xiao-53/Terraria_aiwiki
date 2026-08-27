@@ -1,6 +1,6 @@
 # AI Backend 能力契约
 
-- 状态：confirmed baseline；通用 OpenAI-compatible 边界与 DeepSeek V4 Flash 三场验收通过
+- 状态：confirmed baseline；Phase 07 流式/Sidecar 回归与 Windows 发布版真实 provider 验收通过
 - 适用范围：Python Agent、AI Runtime Adapter、Windows Runtime lifecycle；不包含客户端 UI 或目标平台打包
 - 来源：Master Architecture v0.6、Wiki Search / Read 边界、Wiki Tools、Phase 06、ADR 0005
 
@@ -10,7 +10,7 @@
 
 ## 公共边界
 
-- Python 包支持 3.12–3.14，公共异步入口是 `TerrariaWikiAgent.answer(question, connection) -> WikiAgentAnswer`；每次调用是独立单轮，不接收或保存历史。
+- Python 包支持 3.12–3.14，公共异步入口是 `TerrariaWikiAgent.answer(question, connection, on_event=None) -> WikiAgentAnswer`；旧两参数调用保持兼容。每次调用是独立单轮，不接收或保存历史。
 - `WikiToolConnection(endpoint, bearer_token)` 只接受规范形式 `http://127.0.0.1:<1..65535>/mcp`。必须拒绝 `localhost`、其他地址、HTTPS、userinfo、缺失或非法端口、其他 path、query、fragment 以及非法 token。
 - connection 的字符串和 repr 只能显示 endpoint；bearer 只进入 Authorization header。MCP HTTP client 不继承环境代理、不跟随重定向。
 - 连接后必须发现恰好 `search_wiki` 与 `read_wiki` 两个工具；缺失或额外工具均作为 Wiki Tool 不可用处理。
@@ -43,7 +43,15 @@
 - `usage`：请求数、工具调用数、输入/输出/总 token 和 provider 可提供时的美元成本；
 - `tool_trace`：成功 Search、成功 Read 或 not-found Read 的最小轨迹，不包含参数、内容、路径或凭据。
 
-模型只能生成 status 与 Markdown 草稿，不能声明来源。每个来源保留 `requested_title`、最终 `resolved_title`、anchor 与 `last_modified`；按不区分大小写的 resolved title + anchor 去重并保持首次成功 Read 顺序。not-found Read 进入轨迹但不生成来源。模型若声明 answered 而没有任何成功 Read 来源，宿主必须强制转为 `insufficient_evidence`。
+模型只生成纯 Markdown 草稿，不能声明 status 或来源。每个来源保留 `requested_title`、最终 `resolved_title`、anchor 与 `last_modified`；按不区分大小写的 resolved title + anchor 去重并保持首次成功 Read 顺序。not-found Read 进入轨迹但不生成来源。没有成功 Read，或模型返回固定“本地 Wiki 证据不足”正文时，宿主必须归一为 `insufficient_evidence`。
+
+## 流式事件
+
+- `on_event` 是可选异步回调，事件是 frozen、extra-forbid 的判别式模型：`run_started`、`tool_started`、`tool_finished`、`text_delta`。
+- tool 事件只公开 `search_wiki` / `read_wiki` 名称与 `succeeded` / `not_found` / `failed` 状态；不得携带参数、返回值、HTML、路径、凭据或异常。
+- Agent 使用锁定 PydanticAI 2.31 的完整 `run_stream_events()` 图。只有最终纯文本响应成为 `text_delta`；工具轮次文本、thinking 和其他模型事件不对外转发。
+- Markdown sanitizer 必须跨 chunk 保留未闭合 URL/协议前缀和尾随空白，替换远程 URL 并只发布已确定的安全前缀。全部 delta 的顺序拼接必须精确等于最终 `WikiAgentAnswer.markdown`。
+- 空白/空输出、超过 32768 字符、流式与最终不一致都归一为 `model_unavailable`。回调按顺序 await 并形成背压；回调异常停止运行并归一为安全 `unknown`。
 
 ## 运行预算
 
@@ -73,18 +81,19 @@
 
 ## Runtime 分离与非目标
 
-- Agent 包只实现平台无关业务逻辑。Windows/Android 负责各自的 Python 进程、MCP server、凭据传递、启动退出、崩溃恢复、打包与发布。
+- Agent 包只实现平台无关业务逻辑。Windows/Android 负责各自的 Python 进程、MCP server、凭据传递、启动退出、崩溃恢复、打包与发布；Windows 首个实现另见 `windows-ai-runtime` spec 与 ADR 0006。
 - Phase 06 的 C# TestHost 只能存在于测试项目，使用随机临时数据根与合成 SQLite fixture；不得进入生产引用、读取用户设置或连接用户数据库。
-- 不包含 UI、流式事件、多轮/持久化历史、Windows Runtime 接线、Python 封装或发布产物、正式数据根、Reader 转换、Web Search、Vector/Embedding、Android 或其他平台。
+- 不包含 UI、多轮/持久化历史、目标平台进程实现、正式数据根、Reader 转换、Web Search、Vector/Embedding、Android 或其他平台。
 
 ## 验收场景
 
 1. 离线模型测试全局禁止真实 provider 请求，覆盖配置、连接、来源派生、Redirect/anchor、去重、证据不足、工具错误、取消、超时、预算、脱敏与提示注入。
 2. 离线配置测试覆盖 Responses / Chat 两种 model classes、远程 HTTPS / loopback HTTP、保守兼容 profile、缺失 secret 和脱敏；具体兼容 endpoint 未实测时不得宣称可用。
 3. Windows Python 通过真实 C# TestHost 发现恰好两个工具，完成 Search → 多 Read → typed Answer；fixture 覆盖 Redirect 配方、两项材料、无结果和恶意页面。
-4. WSL Python 3.12 与 Windows Python 3.14 使用同一解析锁通过 lint、格式、strict mypy 与适用测试；Windows .NET Release build 和全部测试通过。
+4. WSL Python 3.12 与 Windows Python 3.12.3 使用同一解析锁通过 lint、格式、strict mypy 与适用测试；Windows .NET Release build 和全部测试通过。
 5. 首个真实 endpoint 使用 DeepSeek `deepseek-v4-flash` Responses，固定运行多跳配方、无证据拒答和提示注入抵抗三场；每场满足事实、轨迹与来源约束。最终验收 3/3 通过；其他 endpoint/model 不继承该实测结论。
-6. 静态依赖门确认生产 Agent 不接触 SQLite/Core/Application/UI/平台路径，生产 .NET 项目不引用测试 Host，仓库不含 secret、用户数据、虚拟环境或缓存。
+6. Phase 07 增量测试覆盖最终文本分块、URL 跨 chunk、固定不足证据、取消、callback、超长输出和 Sidecar 严格协议；真实 Windows Application + WikiTools + Python fixture 验证跨语言事件与 typed completion。
+7. 静态依赖门确认生产 Agent 不接触 SQLite/Core/Application/UI/平台路径，生产 .NET 项目不引用测试 Host，仓库不含 secret、用户数据、虚拟环境或缓存。
 
 ## 变更规则
 
