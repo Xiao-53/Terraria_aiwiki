@@ -6,9 +6,9 @@
 
 ## 信息架构与响应式布局
 
-- 应用默认进入 AI 问答，左侧只显示可用的“AI 问答”和“收藏”两个导航入口；顶部 Wiki 按钮进入 Wiki 搜索并打开或恢复共享 Reader。历史、全部页面、数据管理和设置仍不显示无功能占位入口。
+- 应用默认进入 AI 问答，左侧只显示可用的“AI 问答”和“收藏”两个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前 Chat/收藏主页面。历史、全部页面、数据管理和设置仍不显示无功能占位入口。
 - Windows Shell 使用固定窄导航栏、标题区和细描边工作区。初始窗口为 1280×820 DIP，最小窗口为 900×600 DIP。
-- 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。Reader 被向右压缩到关闭阈值时收起，主内容安全扩展；顶部 Wiki 按钮可重新打开。
+- 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。拖动分隔条不会自动关闭 Reader；关闭只由 Reader 叉号执行，顶部 Wiki 按钮可重新打开。
 - 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
 - Chat/收藏/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
 
@@ -37,12 +37,14 @@
 ## Wiki 与共享 Reader
 
 - Chat 来源必须按 `resolvedTitle#anchor` 打开；不得使用 requested title 代替已解析标题。
-- 顶部 Wiki 按钮打开 Wiki 阅读界面；Wiki 阅读使用 180 ms debounce 搜索、取消前一请求并安全显示无结果或数据源不可用状态；结果在同一个 Reader 打开。
+- 顶部 Wiki 按钮只控制 Reader 可见性；Reader 内继续使用既有 Viewer 页面导航和搜索。原生 Wiki 搜索状态仍保持内部能力，但顶部按钮不得把主内容切换到该页面。
 - 整个 Windows Presentation 只创建一个 `NativeWebView` 和一个 `ViewerWebViewSession`。宽窄切换只改变该 Reader 的布局与可见性，不移动、复制或启动第二个 Viewer。
 - Reader 继续使用既有 Viewer 协议、内部链接、主题、访问记录、返回行为和资源链路；Presentation 不直接访问 Core、SQLite 或 Viewer backend。
 
 ## 变更边界
 
 Application/Core 公共 API、Python Agent、NDJSON v1、`ai-runtime.json`、SQLite schema、Wiki 数据包和 Viewer 内容协议不因 Presentation 改变。新增状态模型保持在 Windows assembly 内部；不得把 UI 状态升级为公共持久模型或 Application port。
+
+启动失败时必须同时提供“重试”和“重新选择 Wiki 数据文件夹”，后者验证并替换已保存路径后重新组合 Runtime。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
 若增加多轮、自动会话历史或同步、Phase 09 其余 P0 页面、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化或 Android UI，必须建立独立变更并更新相应能力契约。

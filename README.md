@@ -109,7 +109,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation；当前首个 Phase 09 切片已把左侧星标入口改为统一收藏页，接通显式 AI 单轮收藏与现有 Wiki 收藏，并为共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏。普通问答仍不自动持久化，Viewer 仍只有一个。Windows Release build 为 0 warning/0 error，当前 .NET 测试 244/244 通过；Phase 08 的真实无外网跨语言、两种 `win-x64` 发布 smoke 和发布版 DeepSeek 单次真实验收仍是既有基线。完整 P0 管理 UI、多轮、内置 Python、安装器和 Android 尚未完成。
+**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation；当前首个 Phase 09 切片已把左侧星标入口改为统一收藏页，接通显式 AI 单轮收藏与现有 Wiki 收藏，并为共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏。顶部 Wiki 只展开 Reader，拖动分隔条不会自动关闭；启动失败时可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint。普通问答仍不自动持久化，Viewer 仍只有一个。Windows Release build 为 0 warning/0 error，当前 .NET 测试 246/246 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。完整 P0 管理 UI、多轮、内置 Python、安装器和 Android 尚未完成。
 
 ## 工作区结构
 

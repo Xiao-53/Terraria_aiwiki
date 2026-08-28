@@ -86,7 +86,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。首个切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；普通问答不自动持久化，Application/Core、SQLite 与 Viewer 协议不变。当前 Windows Release build 为 0 warning/0 error，.NET 测试 244/244 通过，并已实机验证分栏左限位、向右关闭与重新打开。完整 P0 UI 接管、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。首个切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；公共 API、SQLite schema 与 Viewer 协议不变。当前 Windows Release build 为 0 warning/0 error，.NET 测试 246/246 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复。完整 P0 UI 接管、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 
