@@ -27,7 +27,7 @@
 - 默认 Reader 首页具有真实页面收藏状态，点击星标可立即收藏或取消，不再因缺少当前标题而静默无响应。
 - 按用户明确要求，Windows 本机 `ai-runtime.json` 使用新版配置保存 API key；Host 只把该值放入所属 Sidecar 的进程环境，不进入命令参数、NDJSON、错误或 Git。
 - Chat 思考中使用连续内容流、明确的运行状态和紧凑工具轨迹，不再以孤立居中的问题卡、厚重工具卡和重复输入内容形成大面积空白。
-- 输入框以预览路由拦截 Enter 并发送，Shift+Enter 保留换行；发送后清空编辑框，底部显示键盘提示。
+- 输入框以预览路由处理 Enter，Shift+Enter 保留换行；中文输入法存在未提交的 preedit 文本时 Enter 只确认候选，组词结束后 Enter 才发送。已提交问题保留在底部只读输入栏，不再另建右上角问题卡。
 - 取消 Agent 的美元费用安全预算，不再因 PydanticAI 可识别的 provider 定价达到 `$0.10` 而中止回答；请求/工具循环、输出/context 和超时技术限位继续生效。
 - Chat 原 Usage 区域改为“Token 花费”，只显示输入、输出与合计 token，不显示模型请求数、工具调用数或美元估算。
 - Chat 思考期间的停止按钮图标必须固定居中，不因无边框 Button 模板的默认 content alignment 偏移；回答内容与右上角收藏星标使用独立布局列，窄分栏下也不得重叠。
@@ -81,6 +81,7 @@
 - MODIFY Chat XAML/view model 与 Windows tests：把 Usage 展示替换为 Token 花费，并更新运行限位安全文案。
 - MODIFY Chat XAML/App styles 与 Presentation boundary tests：修正停止图标居中，并为收藏星标建立独立布局栏。
 - MODIFY Chat XAML/App styles 与 Presentation boundary tests：重排回答标签、来源列表、Token 与完成状态的视觉层级。
+- MODIFY Chat input behavior/view model/XAML 与 Presentation flow/boundary tests：识别 IME preedit、保留 composer 问题文字并移除重复问题卡。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
@@ -105,6 +106,8 @@
 - [x] 执行最小 Windows Presentation build/tests、diff/双 Git 状态检查并分别提交源码与治理变更；人工 UI 验收由用户执行。
 - [x] 优化回答标题、可信来源、Token 花费与完成状态的视觉层级。
 - [x] 执行最小 Windows Presentation 定向验证并分别提交源码与治理变更；人工 UI 验收由用户执行。
+- [x] 修正中文输入法 Enter 抢发、候选条锚点错位和发送后输入栏空白。
+- [x] 执行最小 Windows Presentation 定向验证并分别提交源码与治理变更；人工 IME/UI 验收由用户执行。
 
 ## 验证与回归计划
 
@@ -141,6 +144,8 @@
 - 2026-08-28：完成 12×12 停止方块双向居中与 54 DIP 独立收藏栏，ScrollViewer 固定留在内容列；按用户要求只执行直接相关的 Presentation 定向验证。源码提交为 `27e5dde`。
 - 2026-08-28：用户实机截图要求优化可信来源/Token/状态区域，并区分回答标题与 Markdown 正文。决定保持现有数据与命令不变，只用 XAML/styles 建立“AI 结论”标签、等宽来源行和轻量元信息条。
 - 2026-08-28：完成“AI 结论”标签、绿色来源容器、等宽无边框来源行、圆形箭头，以及 Token/状态信息条。标准 Release 输出被用户正在运行的进程锁定后，未关闭该进程，改用 Windows 临时独立输出完成最小验证。源码提交为 `3f5d8f5`。
+- 2026-08-28：用户实机截图确认中文输入法候选条锚到右侧 Reader，底部输入栏在回答期间为空，问题文字另成右上角小卡。代码确认 Tunnel Enter 未判断 `TextPresenter.PreeditText` 且发送时主动清空 `Question`；决定让 preedit Enter 只提交候选，并将问题保留在底部 composer。
+- 2026-08-28：完成 IME preedit 检测、composer 问题保留与右上角问题卡移除；使用独立 Windows Temp 输出避免运行中应用锁定，最小相关验证通过。源码提交为 `37fbccf`。
 
 ## 发现、偏差与决策
 
@@ -164,7 +169,8 @@
 - 费用预算/Token 展示修正后：WSL Python 3.12.3 Ruff lint、format 和 strict mypy 通过；离线 Agent tests 77 passed / 4 skipped（跨语言与付费 Provider 未启用）。Windows Release build 0 warning / 0 error；全量 .NET tests 249/249 通过（Core 90、Application 54、Windows 77、WikiTools 28）。未启动 UI、未请求 Provider。
 - 停止按钮/收藏栏修正后：Windows Release 编译由定向 `Terraria_Wiki.Windows.Tests` 测试命令完成；Presentation boundary/flow 19/19 通过。未运行完整测试集、未启动 UI，人工视觉验收由用户执行。
 - 回答结果视觉修正后：首次定向命令因运行中的 `Terraria_Wiki.Windows` 锁定既有 Release DLL 而未完成；使用独立 Windows Temp `OutDir` 后 XAML/Release 编译成功，Presentation boundary 4/4 通过。未运行完整测试集、未关闭或启动 UI。
+- IME/composer 修正后：独立 Windows Temp `OutDir` XAML/Release 编译成功，IME key behavior、composer state 与 Presentation boundary 定向测试 6/6 通过。未运行完整测试集、未关闭或启动 UI；真实中文输入法视觉验收由用户执行。
 
 ## 完成摘要
 
-当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde` 和 `3f5d8f5` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
+当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存；Phase 09 整体仍为 `in-progress`，人工 UI/IME 验收由用户执行，其余 P0 页面不在本次完成范围内。
