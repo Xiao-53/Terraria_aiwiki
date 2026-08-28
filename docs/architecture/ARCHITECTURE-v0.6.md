@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–08 已完成，Windows AI-first Presentation 与共享 Reader 已通过目标平台验证
+> **项目状态**：实施中；Phase 00–08 已完成，Phase 09 P0 UI Takeover 正在以小切片推进
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -182,7 +182,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **06 — AI Backend** | 建立最小 Python Agent 与多步 Tool Calling；不做最终 UI | 05 | 已完成：供应商中立配置、受限证据 Agent、跨语言链路与 DeepSeek 三场实测通过 | `openspec/changes/archive/phase-06-ai-backend/plan.md` |
 | **07 — Windows Runtime Smoke Test** | 接通客户端、AI Runtime、流式交互、生命周期和最小发布产物 | 04、06 | 已完成：无外网跨语言、两种发布 smoke 与发布版真实 provider 验收通过 | `openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md` |
 | **08 — Presentation Rebuild** | 建设新的产品信息架构和核心页面，通过 Application 使用后端 | 04、07 | 已完成：AI-first Chat、Wiki Search、安全 Markdown 和唯一共享 Reader 通过 Windows 验证 | `openspec/changes/archive/phase-08-presentation-rebuild/plan.md` |
-| **09 — P0 UI Takeover** | 新 UI 逐项接管 Wiki、数据管理、设置、导入导出、维护和错误流程 | 08 | 新客户端覆盖计划内 P0 入口和目标用户流程 | `openspec/changes/phase-09-p0-ui-takeover/plan.md` |
+| **09 — P0 UI Takeover** | 新 UI 逐项接管 Wiki、数据管理、设置、导入导出、维护和错误流程 | 08 | 进行中：收藏导航、Chat/Wiki 收藏和受限可调共享 Reader 首个切片已通过 Windows 验证；其余 P0 入口待后续切片 | `openspec/changes/phase-09-p0-ui-takeover/plan.md` |
 | **10 — Legacy MAUI Retirement** | 只清理已被替代、确认无依赖且获准删除的旧 Presentation/宿主 | 09 | 新客户端无功能缺口，旧宿主可回退或归档 | `openspec/changes/phase-10-legacy-maui-retirement/plan.md` |
 | **11 — Windows Productization** | 完成错误恢复、安装打包、升级和发布准备 | 07、10 | Windows 成品达到发布门槛 | `openspec/changes/phase-11-windows-productization/plan.md` |
 | **12 — Extensions** | 按真实需求增加其他 Toolset；每项独立决策 | 11 | 扩展通过既有边界接入且可独立关闭 | `openspec/changes/phase-12-extensions/plan.md` |

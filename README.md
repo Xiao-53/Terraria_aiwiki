@@ -33,6 +33,7 @@ codex
 - 已完成 Phase 06 记录：[`openspec/changes/archive/phase-06-ai-backend/plan.md`](./openspec/changes/archive/phase-06-ai-backend/plan.md)
 - 已完成 Phase 07 记录：[`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`](./openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md)
 - 已完成 Phase 08 记录：[`openspec/changes/archive/phase-08-presentation-rebuild/plan.md`](./openspec/changes/archive/phase-08-presentation-rebuild/plan.md)
+- 进行中 Phase 09 计划：[`openspec/changes/phase-09-p0-ui-takeover/plan.md`](./openspec/changes/phase-09-p0-ui-takeover/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
@@ -108,7 +109,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–08 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation：窄导航栏、独立单轮 Chat、安全流式 Markdown、工具进度、可信来源、usage、Wiki 搜索和唯一共享 Reader 已接通；宽屏默认 AI/Reader 双栏，窄屏默认保留 AI 画布并按需覆盖 Reader。Windows .NET 237/237、真实无外网跨语言链路、正式 WinExe、framework-dependent/self-contained `win-x64` 发布 smoke，以及发布版 DeepSeek `deepseek-v4-flash` 单次真实验收均已通过；AI 缺少配置、密钥或 Runtime 故障时离线 Search/Viewer 仍可用。客户端仍不包含多轮、完整 P0 管理 UI、内置 Python、安装器或 Android。
+**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation；当前首个 Phase 09 切片已把左侧星标入口改为统一收藏页，接通显式 AI 单轮收藏与现有 Wiki 收藏，并为共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏。普通问答仍不自动持久化，Viewer 仍只有一个。Windows Release build 为 0 warning/0 error，当前 .NET 测试 244/244 通过；Phase 08 的真实无外网跨语言、两种 `win-x64` 发布 smoke 和发布版 DeepSeek 单次真实验收仍是既有基线。完整 P0 管理 UI、多轮、内置 Python、安装器和 Android 尚未完成。
 
 ## 工作区结构
 
@@ -141,7 +142,7 @@ terraria_aiwiki/
 
 现有源码位于 `terraria-wiki-offline/`，它的基线技术包括 C#、.NET 10、.NET MAUI、Blazor Hybrid / Razor、SQLite / FTS5、HtmlAgilityPack 和 MediaWiki API。MAUI/Blazor 是旧宿主事实，不再是 Windows 目标架构。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar、严格非密钥配置与发布复制；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar、严格非密钥配置与发布复制；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 正以小切片接管 P0 UI，当前已实现统一收藏页、Chat/Wiki 收藏和受限可调 Reader 分栏。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|
