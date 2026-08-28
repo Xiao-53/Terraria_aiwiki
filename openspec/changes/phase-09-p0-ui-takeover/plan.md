@@ -5,7 +5,7 @@
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
 - 最后更新：2026-08-28
-- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏与本机 AI 配置
+- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏、本机 AI 配置与 Chat 交互视觉
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -26,6 +26,8 @@
 - 顶部 Wiki 只展开或恢复 Reader，不把左侧主内容替换为原生 Wiki 搜索页；启动失败时可重新选择数据文件夹。
 - 默认 Reader 首页具有真实页面收藏状态，点击星标可立即收藏或取消，不再因缺少当前标题而静默无响应。
 - 按用户明确要求，Windows 本机 `ai-runtime.json` 使用新版配置保存 API key；Host 只把该值放入所属 Sidecar 的进程环境，不进入命令参数、NDJSON、错误或 Git。
+- Chat 思考中使用连续内容流、明确的运行状态和紧凑工具轨迹，不再以孤立居中的问题卡、厚重工具卡和重复输入内容形成大面积空白。
+- 输入框以预览路由拦截 Enter 并发送，Shift+Enter 保留换行；发送后清空编辑框，底部显示键盘提示。
 - Windows Release build 0 warning/0 error；既有和新增测试通过；高 DPI 下实际拖动两端、收藏页、Chat/Reader 星标与窄窗口无方框错位。
 
 ## 前置条件
@@ -69,6 +71,7 @@
 - MODIFY Core 兼容实现：在既有 anchor 迁移前安全 checkpoint 旧 WAL；不改变数据 schema 或公共用例 API。
 - MODIFY Windows AI configuration/process：读取 v2 本机密钥并仅通过子进程环境交付；不改变 NDJSON 或 Python Agent 公共设置。
 - MODIFY Reader view model / MainWindow：为默认首页建立当前页面收藏上下文。
+- MODIFY Chat XAML/view model/input behavior/styles：重排思考态、清空已提交输入并可靠处理 Enter/Shift+Enter。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
@@ -84,6 +87,8 @@
 - [x] 更新持续 spec、项目状态、计划验证记录；分别提交源码与治理变更。
 - [x] 按用户指定的本机配置边界接通 AI key、准备兼容 Python 环境并修复 Reader 首页收藏。
 - [x] 执行 Windows build/自动化测试和静态脱敏检查；人工 UI 验收由用户执行。
+- [x] 优化 AI 思考态和工具轨迹视觉，接通预览 Enter 发送并补齐回归测试。
+- [x] 执行 Windows build/自动化测试与静态检查；本次人工 UI 验收继续由用户执行。
 
 ## 验证与回归计划
 
@@ -112,6 +117,8 @@
 - 2026-08-28：后续修正以源码提交 `df9c723` 保存；用户接管此后的人工 UI 测试，Agent 后续仅执行编译、自动化测试与静态检查，除非用户另行要求。
 - 2026-08-28：用户明确要求 API key 直接保存到本机配置，并报告星标点击无反应；确认默认 Reader 首页未设置 `_currentPageTitle`，导致收藏命令不可执行。开始严格 v2 本机配置与首页收藏修正，不发起付费 Provider 请求。
 - 2026-08-28：已在 `%LOCALAPPDATA%\Terraria AI Wiki\python` 建立 Python 3.12.3 / PydanticAI 2.31.0 环境并写入用户级 v2 配置；真实 Sidecar ready/shutdown 握手通过，未发送 answer 或 Provider 请求。源码提交为 `ec124ff`。
+- 2026-08-28：用户提供实机截图，要求优化 AI 思考态并增加 Enter 发送。确认现有输入仅在 TextBox 冒泡 `KeyDown` 上处理，而 `AcceptsReturn` 可能先消费 Enter；改为预览路由处理，并同步修正重复问题与厚重工具卡布局。
+- 2026-08-28：Chat 思考态、回答区、完成后工具摘要与输入区已重排；预览路由 Enter/Shift+Enter、发送后清空编辑框及状态转换回归通过。源码提交为 `c23c4b9`，人工 UI 验收按用户要求留给用户。
 
 ## 发现、偏差与决策
 
@@ -131,7 +138,8 @@
 - Windows Release build：通过，0 warning / 0 error；全量 .NET tests：247/247 通过（Core 90、Application 54、Windows 75、WikiTools 28）。
 - 本机 AI 配置结构验证：v2、Python 路径、DeepSeek provider/model/API 和非空 key 均有效；真实 Sidecar 返回 Runtime 1、Python 3.12.3、PydanticAI 2.31.0 ready 后正常退出。未启动 UI，未请求付费 Provider。
 - 仓库 secret scan：通过；真实 key 只存在用户级 `ai-runtime.json`，未进入源码、测试、文档、Git 或临时文件。
+- Chat 修正后 Windows Release build：通过，0 warning / 0 error；全量 .NET tests：248/248 通过（Core 90、Application 54、Windows 76、WikiTools 28）。XAML 编译、预览 Enter 绑定、Shift+Enter 判定、思考态到完成态转换和编辑框清空均有自动化回归；未启动 UI、未请求 Provider。
 
 ## 完成摘要
 
-当前授权的收藏、Reader 交互与本机 AI 配置切片已由源码提交 `5ee1600`、`df9c723` 和 `ec124ff` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
+当前授权的收藏、Reader 交互、本机 AI 配置与 Chat 视觉切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff` 和 `c23c4b9` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。

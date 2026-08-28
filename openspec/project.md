@@ -86,7 +86,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。首个切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页已可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置已升级为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 247/247 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复。完整 P0 UI 接管、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。首个切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页已可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。Chat 思考态使用轻量连续内容流，预览 Enter 发送且 Shift+Enter 换行。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置已升级为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 248/248 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复。完整 P0 UI 接管、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 
