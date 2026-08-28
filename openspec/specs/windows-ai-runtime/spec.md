@@ -10,18 +10,19 @@
 
 ## 配置与依赖
 
-- 非密钥配置固定为 `ai-runtime.json` v1。默认路径是 `%LOCALAPPDATA%\Terraria AI Wiki\ai-runtime.json`；命令行可用唯一 `--ai-config <absolute-path>` 覆盖。
-- 文档字段固定为 `version`、`pythonExecutable` 和 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本、相对路径和非法 provider 值必须拒绝。
+- Windows 本机配置固定为 `ai-runtime.json` v2。默认路径是 `%LOCALAPPDATA%\Terraria AI Wiki\ai-runtime.json`；命令行可用唯一 `--ai-config <absolute-path>` 覆盖。
+- 文档字段固定为 `version`、`pythonExecutable`、`apiKey` 和 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本、空白密钥、相对路径和非法 provider 值必须拒绝。
 - `pythonExecutable` 必须是存在的绝对 `python.exe`。首个 Runtime 支持 Python 3.12–3.14，并在 Sidecar 握手中固定验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。
 - 应用不下载、安装、升级或修复 Python 与依赖。发布物只携带 launcher、Agent 包源码、`pyproject.toml` 和 `uv.lock`；Python 本体与虚拟环境由用户在 Phase 11 之前外部准备。
-- API key 只从 Windows 进程环境中的 `TERRARIA_AI_API_KEY` 继承给子进程；不得进入配置文件、命令参数、协议 JSON、公开错误、日志或 smoke 结果。
+- API key 按用户明确选择保存在 Windows 用户级配置中。Host 读取后只写入自己启动的 Sidecar `TERRARIA_AI_API_KEY` 进程环境；不得进入命令参数、协议 JSON、公开错误、日志、Git 或 smoke 结果。配置文件继承用户目录访问控制，产品化凭据存储留 Phase 11。
 
 配置形状：
 
 ```json
 {
-  "version": 1,
+  "version": 2,
   "pythonExecutable": "C:\\path\\to\\.venv\\Scripts\\python.exe",
+  "apiKey": "<local-api-key>",
   "provider": {
     "baseUrl": "https://api.example.com",
     "model": "provider-model",
@@ -58,12 +59,12 @@
 
 ## 验收场景
 
-1. 严格配置测试覆盖默认/覆盖路径、未知字段、非法 Python/provider 和不包含 key。
+1. 严格配置测试覆盖默认/覆盖路径、未知字段、非法 Python/provider/key，并确认 key 不进入参数或配置对象字符串表示。
 2. fake Sidecar 覆盖 ready 握手、事件顺序、typed completion、调用方取消、完成/取消竞态、复用、fatal、协议污染与所属进程终止策略。
 3. 真实 Windows Application + WikiToolServer + Windows Python 测试 Sidecar，以临时数据完成无外网 Search → Read → 至少两个 delta → sources/trace/usage completion。
 4. AI 配置缺失时正式 Avalonia WinExe 仍通过 Search/Viewer/assets/返回/退出 smoke。
 5. framework-dependent 与 self-contained `win-x64` 发布目录都包含同一 AgentRuntime 文件，并用同一配置 Python 环境通过取消、再次提问、工具进度、流式完成和退出清理。
-6. 有有效环境 key 时，对明确 provider/model 进行一次不自动重试的发布验收；记录首段、总耗时与 usage，不在日志保存问题、正文或 secret。没有 key 时阶段保持未完成，不把离线 fixture 当作真实 provider 结果。
+6. 有有效本机配置 key 时，对明确 provider/model 进行一次不自动重试的发布验收；记录首段、总耗时与 usage，不在日志保存问题、正文或 secret。没有 key 时阶段保持未完成，不把离线 fixture 当作真实 provider 结果。
 
 ## 非目标与变更规则
 

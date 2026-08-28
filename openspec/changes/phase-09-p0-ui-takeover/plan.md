@@ -5,7 +5,7 @@
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
 - 最后更新：2026-08-28
-- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口与可调整分栏
+- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏与本机 AI 配置
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -24,6 +24,8 @@
 - 顶部最右侧 Wiki 按钮打开/恢复共享 Reader；不创建第二个 Viewer。
 - 宽布局分隔条具有清晰而克制的拖柄与左右硬性最小宽度；拖到两端不会破坏布局，也不会自动关闭 Reader。宽布局关闭只由 Reader 叉号执行。
 - 顶部 Wiki 只展开或恢复 Reader，不把左侧主内容替换为原生 Wiki 搜索页；启动失败时可重新选择数据文件夹。
+- 默认 Reader 首页具有真实页面收藏状态，点击星标可立即收藏或取消，不再因缺少当前标题而静默无响应。
+- 按用户明确要求，Windows 本机 `ai-runtime.json` 使用新版配置保存 API key；Host 只把该值放入所属 Sidecar 的进程环境，不进入命令参数、NDJSON、错误或 Git。
 - Windows Release build 0 warning/0 error；既有和新增测试通过；高 DPI 下实际拖动两端、收藏页、Chat/Reader 星标与窄窗口无方框错位。
 
 ## 前置条件
@@ -53,6 +55,7 @@
 - Reader 收藏使用当前 `ReaderPageRequest.Title`（去除 anchor），状态随打开页面刷新。
 - 分栏只使用 Grid 列最小宽度约束，不注册拖动完成关闭事件；Reader 关闭动作只由既有显式关闭入口委托 `ShellViewModel.CloseReader()`。
 - 已保存数据根失效或内容不兼容时，错误区提供重新选择入口；旧数据遗留 WAL/SHM 先正常 checkpoint 并切回 DELETE journal，不直接删除 sidecar。
+- `ai-runtime.json` 升级为严格 v2，新增顶层 `apiKey`；值只在内存中传给 `ProcessStartInfo.Environment["TERRARIA_AI_API_KEY"]`。配置与用户级 Python 环境位于 `%LOCALAPPDATA%`，不纳入仓库。
 - 待决问题：无；收藏跨设备同步和完整 Phase 09 其余页面留给后续明确任务。
 
 ## 文件变更
@@ -64,6 +67,8 @@
 - MODIFY `ShellViewModel` / `ShellView.axaml(.cs)`：收藏导航、只展开 Reader 的顶部 Wiki 按钮和纯限位分隔约束。
 - MODIFY `MainWindow` / data-root 启动链路：错误后重新选择数据根并重新组合 Runtime。
 - MODIFY Core 兼容实现：在既有 anchor 迁移前安全 checkpoint 旧 WAL；不改变数据 schema 或公共用例 API。
+- MODIFY Windows AI configuration/process：读取 v2 本机密钥并仅通过子进程环境交付；不改变 NDJSON 或 Python Agent 公共设置。
+- MODIFY Reader view model / MainWindow：为默认首页建立当前页面收藏上下文。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
@@ -77,6 +82,8 @@
 - [x] 修正 GridSplitter 最小宽度、视觉与窄布局；按用户修正移除拖动自动关闭。
 - [x] 执行 Windows build/tests 和目标 Windows 宽布局 UI 自动化验收。
 - [x] 更新持续 spec、项目状态、计划验证记录；分别提交源码与治理变更。
+- [x] 按用户指定的本机配置边界接通 AI key、准备兼容 Python 环境并修复 Reader 首页收藏。
+- [x] 执行 Windows build/自动化测试和静态脱敏检查；人工 UI 验收由用户执行。
 
 ## 验证与回归计划
 
@@ -103,12 +110,15 @@
 - 2026-08-28：修正后 Windows Release build 0 warning/0 error；全量 .NET 测试 Core 90、Application 54、Windows 74、WikiTools 28，共 246/246 通过。
 - 2026-08-28：真实窗口执行“关闭 Reader → 点击顶部 Wiki”，截图确认 AI 主页面保持可见且 Reader 重新展开；原生 Wiki 搜索页未替换主内容。
 - 2026-08-28：后续修正以源码提交 `df9c723` 保存；用户接管此后的人工 UI 测试，Agent 后续仅执行编译、自动化测试与静态检查，除非用户另行要求。
+- 2026-08-28：用户明确要求 API key 直接保存到本机配置，并报告星标点击无反应；确认默认 Reader 首页未设置 `_currentPageTitle`，导致收藏命令不可执行。开始严格 v2 本机配置与首页收藏修正，不发起付费 Provider 请求。
+- 2026-08-28：已在 `%LOCALAPPDATA%\Terraria AI Wiki\python` 建立 Python 3.12.3 / PydanticAI 2.31.0 环境并写入用户级 v2 配置；真实 Sidecar ready/shutdown 握手通过，未发送 answer 或 Provider 请求。源码提交为 `ec124ff`。
 
 ## 发现、偏差与决策
 
 - 发现：现有 Application 已完整覆盖 Wiki 收藏，无需新增公共 API。
 - 决定：Chat 收藏是用户显式操作的快照，不改变“每次提问独立单轮、普通问答不持久化”的 AI 契约。
 - 决定：本次是 Phase 09 的首个切片；其余 P0 页面不在当前授权中，完成本切片后计划仍保留进行中状态。
+- 决定：用户明确覆盖 ADR 0006 原有“密钥不落配置文件”选择；仅 Windows 本机配置改变，Python Agent 仍只从子进程环境读取，NDJSON 和命令参数继续不携带密钥。
 
 ## 验证结果
 
@@ -118,7 +128,10 @@
 - Presentation 回归确认顶部 Wiki 保留当前 Chat/收藏主页面，分隔条无自动关闭事件，左右最小宽度限位继续生效。
 - 目标 Windows 窗口验证：关闭 Reader 后点击顶部 Wiki，Chat 仍为主页面且同一个 Reader 重新可见。
 - Reader 已用当前本机真实数据完成首页内容加载；AI 未发起付费 Provider 请求，AI 配置不影响本次离线启动与 Reader 验证。
+- Windows Release build：通过，0 warning / 0 error；全量 .NET tests：247/247 通过（Core 90、Application 54、Windows 75、WikiTools 28）。
+- 本机 AI 配置结构验证：v2、Python 路径、DeepSeek provider/model/API 和非空 key 均有效；真实 Sidecar 返回 Runtime 1、Python 3.12.3、PydanticAI 2.31.0 ready 后正常退出。未启动 UI，未请求付费 Provider。
+- 仓库 secret scan：通过；真实 key 只存在用户级 `ai-runtime.json`，未进入源码、测试、文档、Git 或临时文件。
 
 ## 完成摘要
 
-当前授权的收藏与 Reader 交互切片已由源码提交 `5ee1600` 和后续修正 `df9c723` 保存；Phase 09 整体仍为 `in-progress`，其余 P0 页面不在本次完成范围内。
+当前授权的收藏、Reader 交互与本机 AI 配置切片已由源码提交 `5ee1600`、`df9c723` 和 `ec124ff` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
