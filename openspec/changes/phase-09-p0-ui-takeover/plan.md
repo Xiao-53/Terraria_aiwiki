@@ -30,6 +30,7 @@
 - 输入框以预览路由拦截 Enter 并发送，Shift+Enter 保留换行；发送后清空编辑框，底部显示键盘提示。
 - 取消 Agent 的美元费用安全预算，不再因 PydanticAI 可识别的 provider 定价达到 `$0.10` 而中止回答；请求/工具循环、输出/context 和超时技术限位继续生效。
 - Chat 原 Usage 区域改为“Token 花费”，只显示输入、输出与合计 token，不显示模型请求数、工具调用数或美元估算。
+- Chat 思考期间的停止按钮图标必须固定居中，不因无边框 Button 模板的默认 content alignment 偏移；回答内容与右上角收藏星标使用独立布局列，窄分栏下也不得重叠。
 - Windows Release build 0 warning/0 error；既有和新增测试通过；高 DPI 下实际拖动两端、收藏页、Chat/Reader 星标与窄窗口无方框错位。
 
 ## 前置条件
@@ -77,6 +78,7 @@
 - MODIFY Chat XAML/view model/input behavior/styles：重排思考态、清空已提交输入并可靠处理 Enter/Shift+Enter。
 - MODIFY Python Agent settings/tests：移除美元费用上限配置和执行限制，保留非费用运行限位。
 - MODIFY Chat XAML/view model 与 Windows tests：把 Usage 展示替换为 Token 花费，并更新运行限位安全文案。
+- MODIFY Chat XAML/App styles 与 Presentation boundary tests：修正停止图标居中，并为收藏星标建立独立布局栏。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
@@ -97,6 +99,8 @@
 - [x] 移除 Agent 美元费用安全预算，并把 Chat Usage 区域改为 Token 花费。
 - [x] 更新 AI Backend/Windows Presentation 持续契约与 ADR 0005。
 - [x] 执行 Python Agent、Windows build/tests、diff/secret/双 Git 状态检查并分别提交源码与治理变更。
+- [x] 修正思考中停止按钮图标偏移和回答内容与收藏星标重叠。
+- [x] 执行最小 Windows Presentation build/tests、diff/双 Git 状态检查并分别提交源码与治理变更；人工 UI 验收由用户执行。
 
 ## 验证与回归计划
 
@@ -129,6 +133,8 @@
 - 2026-08-28：Chat 思考态、回答区、完成后工具摘要与输入区已重排；预览路由 Enter/Shift+Enter、发送后清空编辑框及状态转换回归通过。源码提交为 `c23c4b9`，人工 UI 验收按用户要求留给用户。
 - 2026-08-28：用户要求关闭安全预算并把原显示位置改为 Token 花费。代码确认唯一费用预算为 `WikiAgentSettings.cost_limit_usd` / PydanticAI `UsageLimits.cost_limit`；决定只移除美元费用中止，保留防循环、协议长度、context 与超时技术护栏，同时维持 typed usage/NDJSON 的可选费用字段兼容。
 - 2026-08-28：移除公开 settings 的费用预算覆盖与 PydanticAI `cost_limit`，Chat 改为只显示输入/输出/合计 Token，`budget_exceeded` 兼容错误改用“运行限制”安全文案。源码提交为 `28f2d82`。
+- 2026-08-28：用户实机截图确认思考中停止方块偏离圆形按钮，回答内容会进入悬浮收藏星标区域。代码确认停止按钮模板未设置 content alignment，星标与 ScrollViewer 位于同一覆盖 Grid；决定分别强制居中并改为独立星标布局列。
+- 2026-08-28：完成 12×12 停止方块双向居中与 54 DIP 独立收藏栏，ScrollViewer 固定留在内容列；按用户要求只执行直接相关的 Presentation 定向验证。源码提交为 `27e5dde`。
 
 ## 发现、偏差与决策
 
@@ -150,7 +156,8 @@
 - 仓库 secret scan：通过；真实 key 只存在用户级 `ai-runtime.json`，未进入源码、测试、文档、Git 或临时文件。
 - Chat 修正后 Windows Release build：通过，0 warning / 0 error；全量 .NET tests：248/248 通过（Core 90、Application 54、Windows 76、WikiTools 28）。XAML 编译、预览 Enter 绑定、Shift+Enter 判定、思考态到完成态转换和编辑框清空均有自动化回归；未启动 UI、未请求 Provider。
 - 费用预算/Token 展示修正后：WSL Python 3.12.3 Ruff lint、format 和 strict mypy 通过；离线 Agent tests 77 passed / 4 skipped（跨语言与付费 Provider 未启用）。Windows Release build 0 warning / 0 error；全量 .NET tests 249/249 通过（Core 90、Application 54、Windows 77、WikiTools 28）。未启动 UI、未请求 Provider。
+- 停止按钮/收藏栏修正后：Windows Release 编译由定向 `Terraria_Wiki.Windows.Tests` 测试命令完成；Presentation boundary/flow 19/19 通过。未运行完整测试集、未启动 UI，人工视觉验收由用户执行。
 
 ## 完成摘要
 
-当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9` 和 `28f2d82` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
+当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82` 和 `27e5dde` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
