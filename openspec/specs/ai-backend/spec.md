@@ -23,7 +23,7 @@
 - API key 固定只从 `TERRARIA_AI_API_KEY` 环境变量取得，不进入公共 settings、connection、URL、错误、日志、测试 fixture 或仓库文件。库不读取 `.env`。
 - 通用兼容 profile 不请求 strict tool schema 或 required tool choice，把系统规则保持为单一 `system` message，并避免假设 Chat endpoint 接受 `max_completion_tokens`。可选 reasoning effort 只在调用方显式配置时发送。
 - `store`、`truncation`、并行工具、reasoning 和 token 预计算并非所有兼容 endpoint 的共同能力；本契约不把被忽略的请求字段描述成保证。远程服务的数据保留、并行行为与定价仍须按具体 provider 实测和披露。
-- 公共设置允许调用方把安全上限向下收紧，不允许调高。PydanticAI 与 OpenAI-compatible model classes 是 Agent 内部实现；客户端和 Application 只能依赖 typed 结果与稳定错误。
+- 公共设置允许调用方把请求、工具、token 和超时运行限位向下收紧，不允许调高。Agent 不设置美元费用上限；PydanticAI 与 OpenAI-compatible model classes 是内部实现，客户端和 Application 只能依赖 typed 结果与稳定错误。
 
 ## 证据工作流与不可信内容
 
@@ -53,7 +53,7 @@
 - Markdown sanitizer 必须跨 chunk 保留未闭合 URL/协议前缀和尾随空白，替换远程 URL 并只发布已确定的安全前缀。全部 delta 的顺序拼接必须精确等于最终 `WikiAgentAnswer.markdown`。
 - 空白/空输出、超过 32768 字符、流式与最终不一致都归一为 `model_unavailable`。回调按顺序 await 并形成背压；回调异常停止运行并归一为安全 `unknown`。
 
-## 运行预算
+## 运行限位
 
 每次 `answer` 的硬上限为：
 
@@ -62,10 +62,9 @@
 - 最多 4096 输出 tokens；
 - 最多 300000 累计 tokens；
 - 单次模型请求最多 256000 输入 tokens；
-- 最多 120 秒；
-- 最多 0.10 美元（provider 可被定价时强制；未知定价时为 best-effort 并返回未知成本）。
+- 最多 120 秒。
 
-请求、工具和 provider 返回后的 token 超限必须返回稳定预算或 context 错误，不得静默截断。为了兼容不提供预计算 endpoint 的服务，输入 token 上限不承诺请求前拦截；美元成本也不能替代 provider 自身余额/限额。完整 Wiki HTML 继续沿用 Wiki Tools 契约；超大页面导致 context limit 时明确失败，Reader/HTML 转换必须由后续独立证据和决策引入。
+这些限位用于防止模型循环、协议超长、上下文溢出和长时间挂起，不作为费用预算。请求、工具和 provider 返回后的 token 超限必须返回稳定的 `budget_exceeded`（为兼容保留的错误 code）或 context 错误，不得静默截断。为了兼容不提供预计算 endpoint 的服务，输入 token 上限不承诺请求前拦截。Agent 不因美元估算中止回答；真实账单控制由用户选择的 provider 余额、额度或限额承担。完整 Wiki HTML 继续沿用 Wiki Tools 契约；超大页面导致 context limit 时明确失败，Reader/HTML 转换必须由后续独立证据和决策引入。
 
 ## 错误、取消与脱敏
 
@@ -87,7 +86,7 @@
 
 ## 验收场景
 
-1. 离线模型测试全局禁止真实 provider 请求，覆盖配置、连接、来源派生、Redirect/anchor、去重、证据不足、工具错误、取消、超时、预算、脱敏与提示注入。
+1. 离线模型测试全局禁止真实 provider 请求，覆盖配置、连接、来源派生、Redirect/anchor、去重、证据不足、工具错误、取消、超时、运行限位、无美元费用预算、脱敏与提示注入。
 2. 离线配置测试覆盖 Responses / Chat 两种 model classes、远程 HTTPS / loopback HTTP、保守兼容 profile、缺失 secret 和脱敏；具体兼容 endpoint 未实测时不得宣称可用。
 3. Windows Python 通过真实 C# TestHost 发现恰好两个工具，完成 Search → 多 Read → typed Answer；fixture 覆盖 Redirect 配方、两项材料、无结果和恶意页面。
 4. WSL Python 3.12 与 Windows Python 3.12.3 使用同一解析锁通过 lint、格式、strict mypy 与适用测试；Windows .NET Release build 和全部测试通过。
@@ -97,4 +96,4 @@
 
 ## 变更规则
 
-公共 answer/source/usage/error 语义、证据规则、预算上限、provider 配置/endpoint/secret 安全边界或 Runtime 分层变化时更新本 spec，并在需要时新增 ADR。具体供应商与模型验收、依赖版本、类、fixture、命令和验证记录进入对应 Phase 计划；Wiki Tool JSON 契约变化同时更新 `wiki-tools` spec。
+公共 answer/source/usage/error 语义、证据规则、运行限位、provider 配置/endpoint/secret 安全边界或 Runtime 分层变化时更新本 spec，并在需要时新增 ADR。具体供应商与模型验收、依赖版本、类、fixture、命令和验证记录进入对应 Phase 计划；Wiki Tool JSON 契约变化同时更新 `wiki-tools` spec。

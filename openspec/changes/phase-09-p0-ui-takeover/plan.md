@@ -5,7 +5,7 @@
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
 - 最后更新：2026-08-28
-- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏、本机 AI 配置与 Chat 交互视觉
+- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏、本机 AI 配置、Chat 交互视觉与 Token 花费展示
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -28,6 +28,8 @@
 - 按用户明确要求，Windows 本机 `ai-runtime.json` 使用新版配置保存 API key；Host 只把该值放入所属 Sidecar 的进程环境，不进入命令参数、NDJSON、错误或 Git。
 - Chat 思考中使用连续内容流、明确的运行状态和紧凑工具轨迹，不再以孤立居中的问题卡、厚重工具卡和重复输入内容形成大面积空白。
 - 输入框以预览路由拦截 Enter 并发送，Shift+Enter 保留换行；发送后清空编辑框，底部显示键盘提示。
+- 取消 Agent 的美元费用安全预算，不再因 PydanticAI 可识别的 provider 定价达到 `$0.10` 而中止回答；请求/工具循环、输出/context 和超时技术限位继续生效。
+- Chat 原 Usage 区域改为“Token 花费”，只显示输入、输出与合计 token，不显示模型请求数、工具调用数或美元估算。
 - Windows Release build 0 warning/0 error；既有和新增测试通过；高 DPI 下实际拖动两端、收藏页、Chat/Reader 星标与窄窗口无方框错位。
 
 ## 前置条件
@@ -58,6 +60,7 @@
 - 分栏只使用 Grid 列最小宽度约束，不注册拖动完成关闭事件；Reader 关闭动作只由既有显式关闭入口委托 `ShellViewModel.CloseReader()`。
 - 已保存数据根失效或内容不兼容时，错误区提供重新选择入口；旧数据遗留 WAL/SHM 先正常 checkpoint 并切回 DELETE journal，不直接删除 sidecar。
 - `ai-runtime.json` 升级为严格 v2，新增顶层 `apiKey`；值只在内存中传给 `ProcessStartInfo.Environment["TERRARIA_AI_API_KEY"]`。配置与用户级 Python 环境位于 `%LOCALAPPDATA%`，不纳入仓库。
+- Agent 的 `UsageLimits` 不再设置 `cost_limit`；typed usage 与 NDJSON 继续兼容 provider 返回的可选 `cost_usd`，避免改变协议。其余限位属于稳定性与协议护栏，不作为费用预算展示。
 - 待决问题：无；收藏跨设备同步和完整 Phase 09 其余页面留给后续明确任务。
 
 ## 文件变更
@@ -72,6 +75,8 @@
 - MODIFY Windows AI configuration/process：读取 v2 本机密钥并仅通过子进程环境交付；不改变 NDJSON 或 Python Agent 公共设置。
 - MODIFY Reader view model / MainWindow：为默认首页建立当前页面收藏上下文。
 - MODIFY Chat XAML/view model/input behavior/styles：重排思考态、清空已提交输入并可靠处理 Enter/Shift+Enter。
+- MODIFY Python Agent settings/tests：移除美元费用上限配置和执行限制，保留非费用运行限位。
+- MODIFY Chat XAML/view model 与 Windows tests：把 Usage 展示替换为 Token 花费，并更新运行限位安全文案。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
@@ -89,6 +94,9 @@
 - [x] 执行 Windows build/自动化测试和静态脱敏检查；人工 UI 验收由用户执行。
 - [x] 优化 AI 思考态和工具轨迹视觉，接通预览 Enter 发送并补齐回归测试。
 - [x] 执行 Windows build/自动化测试与静态检查；本次人工 UI 验收继续由用户执行。
+- [x] 移除 Agent 美元费用安全预算，并把 Chat Usage 区域改为 Token 花费。
+- [x] 更新 AI Backend/Windows Presentation 持续契约与 ADR 0005。
+- [x] 执行 Python Agent、Windows build/tests、diff/secret/双 Git 状态检查并分别提交源码与治理变更。
 
 ## 验证与回归计划
 
@@ -119,6 +127,8 @@
 - 2026-08-28：已在 `%LOCALAPPDATA%\Terraria AI Wiki\python` 建立 Python 3.12.3 / PydanticAI 2.31.0 环境并写入用户级 v2 配置；真实 Sidecar ready/shutdown 握手通过，未发送 answer 或 Provider 请求。源码提交为 `ec124ff`。
 - 2026-08-28：用户提供实机截图，要求优化 AI 思考态并增加 Enter 发送。确认现有输入仅在 TextBox 冒泡 `KeyDown` 上处理，而 `AcceptsReturn` 可能先消费 Enter；改为预览路由处理，并同步修正重复问题与厚重工具卡布局。
 - 2026-08-28：Chat 思考态、回答区、完成后工具摘要与输入区已重排；预览路由 Enter/Shift+Enter、发送后清空编辑框及状态转换回归通过。源码提交为 `c23c4b9`，人工 UI 验收按用户要求留给用户。
+- 2026-08-28：用户要求关闭安全预算并把原显示位置改为 Token 花费。代码确认唯一费用预算为 `WikiAgentSettings.cost_limit_usd` / PydanticAI `UsageLimits.cost_limit`；决定只移除美元费用中止，保留防循环、协议长度、context 与超时技术护栏，同时维持 typed usage/NDJSON 的可选费用字段兼容。
+- 2026-08-28：移除公开 settings 的费用预算覆盖与 PydanticAI `cost_limit`，Chat 改为只显示输入/输出/合计 Token，`budget_exceeded` 兼容错误改用“运行限制”安全文案。源码提交为 `28f2d82`。
 
 ## 发现、偏差与决策
 
@@ -139,7 +149,8 @@
 - 本机 AI 配置结构验证：v2、Python 路径、DeepSeek provider/model/API 和非空 key 均有效；真实 Sidecar 返回 Runtime 1、Python 3.12.3、PydanticAI 2.31.0 ready 后正常退出。未启动 UI，未请求付费 Provider。
 - 仓库 secret scan：通过；真实 key 只存在用户级 `ai-runtime.json`，未进入源码、测试、文档、Git 或临时文件。
 - Chat 修正后 Windows Release build：通过，0 warning / 0 error；全量 .NET tests：248/248 通过（Core 90、Application 54、Windows 76、WikiTools 28）。XAML 编译、预览 Enter 绑定、Shift+Enter 判定、思考态到完成态转换和编辑框清空均有自动化回归；未启动 UI、未请求 Provider。
+- 费用预算/Token 展示修正后：WSL Python 3.12.3 Ruff lint、format 和 strict mypy 通过；离线 Agent tests 77 passed / 4 skipped（跨语言与付费 Provider 未启用）。Windows Release build 0 warning / 0 error；全量 .NET tests 249/249 通过（Core 90、Application 54、Windows 77、WikiTools 28）。未启动 UI、未请求 Provider。
 
 ## 完成摘要
 
-当前授权的收藏、Reader 交互、本机 AI 配置与 Chat 视觉切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff` 和 `c23c4b9` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
+当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9` 和 `28f2d82` 保存；Phase 09 整体仍为 `in-progress`，人工 UI 验收由用户执行，其余 P0 页面不在本次完成范围内。
