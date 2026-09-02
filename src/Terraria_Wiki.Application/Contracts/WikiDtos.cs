@@ -1,0 +1,62 @@
+using Terraria_Wiki.Core.Packages;
+using Terraria_Wiki.Core.Query;
+
+namespace Terraria_Wiki.Application;
+
+public sealed record WikiBookSnapshot(
+    int Id,
+    string Title,
+    string Description,
+    bool IsPageDownloaded,
+    bool IsResourceDownloaded,
+    int PageCount,
+    int ResourceCount,
+    int RedirectCount,
+    long DataSize,
+    DateTime UpdateTime,
+    string DataFolder,
+    string DefaultPageTitle);
+
+public sealed record WikiPageListItem(string Title, DateTime LastModified);
+
+public sealed record WikiReadResponse(
+    string RequestedTitle,
+    string RequestedPageTitle,
+    WikiReadStatus Status,
+    string? Title,
+    string? Content,
+    DateTime? LastModified,
+    string? RedirectFromTitle,
+    string? RedirectTargetTitle,
+    string? RedirectTargetAnchor,
+    string? Anchor)
+{
+    public bool IsFound => Status == WikiReadStatus.Found;
+    public bool IsRedirect => RedirectFromTitle is not null;
+}
+
+public sealed record WikiAssetContent(
+    string FileName,
+    byte[] Data,
+    string MimeType,
+    DateTime? LastModified);
+
+public sealed record WikiHistoryItem(
+    int Id,
+    string WikiTitle,
+    DateTime ReadAt,
+    string DateKey);
+
+public sealed record WikiFavoriteItem(string WikiTitle, DateTime FavoritedAt);
+
+public sealed record WikiPackageImportResponse(
+    WikiBookSnapshot WikiBook,
+    WikiPackageInspection Inspection,
+    bool ReplacedExistingData,
+    bool MigratedLegacyAnchors);
+
+public sealed record WikiPackageExportResponse(
+    string PackagePath,
+    long PackageBytes,
+    int MetadataBytes,
+    long PayloadBytes);

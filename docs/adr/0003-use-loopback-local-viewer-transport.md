@@ -1,9 +1,9 @@
 # ADR 0003：Windows Local Viewer 使用受限动态 loopback transport
 
-- 状态：accepted；Phase 04 Windows 11 x64 生产客户端验证通过
+- 状态：accepted；Phase 04 Windows 11 x64 生产客户端验证通过；旧项目直接供给构建资产的部分已由 ADR 0007 替代
 - 日期：2026-08-24
 - 决策范围：Windows Local Viewer transport、NativeWebView 消息边界与生命周期；不外推 Android
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/changes/archive/phase-04-windows-client-foundation/plan.md`
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/changes/archive/phase-04-windows-client-foundation/plan.md`、`docs/adr/0007-separate-product-source-from-reference.md`
 
 ## 背景
 

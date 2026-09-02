@@ -1,0 +1,40 @@
+# .NET / Avalonia build output
+**/[Bb]in/
+**/[Oo]bj/
+**/TestResults/
+artifacts/
+publish/
+*.user
+*.suo
+*.nupkg
+*.snupkg
+
+# Python environments and caches
+**/.venv/
+**/__pycache__/
+**/.mypy_cache/
+**/.pytest_cache/
+**/.ruff_cache/
+**/*.py[cod]
+**/dist/
+**/build/
+
+# Local probes and runtime data
+.tmp-searchprobe/
+*.db
+*.db-shm
+*.db-wal
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+*.pkg
+*.pak
+
+# Local secrets and editor / OS state
+.env
+.env.*
+!.env.example
+.DS_Store
+Thumbs.db
+*.swp
+*~

@@ -1,0 +1,114 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AssemblyName>Terraria_Wiki.Windows</AssemblyName>
+    <RootNamespace>Terraria_Wiki.Windows</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <FrameworkReference Include="Microsoft.AspNetCore.App" />
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+    <PackageReference Include="Markdig" Version="1.3.2" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="../Terraria_Wiki.Application/Terraria_Wiki.Application.csproj" />
+    <ProjectReference Include="../Terraria_Wiki.WikiTools/Terraria_Wiki.WikiTools.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="Terraria_Wiki.Windows.Tests" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <AvaloniaResource Include="../../assets/windows/AppIcon/logo.svg"
+                       Link="Assets/logo.svg" />
+    <AvaloniaResource Include="../../assets/windows/AppIcon/appicon.ico"
+                       Link="Assets/appicon.ico" />
+  </ItemGroup>
+
+  <Target Name="CopyViewerAssetsAfterBuild" AfterTargets="Build">
+    <PropertyGroup>
+      <_ViewerOutput>$(OutDir)ViewerAssets</_ViewerOutput>
+      <_ViewerSource>$(MSBuildProjectDirectory)\..\..\assets\windows\Viewer\Web</_ViewerSource>
+      <_ViewerBridge>$(MSBuildProjectDirectory)\..\..\assets\windows\Viewer\_common\iframe-bridge.js</_ViewerBridge>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ViewerFiles Include="$(_ViewerSource)\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(_ViewerOutput)\Web;$(_ViewerOutput)\_common" />
+    <Copy SourceFiles="@(_ViewerFiles)"
+          DestinationFiles="@(_ViewerFiles->'$(_ViewerOutput)\Web\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_ViewerBridge)"
+          DestinationFiles="$(_ViewerOutput)\_common\iframe-bridge.js"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\viewer-host.html"
+          DestinationFiles="$(_ViewerOutput)\index.html"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyViewerAssetsAfterPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_ViewerOutput>$(PublishDir)ViewerAssets</_ViewerOutput>
+      <_ViewerSource>$(MSBuildProjectDirectory)\..\..\assets\windows\Viewer\Web</_ViewerSource>
+      <_ViewerBridge>$(MSBuildProjectDirectory)\..\..\assets\windows\Viewer\_common\iframe-bridge.js</_ViewerBridge>
+    </PropertyGroup>
+    <ItemGroup>
+      <_ViewerFiles Include="$(_ViewerSource)\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(_ViewerOutput)\Web;$(_ViewerOutput)\_common" />
+    <Copy SourceFiles="@(_ViewerFiles)"
+          DestinationFiles="@(_ViewerFiles->'$(_ViewerOutput)\Web\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_ViewerBridge)"
+          DestinationFiles="$(_ViewerOutput)\_common\iframe-bridge.js"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\viewer-host.html"
+          DestinationFiles="$(_ViewerOutput)\index.html"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyAgentRuntimeAfterBuild" AfterTargets="Build">
+    <PropertyGroup>
+      <_AgentSource>$(MSBuildProjectDirectory)\..\..\agent</_AgentSource>
+      <_AgentOutput>$(OutDir)AgentRuntime</_AgentOutput>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AgentFiles Include="$(_AgentSource)\src\terraria_wiki_agent\**\*.py" />
+    </ItemGroup>
+    <MakeDir Directories="$(_AgentOutput)\src\terraria_wiki_agent" />
+    <Copy SourceFiles="@(_AgentFiles)"
+          DestinationFiles="@(_AgentFiles->'$(_AgentOutput)\src\terraria_wiki_agent\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_AgentSource)\sidecar_launcher.py;$(_AgentSource)\pyproject.toml;$(_AgentSource)\uv.lock"
+          DestinationFolder="$(_AgentOutput)"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopyAgentRuntimeAfterPublish" AfterTargets="Publish">
+    <PropertyGroup>
+      <_AgentSource>$(MSBuildProjectDirectory)\..\..\agent</_AgentSource>
+      <_AgentOutput>$(PublishDir)AgentRuntime</_AgentOutput>
+    </PropertyGroup>
+    <ItemGroup>
+      <_AgentFiles Include="$(_AgentSource)\src\terraria_wiki_agent\**\*.py" />
+    </ItemGroup>
+    <MakeDir Directories="$(_AgentOutput)\src\terraria_wiki_agent" />
+    <Copy SourceFiles="@(_AgentFiles)"
+          DestinationFiles="@(_AgentFiles->'$(_AgentOutput)\src\terraria_wiki_agent\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(_AgentSource)\sidecar_launcher.py;$(_AgentSource)\pyproject.toml;$(_AgentSource)\uv.lock"
+          DestinationFolder="$(_AgentOutput)"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

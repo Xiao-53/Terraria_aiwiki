@@ -2,6 +2,8 @@
 
 这是一个基于现有 **Terraria Wiki Offline** 源码逐步建设的 Terraria AI 应用工作区，后续开发由 **WSL2 中安装的 Codex CLI** 执行。
 
+外层仓库现在是唯一产品源码仓库，根级 `src/`、`tests/`、`agent/`、`assets/` 与 `Terraria_Wiki.Core.slnx` 构成产品基线。`terraria-wiki-offline/` 只作为固定到上游提交的只读参考 Submodule，不参与正常 build/runtime。
+
 项目会继续复用成熟的 C# Wiki 获取、更新、SQLite、FTS5、导入导出、资源和离线阅读能力；在其上建立可移植 Wiki Core、薄 Application、新的客户端 Presentation 与 Python AI。目标不是给旧界面简单增加 Chat，也不是重写已有 Wiki Core。
 
 Windows 新版本已经确定不再使用 .NET MAUI。当前首选路线是 **.NET 10 portable Core + Avalonia Presentation + NativeWebView**；Phase 00 垂直 PoC 已在 Windows 11 x64 通过宿主选择门槛，Phase 01 已完成单一 portable Core 提取与旧 MAUI façade 接入。产品当前目标仅为 Windows，未来只考虑 Android，除此之外的产品平台全部为非目标。Windows 开发不要求安装 MAUI workload、Android SDK、JDK 或 Emulator；Android 工具链只在后续 Android Phase 引入。
@@ -15,7 +17,7 @@ cd /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 codex
 ```
 
-不要从内层 `terraria-wiki-offline/` Git 仓库启动主会话，否则外层 `AGENTS.md` 可能不在 Codex 的指令发现范围内。`AGENTS.md` 在 Codex 会话开始时加载；修改后请重启会话。
+不要从 `terraria-wiki-offline/` 参考 Submodule 启动主会话，否则会把参考仓库误当作产品根，并漏掉外层产品源码与 `AGENTS.md`。`AGENTS.md` 在 Codex 会话开始时加载；修改后请重启会话。
 
 - 项目级方向、P0 护栏和 Phase 路线：[`docs/architecture/ARCHITECTURE-v0.6.md`](./docs/architecture/ARCHITECTURE-v0.6.md)
 - Agent 强制工作规则：[`AGENTS.md`](./AGENTS.md)
@@ -38,6 +40,8 @@ codex
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
 - Windows AI Runtime 决策：[`docs/adr/0006-use-stdio-python-sidecar.md`](./docs/adr/0006-use-stdio-python-sidecar.md)
+- 产品源码与参考仓库分离决策：[`docs/adr/0007-separate-product-source-from-reference.md`](./docs/adr/0007-separate-product-source-from-reference.md)
+- 已完成产品源码分离记录：[`openspec/changes/archive/separate-product-from-reference/plan.md`](./openspec/changes/archive/separate-product-from-reference/plan.md)
 - AI Backend 能力契约：[`openspec/specs/ai-backend/spec.md`](./openspec/specs/ai-backend/spec.md)
 - Windows AI Runtime 能力契约：[`openspec/specs/windows-ai-runtime/spec.md`](./openspec/specs/windows-ai-runtime/spec.md)
 - Windows Presentation 能力契约：[`openspec/specs/windows-presentation/spec.md`](./openspec/specs/windows-presentation/spec.md)
@@ -93,6 +97,8 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 当前路线与状态
 
+产品源码已从参考仓库迁到外层根级目录，Windows build/publish/runtime 不再读取固定上游 Submodule；迁移基线已完成 Windows/Python 回归，Phase 09 后续从根 solution 继续。
+
 ```text
 Migration Baseline & Host Spike
 → Portable Wiki Core
@@ -119,6 +125,11 @@ terraria_aiwiki/
 ├─ README.md                         # 人类与新会话入口
 ├─ AGENTS.md                         # Agent 强制规则
 ├─ INIT.md                           # 读取顺序
+├─ Terraria_Wiki.Core.slnx           # 产品 solution
+├─ src/                              # C# Core/Application/Windows/WikiTools
+├─ tests/                            # .NET 自动化测试
+├─ agent/                            # Python Agent 与冻结依赖
+├─ assets/windows/                   # Windows Viewer、bridge 与图标快照
 ├─ .agent/
 │  └─ PLANS.md                       # 计划格式与生命周期
 ├─ docs/
@@ -131,17 +142,18 @@ terraria_aiwiki/
 │     ├─ 0003-use-loopback-local-viewer-transport.md # Windows Viewer transport
 │     ├─ 0004-use-loopback-mcp-wiki-tool-transport.md # Wiki Tool transport
 │     ├─ 0005-use-pydantic-ai-openai-backend.md # AI Backend
-│     └─ 0006-use-stdio-python-sidecar.md # Windows AI Runtime
+│     ├─ 0006-use-stdio-python-sidecar.md # Windows AI Runtime
+│     └─ 0007-separate-product-source-from-reference.md # 源码所有权
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约
 │  └─ changes/                       # 进行中与已归档变更
-└─ terraria-wiki-offline/            # 现有源码仓库
+└─ terraria-wiki-offline/            # 只读上游参考 Submodule
 ```
 
 ## 开发环境与平台分工
 
-现有源码位于 `terraria-wiki-offline/`，它的基线技术包括 C#、.NET 10、.NET MAUI、Blazor Hybrid / Razor、SQLite / FTS5、HtmlAgilityPack 和 MediaWiki API。MAUI/Blazor 是旧宿主事实，不再是 Windows 目标架构。
+产品源码位于外层根级目录；参考 Submodule 保存 BigBearKing 上游的 .NET MAUI/Blazor Hybrid 旧宿主，仅用于行为与来源核对。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
 
 新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 正以小切片接管 P0 UI，当前已实现统一收藏页、Chat/Wiki 收藏、受限可调 Reader 分栏，以及复用 Application 分页边界的全部页面/历史资料库。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 

@@ -1,0 +1,23 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Terraria_Wiki.Windows.Presentation.Markdown.SafeMarkdownView">
+  <UserControl.Styles>
+    <Style Selector="Border.markdown-code">
+      <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
+      <Setter Property="CornerRadius" Value="8" />
+      <Setter Property="Padding" Value="12" />
+    </Style>
+    <Style Selector="Border.markdown-quote">
+      <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+      <Setter Property="BorderThickness" Value="3,0,0,0" />
+      <Setter Property="Padding" Value="12,4" />
+    </Style>
+    <Style Selector="Border.markdown-cell">
+      <Setter Property="BorderBrush" Value="{DynamicResource SystemControlForegroundBaseLowBrush}" />
+      <Setter Property="BorderThickness" Value="0,0,1,1" />
+      <Setter Property="Padding" Value="10,7" />
+      <Setter Property="MinWidth" Value="120" />
+    </Style>
+  </UserControl.Styles>
+  <StackPanel x:Name="DocumentRoot" Spacing="10" />
+</UserControl>

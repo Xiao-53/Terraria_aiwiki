@@ -1,9 +1,9 @@
 # ADR 0002：单一 Portable Core 与旧数据根原位复用
 
-- 状态：accepted
+- 状态：accepted；“生产 Core 位于内层仓库”的物理位置部分已由 ADR 0007 替代，数据根与 Core 边界决策继续有效
 - 日期：2026-08-24
 - 决策范围：Phase 01 的生产代码物理边界、宿主依赖方式与 Windows 旧数据根策略
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`、`docs/adr/0007-separate-product-source-from-reference.md`
 
 ## 背景
 

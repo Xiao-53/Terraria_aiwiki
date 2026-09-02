@@ -1,0 +1,11 @@
+<Solution>
+  <Project Path="src/Terraria_Wiki.Application/Terraria_Wiki.Application.csproj" />
+  <Project Path="src/Terraria_Wiki.Core/Terraria_Wiki.Core.csproj" />
+  <Project Path="src/Terraria_Wiki.WikiTools/Terraria_Wiki.WikiTools.csproj" />
+  <Project Path="src/Terraria_Wiki.Windows/Terraria_Wiki.Windows.csproj" />
+  <Project Path="tests/Terraria_Wiki.Application.Tests/Terraria_Wiki.Application.Tests.csproj" />
+  <Project Path="tests/Terraria_Wiki.Core.Tests/Terraria_Wiki.Core.Tests.csproj" />
+  <Project Path="tests/Terraria_Wiki.WikiTools.Tests/Terraria_Wiki.WikiTools.Tests.csproj" />
+  <Project Path="tests/Terraria_Wiki.WikiTools.TestHost/Terraria_Wiki.WikiTools.TestHost.csproj" />
+  <Project Path="tests/Terraria_Wiki.Windows.Tests/Terraria_Wiki.Windows.Tests.csproj" />
+</Solution>

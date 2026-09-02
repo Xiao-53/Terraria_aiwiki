@@ -1,0 +1,73 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <ResourceDictionary.ThemeDictionaries>
+    <ResourceDictionary x:Key="Light">
+      <SolidColorBrush x:Key="TerrariaBrandBrush" Color="#5F7F39" />
+      <SolidColorBrush x:Key="TerrariaBrandSoftBrush" Color="#185F7F39" />
+      <SolidColorBrush x:Key="TerrariaBrandHoverBrush" Color="#285F7F39" />
+      <SolidColorBrush x:Key="TerrariaBrandPressedBrush" Color="#385F7F39" />
+      <SolidColorBrush x:Key="TerrariaOnBrandBrush" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="TerrariaAppBackgroundBrush" Color="#FFF5F7F2" />
+      <SolidColorBrush x:Key="TerrariaNavigationBrush" Color="#FFFAFCF8" />
+      <SolidColorBrush x:Key="TerrariaSurfaceBrush" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="TerrariaSurfaceAltBrush" Color="#FFF0F3EC" />
+      <SolidColorBrush x:Key="TerrariaStrokeBrush" Color="#2424331A" />
+      <SolidColorBrush x:Key="TerrariaTextSecondaryBrush" Color="#FF657060" />
+      <SolidColorBrush x:Key="TerrariaDangerBrush" Color="#FFB44943" />
+      <SolidColorBrush x:Key="TerrariaDangerSoftBrush" Color="#18B44943" />
+      <SolidColorBrush x:Key="TerrariaOverlayScrimBrush" Color="#66000000" />
+    </ResourceDictionary>
+    <ResourceDictionary x:Key="Dark">
+      <SolidColorBrush x:Key="TerrariaBrandBrush" Color="#FF9BC76A" />
+      <SolidColorBrush x:Key="TerrariaBrandSoftBrush" Color="#249BC76A" />
+      <SolidColorBrush x:Key="TerrariaBrandHoverBrush" Color="#349BC76A" />
+      <SolidColorBrush x:Key="TerrariaBrandPressedBrush" Color="#469BC76A" />
+      <SolidColorBrush x:Key="TerrariaOnBrandBrush" Color="#FF17200E" />
+      <SolidColorBrush x:Key="TerrariaAppBackgroundBrush" Color="#FF171A16" />
+      <SolidColorBrush x:Key="TerrariaNavigationBrush" Color="#FF20241E" />
+      <SolidColorBrush x:Key="TerrariaSurfaceBrush" Color="#FF22261F" />
+      <SolidColorBrush x:Key="TerrariaSurfaceAltBrush" Color="#FF292E26" />
+      <SolidColorBrush x:Key="TerrariaStrokeBrush" Color="#3A9AAA91" />
+      <SolidColorBrush x:Key="TerrariaTextSecondaryBrush" Color="#FFAEB8A8" />
+      <SolidColorBrush x:Key="TerrariaDangerBrush" Color="#FFF1707A" />
+      <SolidColorBrush x:Key="TerrariaDangerSoftBrush" Color="#24F1707A" />
+      <SolidColorBrush x:Key="TerrariaOverlayScrimBrush" Color="#88000000" />
+    </ResourceDictionary>
+  </ResourceDictionary.ThemeDictionaries>
+
+  <Thickness x:Key="PagePadding">24</Thickness>
+  <Thickness x:Key="CardPadding">16</Thickness>
+  <CornerRadius x:Key="RadiusSmall">4</CornerRadius>
+  <CornerRadius x:Key="RadiusControl">8</CornerRadius>
+  <CornerRadius x:Key="RadiusSurface">12</CornerRadius>
+  <BoxShadows x:Key="ComposerShadow">0 6 20 0 #22000000</BoxShadows>
+  <BoxShadows x:Key="OverlayShadow">0 12 32 0 #38000000</BoxShadows>
+
+  <ControlTheme x:Key="ChromeLessButtonTheme" TargetType="Button">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}"
+                BorderBrush="{TemplateBinding BorderBrush}"
+                BorderThickness="{TemplateBinding BorderThickness}"
+                CornerRadius="{TemplateBinding CornerRadius}"
+                Padding="{TemplateBinding Padding}">
+          <ContentPresenter Content="{TemplateBinding Content}"
+                            ContentTemplate="{TemplateBinding ContentTemplate}"
+                            HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
+                            VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+  <ControlTheme x:Key="ReaderSplitterTheme" TargetType="GridSplitter">
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{TemplateBinding Background}">
+          <Border Name="PART_Handle" Width="2" Height="40" CornerRadius="1"
+                  Background="{DynamicResource TerrariaStrokeBrush}"
+                  HorizontalAlignment="Center" VerticalAlignment="Center" />
+        </Border>
+      </ControlTemplate>
+    </Setter>
+  </ControlTheme>
+</ResourceDictionary>

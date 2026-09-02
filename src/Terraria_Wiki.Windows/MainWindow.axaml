@@ -1,0 +1,10 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:shell="clr-namespace:Terraria_Wiki.Windows.Presentation.Shell"
+        x:Class="Terraria_Wiki.Windows.MainWindow"
+        Title="Terraria AI Wiki"
+        Icon="avares://Terraria_Wiki.Windows/Assets/appicon.ico"
+        Width="1280" Height="820"
+        MinWidth="900" MinHeight="600">
+  <shell:ShellView x:Name="ShellHost" />
+</Window>

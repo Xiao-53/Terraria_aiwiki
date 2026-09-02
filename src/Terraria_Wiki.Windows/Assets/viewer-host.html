@@ -1,0 +1,43 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Terraria Wiki Viewer</title>
+  <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;overflow:hidden}body{background:#202124}</style>
+</head>
+<body>
+  <iframe id="wiki-frame" title="Terraria Wiki" src="{{WIKI_URI}}"></iframe>
+  <script>
+    (() => {
+      'use strict';
+      const frame = document.getElementById('wiki-frame');
+      const origin = window.location.origin;
+      const source = 'terraria-wiki-viewer';
+
+      function isEnvelope(value) {
+        if (!value || typeof value !== 'object') return false;
+        if (value.type !== 'req' && value.type !== 'res') return false;
+        return typeof value.id === 'string' && value.id.length > 0 && value.id.length <= 128;
+      }
+
+      window.terrariaWikiHost = Object.freeze({
+        receive(envelope) {
+          if (!isEnvelope(envelope) || !frame.contentWindow) return false;
+          frame.contentWindow.postMessage(envelope, origin);
+          return true;
+        }
+      });
+
+      window.addEventListener('message', event => {
+        if (event.origin !== origin) return;
+        if (event.source !== frame.contentWindow) return;
+        if (!isEnvelope(event.data)) return;
+        if (event.data.type === 'req' && typeof event.data.method !== 'string') return;
+        if (!window.chrome?.webview?.postMessage) return;
+        window.chrome.webview.postMessage(JSON.stringify({ source, origin, envelope: event.data }));
+      });
+    })();
+  </script>
+</body>
+</html>

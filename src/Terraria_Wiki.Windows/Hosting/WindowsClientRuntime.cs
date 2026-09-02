@@ -1,0 +1,364 @@
+using Terraria_Wiki.Application;
+using Terraria_Wiki.Core.Net;
+using Terraria_Wiki.WikiTools;
+using Terraria_Wiki.Windows.AI;
+using Terraria_Wiki.Windows.Viewer;
+using System.Diagnostics;
+
+namespace Terraria_Wiki.Windows.Hosting;
+
+internal sealed class WindowsClientRuntime : IAsyncDisposable
+{
+    private readonly HttpClient _httpClient;
+    private readonly WindowsMountGuard _mountGuard;
+    private readonly string[] _arguments;
+    private readonly WikiToolConsumerCoordinator _wikiToolCoordinator;
+    private readonly CancellationTokenSource _lifetime = new();
+    private readonly SemaphoreSlim _aiGate = new(1, 1);
+    private AiRuntimeConfiguration? _aiConfiguration;
+    private bool _aiConfigurationLoaded;
+    private WindowsAiRuntime? _ai;
+    private int _disposed;
+
+    private WindowsClientRuntime(
+        string dataRoot,
+        HttpClient httpClient,
+        WindowsMountGuard mountGuard,
+        WikiApplication application,
+        ViewerConsumerCoordinator viewer,
+        ViewerBridge bridge,
+        ApplicationPreferences preferences,
+        WebView2RuntimeStatus webView2,
+        string[] arguments,
+        WikiToolConsumerCoordinator wikiToolCoordinator,
+        WindowsAiRuntimeStatus aiStatus)
+    {
+        DataRoot = dataRoot;
+        _httpClient = httpClient;
+        _mountGuard = mountGuard;
+        Application = application;
+        Viewer = viewer;
+        Bridge = bridge;
+        Preferences = preferences;
+        WebView2 = webView2;
+        _arguments = arguments;
+        _wikiToolCoordinator = wikiToolCoordinator;
+        AiStatus = aiStatus;
+    }
+
+    public string DataRoot { get; }
+    public WikiApplication Application { get; }
+    public ViewerConsumerCoordinator Viewer { get; }
+    public ViewerBridge Bridge { get; }
+    public ApplicationPreferences Preferences { get; }
+    public WebView2RuntimeStatus WebView2 { get; }
+    public WindowsAiRuntime? Ai => _ai;
+    public WindowsAiRuntimeStatus AiStatus { get; private set; }
+    public WindowsRuntimeDisposeTimings DisposeTimings { get; } = new();
+    public event EventHandler<WindowsAiRuntimeStatus>? AiStatusChanged;
+
+    public static async Task<WindowsClientRuntime> CreateAsync(
+        IReadOnlyList<string> arguments,
+        IDataRootPicker picker,
+        Func<bool> isDarkTheme,
+        CancellationToken cancellationToken = default)
+    {
+        var webView2 = WebView2RuntimeProbe.Probe();
+        if (!webView2.Available)
+            throw new WindowsClientStartupException("webview2-missing", webView2.Error ?? "WebView2 Runtime is unavailable.");
+
+        var guard = new WindowsMountGuard(new LegacyProcessProbe());
+        HttpClient? httpClient = null;
+        ViewerConsumerCoordinator? viewer = null;
+        var wikiToolCoordinator = new WikiToolConsumerCoordinator();
+        WikiApplication? application = null;
+        ApplicationPreferences? loadedPreferences = null;
+        try
+        {
+            guard.AcquireSingleInstance();
+            var settingsPath = ParseHostSettingsPath(arguments);
+            var settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
+            var resolution = await new DataRootResolver(settings, picker)
+                .ResolveAsync(arguments, cancellationToken)
+                .ConfigureAwait(false);
+            guard.AcquireDataRoot(resolution.Path);
+
+            httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
+            var dataSource = new ApplicationViewerDataSource(() =>
+                application ?? throw new InvalidOperationException("WikiApplication has not been created."));
+            var staticRoot = Path.Combine(AppContext.BaseDirectory, "ViewerAssets");
+            viewer = new ViewerConsumerCoordinator(
+                staticRoot,
+                dataSource,
+                () => loadedPreferences?.ContentTheme == "original"
+                    ? "original"
+                    : isDarkTheme() ? "dark" : "light");
+            var consumers = new CompositeWikiDataConsumerCoordinator(viewer, wikiToolCoordinator);
+            application = new WikiApplication(
+                resolution.Path,
+                settings,
+                consumers,
+                new HttpClientWikiHttpTransport(httpClient));
+            viewer.SetActiveWikiProvider(application.ActiveWiki.GetActiveAsync);
+
+            await application.ActiveWiki.InitializeAsync(cancellationToken).ConfigureAwait(false);
+            var preferences = await application.Settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            loadedPreferences = preferences;
+            var bridge = new ViewerBridge(
+                application,
+                new WindowsExternalUriLauncher(),
+                preferences.IsSideButtonBackEnabled);
+
+            return new WindowsClientRuntime(
+                resolution.Path,
+                httpClient,
+                guard,
+                application,
+                viewer,
+                bridge,
+                preferences,
+                webView2,
+                arguments.ToArray(),
+                wikiToolCoordinator,
+                new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Starting, "AI 配置等待后台加载。"));
+        }
+        catch
+        {
+            if (viewer is not null)
+            {
+                try { await viewer.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+            if (application is not null)
+            {
+                try { await application.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+            httpClient?.Dispose();
+            guard.Dispose();
+            throw;
+        }
+    }
+
+    public async Task EnableAiAsync(CancellationToken cancellationToken = default)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        try
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            await EnableAiUnderLockAsync(linked.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _aiGate.Release();
+        }
+    }
+
+    private async Task EnableAiUnderLockAsync(CancellationToken cancellationToken)
+    {
+        if (_ai is not null)
+        {
+            PublishAiStatus(AiStatus);
+            return;
+        }
+        if (!_aiConfigurationLoaded)
+        {
+            _aiConfigurationLoaded = true;
+            try
+            {
+                _aiConfiguration = await AiRuntimeConfiguration.LoadAsync(_arguments, cancellationToken)
+                    .ConfigureAwait(false);
+                if (string.IsNullOrWhiteSpace(_aiConfiguration.ApiKey))
+                {
+                    PublishAiStatus(new WindowsAiRuntimeStatus(
+                        WindowsAiRuntimeState.Disabled,
+                        "未配置 AI API Key；离线搜索和阅读仍可使用。",
+                        "model_authentication"));
+                    return;
+                }
+            }
+            catch (AiConfigurationException exception)
+            {
+                _aiConfiguration = null;
+                PublishAiStatus(new WindowsAiRuntimeStatus(
+                    WindowsAiRuntimeState.Disabled,
+                    exception.Message + " 离线搜索和阅读仍可使用。",
+                    exception.Code));
+                return;
+            }
+        }
+        if (_aiConfiguration is null || AiStatus.State == WindowsAiRuntimeState.Disabled)
+        {
+            PublishAiStatus(AiStatus);
+            return;
+        }
+        PublishAiStatus(new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Starting, "正在启动 AI Runtime…"));
+        try
+        {
+            var ai = await WindowsAiRuntime.StartAsync(
+                Application.Query,
+                _wikiToolCoordinator,
+                _aiConfiguration,
+                cancellationToken: cancellationToken).ConfigureAwait(false);
+            if (Volatile.Read(ref _disposed) != 0 || _lifetime.IsCancellationRequested)
+            {
+                await ai.DisposeAsync().ConfigureAwait(false);
+                cancellationToken.ThrowIfCancellationRequested();
+                return;
+            }
+            _ai = ai;
+            ai.StatusChanged += OnAiStatusChanged;
+            PublishAiStatus(ai.Status);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (AiRuntimeException exception)
+        {
+            PublishAiStatus(new WindowsAiRuntimeStatus(
+                WindowsAiRuntimeState.Failed,
+                exception.Message + " 离线搜索和阅读仍可使用。",
+                exception.Code));
+        }
+        catch
+        {
+            PublishAiStatus(new WindowsAiRuntimeStatus(
+                WindowsAiRuntimeState.Failed,
+                "AI Runtime 启动失败；离线搜索和阅读仍可使用。",
+                "unknown"));
+        }
+    }
+
+    public async Task RetryAiAsync(CancellationToken cancellationToken = default)
+    {
+        using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
+        await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        try
+        {
+            linked.Token.ThrowIfCancellationRequested();
+            var old = _ai;
+            _ai = null;
+            if (old is not null)
+            {
+                old.StatusChanged -= OnAiStatusChanged;
+                try { await old.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+            _aiConfiguration = null;
+            _aiConfigurationLoaded = false;
+            PublishAiStatus(new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Starting, "AI Runtime 等待启动。"));
+            await EnableAiUnderLockAsync(linked.Token).ConfigureAwait(false);
+        }
+        finally
+        {
+            _aiGate.Release();
+        }
+    }
+
+    public async ValueTask DisposeAsync()
+    {
+        if (Interlocked.Exchange(ref _disposed, 1) != 0)
+            return;
+        var total = Stopwatch.StartNew();
+        _lifetime.Cancel();
+        try
+        {
+            var aiStop = StopAiAsync();
+            var viewerStop = StopViewerAsync();
+            await Task.WhenAll(aiStop, viewerStop).ConfigureAwait(false);
+        }
+        finally
+        {
+            var application = Stopwatch.StartNew();
+            try
+            {
+                await Application.DisposeAsync().ConfigureAwait(false);
+            }
+            finally
+            {
+                application.Stop();
+                DisposeTimings.ApplicationStopMilliseconds = application.ElapsedMilliseconds;
+                _httpClient.Dispose();
+                _mountGuard.Dispose();
+                _aiGate.Dispose();
+                _lifetime.Dispose();
+                total.Stop();
+                DisposeTimings.TotalMilliseconds = total.ElapsedMilliseconds;
+            }
+        }
+    }
+
+    private async Task StopAiAsync()
+    {
+        var timer = Stopwatch.StartNew();
+        await _aiGate.WaitAsync().ConfigureAwait(false);
+        try
+        {
+            var ai = _ai;
+            _ai = null;
+            if (ai is not null)
+            {
+                ai.StatusChanged -= OnAiStatusChanged;
+                try { await ai.DisposeAsync().ConfigureAwait(false); } catch { }
+            }
+        }
+        finally
+        {
+            _aiGate.Release();
+            timer.Stop();
+            DisposeTimings.AiStopMilliseconds = timer.ElapsedMilliseconds;
+        }
+    }
+
+    private async Task StopViewerAsync()
+    {
+        var timer = Stopwatch.StartNew();
+        try { await Viewer.StopAsync().ConfigureAwait(false); } catch { }
+        finally
+        {
+            timer.Stop();
+            DisposeTimings.ViewerStopMilliseconds = timer.ElapsedMilliseconds;
+        }
+    }
+
+    private void OnAiStatusChanged(object? sender, WindowsAiRuntimeStatus status) => PublishAiStatus(status);
+
+    private void PublishAiStatus(WindowsAiRuntimeStatus status)
+    {
+        AiStatus = status;
+        try { AiStatusChanged?.Invoke(this, status); } catch { }
+    }
+
+    internal static string? ParseHostSettingsPath(IReadOnlyList<string> arguments)
+    {
+        string? value = null;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            if (!string.Equals(arguments[index], "--host-settings", StringComparison.Ordinal))
+                continue;
+            if (++index >= arguments.Count || string.IsNullOrWhiteSpace(arguments[index]))
+                throw new WindowsClientStartupException("missing-host-settings-argument", "--host-settings requires an absolute file path.");
+            if (value is not null)
+                throw new WindowsClientStartupException("duplicate-host-settings-argument", "--host-settings may only be supplied once.");
+            if (!Path.IsPathFullyQualified(arguments[index]))
+                throw new WindowsClientStartupException("invalid-host-settings-argument", "--host-settings must be an absolute file path.");
+            value = Path.GetFullPath(arguments[index]);
+        }
+        return value;
+    }
+}
+
+internal sealed class WindowsRuntimeDisposeTimings
+{
+    public long AiStopMilliseconds { get; internal set; }
+    public long ViewerStopMilliseconds { get; internal set; }
+    public long ApplicationStopMilliseconds { get; internal set; }
+    public long TotalMilliseconds { get; internal set; }
+}
+
+internal sealed class WindowsClientStartupException : IOException
+{
+    public WindowsClientStartupException(string code, string message, Exception? innerException = null)
+        : base(message, innerException) => Code = code;
+
+    public string Code { get; }
+}

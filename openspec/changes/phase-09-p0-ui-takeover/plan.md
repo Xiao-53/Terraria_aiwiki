@@ -20,6 +20,8 @@
 
 2026-09-02 用户通过实机截图确认：Chat 空状态的三个示例问题和收藏/资料库页头“刷新”按钮继承 Fluent 默认灰色背景，与当前 Terraria 语义配色不协调。用户明确要求删除三个示例问题，并局部重做两个刷新操作的样式与配色；不改变刷新命令、资料库数据或其他页面行为。
 
+2026-09-02 确认新产品不应继续寄存在上游参考仓库的本地分支中。Phase 09 功能开发暂停，先执行非 Phase 变更 `separate-product-from-reference`：以产品提交 `d67d904` 建立外层根级 `src/`、`tests/`、`agent/`、`assets/` 与 solution 基线，并把 `terraria-wiki-offline/` 固定为只读上游 Submodule。此次前置修正不改变本 Phase 行为范围、完成状态或历史提交路径。
+
 ## 目标与完成定义
 
 - 左侧导航显示已实现的“AI 问答”“收藏”和“Wiki 资料库”；收藏页同时列出对话收藏与活动 Wiki 的 Wiki 收藏。
@@ -128,6 +130,7 @@
 - [x] 更新持续 Presentation spec、README/项目状态和本计划；检查双 Git 状态并分别提交源码与治理变更。
 - [x] 删除 Chat 空状态三个示例问题及其内部命令，统一收藏/资料库刷新按钮样式。
 - [x] 执行 Windows Presentation build/tests、静态样式检查与差异检查；更新契约和本计划并分别保存源码/治理提交。
+- [x] 完成并验证 `separate-product-from-reference` 外层源码基线；后续从根 solution 继续 Phase 09 功能开发。
 
 ## 验证与回归计划
 
@@ -176,6 +179,8 @@
 - 2026-09-02：Wiki 资料库源码以 `379ec17`（`feat(windows): add wiki library navigation`）保存；持续 Presentation spec、README、项目基线、架构状态和本计划由独立外层治理提交保存，不 push。
 - 2026-09-02：用户以实机截图要求删除 Chat 三个示例问题，并修正收藏/资料库页头刷新按钮的默认灰色外观；确认本切片只涉及 Windows Presentation 内部 XAML、未再使用的内部命令、共享样式与静态回归，恢复点为内层 `e553e10`。
 - 2026-09-02：删除三个示例按钮及未再使用的 `UseExampleCommand`；为收藏/资料库页头增加共享 `toolbar-action`，使用品牌浅色底、绿色描边与刷新图标，并定义 hover/pressed/focus-visible/disabled 状态。Windows 实际窗口截图确认 Chat 空状态和两个页头按钮在当前缩放下布局正常；测试产生的截图/脚本已清理，测试误写的数据根配置已恢复为真实目录。源码提交为 `d67d904`。
+- 2026-09-02：暂停 Phase 09 功能开发，启动 `separate-product-from-reference` 前置修正。迁移内容基线为内层 `d67d904`，外层恢复点为 `d73436b`，上游参考点为 `a1dd899`；迁移后产品路径改为外层根级目录，Phase 09 仍保持 `in-progress`。
+- 2026-09-02：外层源码基线完成 Windows Release 0-warning build、260/260 .NET tests、framework-dependent/self-contained publish smoke 与冻结 Python 回归；参考 Submodule 固定 `a1dd899`，Phase 09 仍为 `in-progress` 并可从根 solution 继续。
 
 ## 发现、偏差与决策
 

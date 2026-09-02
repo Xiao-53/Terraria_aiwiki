@@ -1,0 +1,392 @@
+<Styles xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:reader="clr-namespace:Terraria_Wiki.Windows.Presentation.Reader">
+  <Style Selector="Window">
+    <Setter Property="FontFamily" Value="Segoe UI Variable Text, Segoe UI, Arial" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaAppBackgroundBrush}" />
+  </Style>
+  <Style Selector="TextBlock, SelectableTextBlock">
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="LineHeight" Value="20" />
+  </Style>
+  <Style Selector="TextBlock.page-title">
+    <Setter Property="FontSize" Value="28" />
+    <Setter Property="LineHeight" Value="36" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.page-subtitle">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="FontSize" Value="14" />
+    <Setter Property="LineHeight" Value="20" />
+  </Style>
+  <Style Selector="TextBlock.section-title">
+    <Setter Property="FontSize" Value="20" />
+    <Setter Property="LineHeight" Value="28" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="TextBlock.eyebrow">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="LineHeight" Value="16" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+    <Setter Property="LetterSpacing" Value="0.4" />
+  </Style>
+  <Style Selector="TextBlock.muted, SelectableTextBlock.muted">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+  </Style>
+  <Style Selector="TextBlock.tag">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="FontSize" Value="12" />
+    <Setter Property="LineHeight" Value="16" />
+  </Style>
+
+  <Style Selector="Button">
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Padding" Value="14,7" />
+  </Style>
+  <Style Selector="Button:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="Button.primary-action">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaOnBrandBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.primary-action:pointerover">
+    <Setter Property="Opacity" Value="0.9" />
+  </Style>
+  <Style Selector="Button.primary-action:pressed">
+    <Setter Property="Opacity" Value="0.78" />
+  </Style>
+  <Style Selector="Button.danger-action">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaDangerBrush}" />
+  </Style>
+
+  <Style Selector="Border.navigation-rail">
+    <Setter Property="Background" Value="{DynamicResource TerrariaNavigationBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,1,0" />
+  </Style>
+  <Style Selector="Border.top-bar">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Border.workspace-surface">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+  </Style>
+  <Style Selector="Border.reader-pane">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1,0,0,0" />
+    <Setter Property="CornerRadius" Value="0" />
+  </Style>
+  <Style Selector="reader|ReaderView.overlay Border.reader-pane">
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource OverlayShadow}" />
+  </Style>
+  <Style Selector="Border.card, Border.wiki-search-pane">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
+  </Style>
+  <Style Selector="Border.section-surface">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+  </Style>
+  <Style Selector="Border.confirmation-card">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource OverlayShadow}" />
+  </Style>
+  <Style Selector="Border.status-banner, Border.reader-header, Border.reader-status">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+
+  <Style Selector="Button.rail-nav">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Width" Value="56" />
+    <Setter Property="Height" Value="56" />
+    <Setter Property="MinWidth" Value="56" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.rail-nav:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+  </Style>
+  <Style Selector="Button.rail-nav:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.rail-nav.selected">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+  </Style>
+  <Style Selector="Border.rail-indicator">
+    <Setter Property="Width" Value="3" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="CornerRadius" Value="0,2,2,0" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandBrush}" />
+  </Style>
+
+  <Style Selector="Button.icon-button">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Width" Value="44" />
+    <Setter Property="Height" Value="44" />
+    <Setter Property="MinWidth" Value="44" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="22" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.icon-button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+  </Style>
+  <Style Selector="Button.icon-button:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.icon-button:disabled">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+  <Style Selector="Button.wiki-preview-button">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Padding" Value="14,7" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.wiki-preview-button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+  </Style>
+  <Style Selector="Button.wiki-preview-button:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.toolbar-action">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="MinWidth" Value="88" />
+    <Setter Property="Height" Value="40" />
+    <Setter Property="Padding" Value="14,0" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.toolbar-action:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+  </Style>
+  <Style Selector="Button.toolbar-action:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.toolbar-action:focus-visible">
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="Button.toolbar-action:disabled">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+
+  <Style Selector="Button.segment-button">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="MinWidth" Value="108" />
+    <Setter Property="Height" Value="36" />
+    <Setter Property="Padding" Value="14,6" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+  </Style>
+  <Style Selector="Button.segment-button:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+  </Style>
+  <Style Selector="Button.segment-button:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.segment-button.selected">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="FontWeight" Value="SemiBold" />
+  </Style>
+  <Style Selector="Button.list-row">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+    <Setter Property="CornerRadius" Value="0" />
+    <Setter Property="Padding" Value="12,10" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.list-row:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+  </Style>
+  <Style Selector="Button.list-row:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+
+  <Style Selector="Border.thinking-card">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+    <Setter Property="BorderThickness" Value="0,0,0,1" />
+  </Style>
+  <Style Selector="Border.answer-card">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderThickness" Value="2,0,0,0" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSmall}" />
+  </Style>
+  <Style Selector="Border.answer-label">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="Padding" Value="0" />
+  </Style>
+  <Style Selector="Border.tool-trace-card, Border.answer-meta-card">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+  </Style>
+  <Style Selector="Border.sources-card">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="0,1,0,0" />
+  </Style>
+  <Style Selector="Button.source-row">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Padding" Value="12,9" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+  </Style>
+  <Style Selector="Button.source-row:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+  </Style>
+  <Style Selector="Button.source-row:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Border.source-chevron">
+    <Setter Property="Width" Value="28" />
+    <Setter Property="Height" Value="28" />
+    <Setter Property="CornerRadius" Value="14" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+  </Style>
+  <Style Selector="Border.answer-status">
+    <Setter Property="Background" Value="Transparent" />
+  </Style>
+  <Style Selector="Border.error-card">
+    <Setter Property="Background" Value="{DynamicResource TerrariaDangerSoftBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaDangerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+  </Style>
+
+  <Style Selector="Border.composer">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="24" />
+    <Setter Property="BoxShadow" Value="{DynamicResource ComposerShadow}" />
+  </Style>
+  <Style Selector="Border.composer:focus-within">
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderThickness" Value="2" />
+  </Style>
+  <Style Selector="TextBox.composer-input">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+    <Setter Property="Padding" Value="10,8" />
+    <Setter Property="FontSize" Value="15" />
+    <Setter Property="CaretBrush" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+  </Style>
+  <Style Selector="TextBox.composer-input:focus, TextBox.composer-input:focus-within">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="TextBox.composer-input /template/ Border#PART_BorderElement,
+                   TextBox.composer-input:focus /template/ Border#PART_BorderElement,
+                   TextBox.composer-input:pointerover /template/ Border#PART_BorderElement">
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="0" />
+  </Style>
+  <Style Selector="TextBox.composer-input:disabled">
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <Style Selector="Button.send-button, Button.stop-button">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Width" Value="44" />
+    <Setter Property="Height" Value="44" />
+    <Setter Property="MinWidth" Value="44" />
+    <Setter Property="Padding" Value="0" />
+    <Setter Property="CornerRadius" Value="22" />
+    <Setter Property="Margin" Value="8,0,0,0" />
+    <Setter Property="HorizontalContentAlignment" Value="Center" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+  </Style>
+  <Style Selector="Button.send-button">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaOnBrandBrush}" />
+  </Style>
+  <Style Selector="Button.send-button:pointerover">
+    <Setter Property="Opacity" Value="0.9" />
+  </Style>
+  <Style Selector="Button.send-button:pressed">
+    <Setter Property="Opacity" Value="0.78" />
+  </Style>
+  <Style Selector="Button.stop-button">
+    <Setter Property="Background" Value="{DynamicResource TerrariaDangerSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaDangerBrush}" />
+  </Style>
+  <Style Selector="Button.stop-button:pointerover">
+    <Setter Property="Opacity" Value="0.86" />
+  </Style>
+  <Style Selector="Button.stop-button:pressed">
+    <Setter Property="Opacity" Value="0.72" />
+  </Style>
+  <Style Selector="Button.send-button:disabled">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="Opacity" Value="1" />
+  </Style>
+  <Style Selector="Button.rail-nav:disabled,
+                   Button.wiki-preview-button:disabled,
+                   Button.segment-button:disabled,
+                   Button.list-row:disabled,
+                   Button.source-row:disabled,
+                   Button.stop-button:disabled">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
+
+  <Style Selector="GridSplitter.reader-splitter">
+    <Setter Property="Theme" Value="{StaticResource ReaderSplitterTheme}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+  </Style>
+  <Style Selector="GridSplitter.reader-splitter:pointerover /template/ Border#PART_Handle,
+                   GridSplitter.reader-splitter:pressed /template/ Border#PART_Handle,
+                   GridSplitter.reader-splitter:focus-visible /template/ Border#PART_Handle">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandBrush}" />
+  </Style>
+</Styles>

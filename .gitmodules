@@ -1,0 +1,3 @@
+[submodule "terraria-wiki-offline"]
+	path = terraria-wiki-offline
+	url = https://github.com/BigBearKing/terraria-wiki-offline.git

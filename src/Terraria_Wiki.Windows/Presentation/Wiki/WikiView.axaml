@@ -1,0 +1,56 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:wiki="clr-namespace:Terraria_Wiki.Windows.Presentation.Wiki"
+             x:Class="Terraria_Wiki.Windows.Presentation.Wiki.WikiView"
+             x:DataType="wiki:WikiViewModel">
+  <Border Classes="wiki-search-pane" Padding="24">
+    <Grid RowDefinitions="Auto,Auto,*" Width="360">
+      <StackPanel Spacing="4">
+        <TextBlock Text="Wiki 阅读" Classes="page-title" />
+        <TextBlock Text="搜索结果在共享 Reader 中打开。" Classes="page-subtitle" TextWrapping="Wrap" />
+      </StackPanel>
+      <TextBox Grid.Row="1" Text="{Binding Query, Mode=TwoWay}"
+               IsEnabled="{Binding IsAvailable}"
+               PlaceholderText="搜索本地 Wiki"
+               Margin="0,16,0,10"
+               AutomationProperties.Name="Wiki 搜索" />
+      <Grid Grid.Row="2">
+        <ListBox ItemsSource="{Binding Results}"
+                 IsVisible="{Binding HasResults}"
+                 AutomationProperties.Name="Wiki 搜索结果">
+          <ListBox.ItemTemplate>
+            <DataTemplate x:DataType="wiki:WikiSearchResultViewModel">
+              <Button Command="{Binding OpenCommand}" Classes="list-row"
+                      Margin="0,0,0,4"
+                      AutomationProperties.Name="打开 Wiki 搜索结果">
+                <StackPanel Spacing="3">
+                  <Grid ColumnDefinitions="*,Auto">
+                    <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                               TextWrapping="Wrap" />
+                    <TextBlock Grid.Column="1" Text="{Binding MatchText}"
+                               Classes="tag" Margin="8,0,0,0" />
+                  </Grid>
+                  <TextBlock Text="{Binding RedirectText}" Classes="muted"
+                             TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Snippet}" Classes="muted"
+                             TextWrapping="Wrap" MaxLines="3" />
+                </StackPanel>
+              </Button>
+            </DataTemplate>
+          </ListBox.ItemTemplate>
+        </ListBox>
+        <StackPanel IsVisible="{Binding IsEmpty}"
+                    VerticalAlignment="Center" HorizontalAlignment="Center"
+                    Spacing="8" Margin="16">
+          <TextBlock Text="没有找到结果" FontSize="18" FontWeight="SemiBold"
+                     HorizontalAlignment="Center" />
+          <TextBlock Text="换一个标题或关键词试试。" Classes="muted" />
+        </StackPanel>
+      </Grid>
+      <TextBlock Grid.Row="2" Text="{Binding StatusMessage}" Classes="muted"
+                 VerticalAlignment="Bottom" Margin="4,8"
+                 TextWrapping="Wrap" IsHitTestVisible="False"
+                 AutomationProperties.Name="Wiki 搜索状态" />
+    </Grid>
+  </Border>
+</UserControl>

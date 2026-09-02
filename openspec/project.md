@@ -14,7 +14,9 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 
 ## 源码基线
 
-现有源码位于 `terraria-wiki-offline/`，来源为 BigBearKing/terraria-wiki-offline。该目录是独立源码仓库，工作区规则、架构、规范、计划和 ADR 均位于其外部。
+外层仓库是唯一产品源码仓库。根级 `src/`、`tests/`、`agent/`、`assets/` 与 `Terraria_Wiki.Core.slnx` 以产品提交 `d67d904` 建立内容基线；namespace、公共 API、数据格式和产品行为未因物理迁移改变。
+
+`terraria-wiki-offline/` 来源为 BigBearKing/terraria-wiki-offline，作为只读 Git Submodule 固定到上游 `a1dd899`，只用于核对旧实现、P0 行为和资产来源。产品 project、tests、build、publish 与 runtime 不得读取该 Submodule。长期源码所有权决策见 ADR 0007。
 
 已核对的现有能力包括：
 
@@ -32,7 +34,7 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 
 ## 技术与平台基线
 
-### 现有源码事实
+### 上游参考事实
 
 - C#、.NET 10
 - .NET MAUI 单项目
@@ -43,6 +45,8 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 - Python 3.12–3.14 Agent，PydanticAI 2.31 与可配置 OpenAI-compatible Responses / Chat provider 边界
 
 MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 Windows 目标技术承诺。现有 Razor Presentation 作为行为参考和过渡基线；Local Viewer 的 HTML/CSS/JS、页面与 WikiAsset 链路仍是需要保留的资产。
+
+当前产品源码使用 .NET 10 portable Core、薄 Application、Avalonia Windows Host、独立 WikiTools 和 Python 3.12–3.14 Agent。Windows Viewer Web、bridge 与图标来自外层 `assets/windows/` 的受控字节快照；参考 Submodule 不参与构建。
 
 ### 目标技术方向
 
@@ -67,7 +71,7 @@ Windows: C:\Users\Xiao\mypython\terraria_aiwiki
 WSL:     /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 ```
 
-Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载；不得默认从内层 `terraria-wiki-offline/` Git 仓库启动主会话。日常读取、编辑、搜索和平台无关检查在 WSL 中完成；Windows 客户端的运行、调试、构建和发布必须由 Windows 环境实际验证。
+Codex CLI 必须从外层 WSL 工作区根启动，使产品源码与根 `AGENTS.md` 被加载；不得从 `terraria-wiki-offline/` 参考 Submodule 启动主会话。日常读取、编辑、搜索和平台无关检查在 WSL 中完成；Windows 客户端的运行、调试、构建和发布必须由 Windows 环境实际验证。
 
 项目当前保留在 C 盘并通过 `/mnt/c` 访问。即使该位置的 WSL I/O 性能可能较低，也不得未经用户决定复制或迁移到 WSL home。必须同时考虑 Linux 工具语义与 Windows 文件系统的路径、大小写、换行和文件锁差异。
 
@@ -80,11 +84,13 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 - AI 通过稳定的 Wiki Search / Read 边界获取本地事实，不直接建立第二套 Wiki 数据体系。
 - 搜索继续使用现有 SQLite FTS5 能力并做局部修正，不重建搜索系统。
 - Python Agent 业务逻辑与 Windows / Android Runtime 分离。
-- Windows 新版本不使用 MAUI；旧 MAUI 项目保持 brownfield 基线，直到新客户端完成 P0 接管并获准退休。
+- Windows 新版本不使用 MAUI；旧 MAUI 项目只保留在只读参考 Submodule，直到 Phase 10 在 P0 接管证据基础上决定保留或移除该参考。
 - Vector Search、Embedding Retrieval、Vector Database 和第二套 LLM Wiki 数据库不属于项目范围。
 - 变更必须小步、可验证、可回退；未验证设想不得写成已实现事实。
 
 ## 当前状态
+
+产品源码已以 `d67d904` 内容建立外层独立基线，固定上游 Submodule 不再参与 build/runtime；迁移后的 Windows Release build、260/260 .NET tests、两种 publish smoke 与冻结 Python 回归均已通过。
 
 Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。收藏/Reader 切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。Wiki 资料库切片已复用 `WikiLibraryUseCases` 接管全部页面与历史记录，支持标题过滤、每批 100 项增量加载、历史日期分组和清空二次确认，Presentation 不直接访问 SQLite。Chat 使用轻量连续内容流，预览 Enter 发送且 Shift+Enter 换行；结果区显示输入、输出与合计 Token 花费。Agent 已取消美元费用预算，仍保留防循环、协议长度、context 与超时运行限位。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；已迁移数据库只读检查锚点格式后直接使用，只有确实需要旧锚点升级时才创建同卷 staging；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 254/254 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复；资料库人工 UI 验收尚未执行。其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 

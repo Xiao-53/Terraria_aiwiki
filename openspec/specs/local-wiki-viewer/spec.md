@@ -35,7 +35,7 @@
 ### Windows 已确认实现
 
 - Windows 使用动态 `127.0.0.1:0` loopback，只接受精确当前 Host 的 GET/HEAD；拒绝 absolute target、路径穿越、反斜线、冒号和 NUL，不提供宽松 CORS。
-- build/publish 从旧项目直接复制 Viewer HTML/CSS/JS、公共资源和 `iframe-bridge.js`，不维护第二份站点资产。
+- build/publish 只从外层产品仓库的受控快照复制 Viewer HTML/CSS/JS、公共资源和 `iframe-bridge.js`。快照必须记录来源、固定提交、数量/hash 与许可提示；参考 Submodule 不得成为 build/runtime 依赖。
 - `/src/*` 只通过 Application `Query.ReadAssetAsync`；页面与 Redirect 只通过 `Query.ReadAsync`；页面成功读取后由宿主显式调用 `Library.RecordVisitAsync`。
 - outer host 与 C# 分别校验精确 origin/source、`req/res`、request ID 和方法；HTTP(S) 外链交给系统浏览器，未知或未支持方法返回可观察错误。
 - pause lease 停止 listener；释放后仅在宿主仍存活时按当前活动 Wiki 重启。退出后不得遗留 listener 或继续访问已释放 Application。
@@ -59,4 +59,4 @@
 
 ## 变更规则
 
-本 spec 只定义持续行为。Windows transport 长期决策见 `docs/adr/0003-use-loopback-local-viewer-transport.md`；NativeWebView 包版本与具体 Adapter 文件结构仍写入对应 Phase 计划。
+本 spec 只定义持续行为。Windows transport 长期决策见 `docs/adr/0003-use-loopback-local-viewer-transport.md`；产品资产所有权见 `docs/adr/0007-separate-product-source-from-reference.md`；NativeWebView 包版本与具体 Adapter 文件结构仍写入对应 Phase 计划。
