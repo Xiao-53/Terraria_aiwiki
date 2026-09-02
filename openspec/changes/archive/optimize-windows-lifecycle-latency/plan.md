@@ -1,6 +1,6 @@
 # 优化 Windows 启停延迟
 
-- 状态：completed
+- 状态：archived
 - Phase：无；Phase 09 期间的独立 Windows Runtime 性能变更
 - 执行环境：WSL Codex CLI；Windows 11 x64 Release 构建、测试与实机计时
 - 创建日期：2026-09-02

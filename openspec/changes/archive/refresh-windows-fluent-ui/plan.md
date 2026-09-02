@@ -1,6 +1,6 @@
 # 刷新 Windows Fluent UI
 
-- 状态：completed
+- 状态：archived
 - Phase：无；Phase 09 期间的独立 Windows Presentation 视觉变更
 - 执行环境：WSL Codex CLI；Windows 11 x64 Release 构建、测试与人工视觉验收
 - 创建日期：2026-09-02
