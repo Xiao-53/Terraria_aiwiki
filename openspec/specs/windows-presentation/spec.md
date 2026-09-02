@@ -12,6 +12,14 @@
 - 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
 - Chat/收藏/资料库/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
 
+## 视觉系统与交互状态
+
+- Windows Presentation 继续使用现有 Avalonia FluentTheme 12.1.1，并采用 Compact 密度；不增加第二套主题框架或图标依赖。
+- 自定义视觉值由 Light/Dark 语义 token 统一提供，至少覆盖 Terraria 品牌色、应用背景、导航、表面、次级表面、描边、次级文本、危险状态、圆角和 elevation。页面 XAML 不直接散落 hex 色值。
+- Shell 使用 72 DIP 左侧导航栏、64 DIP 顶栏、清晰的图标加文本标签和非纯颜色的选中指示；主内容使用 24 DIP 常规边距。列表与结果区优先连续内容和轻量分隔，只在输入、确认和覆盖层等需要边界的区域使用圆角或阴影。
+- 可点击图标和发送/停止控件保持不小于 44×44 DIP 的命中区。自定义导航、分段、列表、来源、Wiki 和 composer 按钮必须定义 pointer-over、pressed、focus-visible 与 disabled 反馈；颜色不能是唯一的选中或状态信号。
+- Chat 空状态直接展示可点击示例问题；回答、工具轨迹、来源、Token 与终态保持清楚但不过度堆叠卡片。宽屏 Reader 与主内容齐平，只有窄屏覆盖 Reader 保留 elevation。
+
 ## Chat 交互
 
 - 每次问题都是独立单轮：发送新问题前清除旧正文、工具状态、来源和 Token 花费，不向 Agent 传递或持久化历史。
