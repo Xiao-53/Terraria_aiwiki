@@ -5,7 +5,7 @@
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
 - 最后更新：2026-09-02
-- 范围：Windows Avalonia 收藏与 Reader 交互、Wiki 资料库、本机 AI 配置、Chat 交互视觉与 Token 花费展示
+- 范围：Windows Avalonia 收藏与 Reader 交互、Wiki 资料库、本机 AI 配置、Chat 交互视觉与 Token 花费展示、空状态与页头操作样式
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -17,6 +17,8 @@
 决定：本切片启动 Phase 09，但不宣称整个 P0 UI Takeover 完成。Chat 收藏使用 Windows 宿主级、版本化原子 JSON，只保存用户显式收藏的当前已完成单轮，不保存普通问答历史，不修改 SQLite schema、Application 公共 API、AI 协议或 Agent。
 
 2026-09-02 继续 Phase 09 时确认：收藏与 Reader 切片已由独立源码/治理提交保存；新 Avalonia Shell 尚未显示旧 UI 的“全部页面”和“历史记录”，但 `WikiLibraryUseCases.GetPagesAsync`、`GetHistoryAsync` 与 `ClearHistoryAsync` 已提供排序、分页、标题过滤和清空语义。下一最小切片接管这两项只读/低风险资料库入口，Presentation 不直接访问 SQLite，也不进入数据管理、设置或 MAUI 退休。
+
+2026-09-02 用户通过实机截图确认：Chat 空状态的三个示例问题和收藏/资料库页头“刷新”按钮继承 Fluent 默认灰色背景，与当前 Terraria 语义配色不协调。用户明确要求删除三个示例问题，并局部重做两个刷新操作的样式与配色；不改变刷新命令、资料库数据或其他页面行为。
 
 ## 目标与完成定义
 
@@ -38,6 +40,7 @@
 - 左侧新增可用的“Wiki 资料库”入口；资料库内可在“全部页面”和“历史记录”间切换，按标题过滤并按 Application 分页继续加载。
 - 全部页面显示标题与更新时间；历史记录保持最新优先和日期分组，清空历史必须经过明确的二次确认。
 - 点击任一页面或历史项只在唯一共享 Reader 中打开，不创建第二个 Viewer，不替换或复制 Wiki 数据。
+- Chat 空状态移除三个示例问题按钮，仅保留品牌图形、标题与说明；两个页头刷新入口使用统一的 Terraria 次级操作样式、刷新图标及完整交互状态。
 
 ## 前置条件
 
@@ -94,6 +97,7 @@
 - MODIFY `Presentation/Shell/ShellViewModel.cs` / `ShellView.axaml`：增加资料库导航，组合 Application Library 并继续复用唯一 Reader。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、资料库分页/过滤/清空、唯一 Reader、导航、分隔条静态和目标行为。
+- MODIFY Chat XAML/view model、收藏/资料库 XAML、共享控件样式与 Presentation boundary tests：移除示例问题入口，统一两个页头刷新按钮的 Terraria 次级操作视觉和交互状态。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
 - KEEP Application/Core、SQLite、Python、协议、Viewer 内容和旧 MAUI。
 
@@ -122,6 +126,8 @@
 - [x] 将资料库加入 Shell，接通 Application Library 与唯一共享 Reader；补齐 Presentation flow/boundary 回归。
 - [x] 执行 Windows Release build、相关/全量 tests 与静态边界检查；记录人工 UI 未验证项。
 - [x] 更新持续 Presentation spec、README/项目状态和本计划；检查双 Git 状态并分别提交源码与治理变更。
+- [x] 删除 Chat 空状态三个示例问题及其内部命令，统一收藏/资料库刷新按钮样式。
+- [x] 执行 Windows Presentation build/tests、静态样式检查与差异检查；更新契约和本计划并分别保存源码/治理提交。
 
 ## 验证与回归计划
 
@@ -130,6 +136,7 @@
 - Windows UI：本切片自动化覆盖宽屏限位、顶部 Wiki 重开与收藏页布局；分隔拖动不得自动关闭 Reader。Chat/Wiki 收藏状态、收藏页打开和窄布局由 Presentation 回归测试覆盖。显式切换到 225% 缩放的人工检查留作后续目标平台验收，不在本切片结果中宣称通过。
 - 回归：只存在一个 `NativeWebView`/`ViewerWebViewSession`；AI 单轮发送、Wiki Search、来源精确页面/anchor、Reader 返回与 AI 故障隔离不变。
 - 资料库：用确定性 fake Application delegates 覆盖首批/继续加载、过滤取消、全部页面与历史打开、日期分组、清空确认/失败；静态检查 Presentation 不出现 Core/SQLite 访问。
+- 空状态/页头操作：静态回归确认 Chat 不再包含示例问题或废弃命令，两个刷新入口复用同一语义样式，且该样式包含 pointer-over、pressed、focus-visible 与 disabled 状态；Windows XAML 编译确认图标和模板有效。
 
 ## 风险与回退
 
@@ -167,6 +174,8 @@
 - 2026-09-02：新增 Windows 内部 Wiki 资料库 view model/XAML 和 Shell 导航；每批 100 项，支持标题过滤、过期请求取消、继续加载、历史日期分组与页内清空确认。全部页面和历史项继续在唯一 Reader 中打开；Windows Presentation 定向编译与 tests 23/23 通过。
 - 2026-09-02：Windows Release build 0 warning/0 error；全量 .NET tests 253/253 通过（Core 90、Application 54、Windows 81、WikiTools 28）。静态边界确认资料库 Presentation 不访问 Core/SQLite，且仍只有一个 `NativeWebView`/`ViewerWebViewSession`；本次未启动真实 UI，人工视觉验收待用户执行。
 - 2026-09-02：Wiki 资料库源码以 `379ec17`（`feat(windows): add wiki library navigation`）保存；持续 Presentation spec、README、项目基线、架构状态和本计划由独立外层治理提交保存，不 push。
+- 2026-09-02：用户以实机截图要求删除 Chat 三个示例问题，并修正收藏/资料库页头刷新按钮的默认灰色外观；确认本切片只涉及 Windows Presentation 内部 XAML、未再使用的内部命令、共享样式与静态回归，恢复点为内层 `e553e10`。
+- 2026-09-02：删除三个示例按钮及未再使用的 `UseExampleCommand`；为收藏/资料库页头增加共享 `toolbar-action`，使用品牌浅色底、绿色描边与刷新图标，并定义 hover/pressed/focus-visible/disabled 状态。Windows 实际窗口截图确认 Chat 空状态和两个页头按钮在当前缩放下布局正常；测试产生的截图/脚本已清理，测试误写的数据根配置已恢复为真实目录。源码提交为 `d67d904`。
 
 ## 发现、偏差与决策
 
@@ -174,6 +183,7 @@
 - 决定：Chat 收藏是用户显式操作的快照，不改变“每次提问独立单轮、普通问答不持久化”的 AI 契约。
 - 决定：收藏/Reader 是 Phase 09 首个切片，本次 Wiki 资料库是第二个切片；数据管理、设置、导入导出和维护仍不在当前授权中，完成资料库切片后计划继续保持进行中状态。
 - 决定：用户明确覆盖 ADR 0006 原有“密钥不落配置文件”选择；仅 Windows 本机配置改变，Python Agent 仍只从子进程环境读取，NDJSON 和命令参数继续不携带密钥。
+- 决定：空状态不再提供预设问题；用户仍从底部 composer 直接输入。页头刷新使用品牌浅色次级操作，不使用 Fluent 默认中性灰背景，也不改变命令语义。
 
 ## 验证结果
 
@@ -192,7 +202,8 @@
 - 回答结果视觉修正后：首次定向命令因运行中的 `Terraria_Wiki.Windows` 锁定既有 Release DLL 而未完成；使用独立 Windows Temp `OutDir` 后 XAML/Release 编译成功，Presentation boundary 4/4 通过。未运行完整测试集、未关闭或启动 UI。
 - IME/composer 修正后：独立 Windows Temp `OutDir` XAML/Release 编译成功，IME key behavior、composer state 与 Presentation boundary 定向测试 6/6 通过。未运行完整测试集、未关闭或启动 UI；真实中文输入法视觉验收由用户执行。
 - Wiki 资料库切片：Windows Release build 通过，0 warning / 0 error；Presentation flow/boundary 定向 tests 23/23、全量 .NET tests 253/253 通过（Core 90、Application 54、Windows 81、WikiTools 28）。覆盖首批/继续加载、标题过滤与过期请求取消、日期分组、清空确认/失败和唯一 Reader 打开；未启动真实 UI，人工视觉验收尚未执行。
+- 空状态/刷新操作视觉切片：Windows `Terraria_Wiki.Core.slnx` Release build 通过，0 warning / 0 error；Presentation boundary/flow 定向 tests 24/24、Windows tests 85/85 通过。真实 Windows 客户端使用现有数据根启动，自动切换并截取 Chat、收藏和资料库三个页面；确认示例问题已移除，两个刷新按钮均显示 Terraria 浅绿色语义样式和刷新图标。应用正常关闭，无残留 Windows 客户端或 Python 进程；临时验证文件已清理。
 
 ## 完成摘要
 
-收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存。Wiki 资料库切片已由源码提交 `379ec17` 保存并通过 Windows Release build 与 253/253 全量 .NET tests；人工 UI 验收尚未执行。Phase 09 整体仍为 `in-progress`，其余 P0 管理页面未完成。
+收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存。Wiki 资料库切片已由源码提交 `379ec17` 保存并通过 Windows Release build 与 253/253 全量 .NET tests；空状态/刷新操作视觉切片已由源码提交 `d67d904` 保存并通过 Windows Release build、Windows 85/85 tests 与真实窗口截图检查。Phase 09 整体仍为 `in-progress`，其余 P0 管理页面未完成。
