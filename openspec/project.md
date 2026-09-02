@@ -86,7 +86,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使根 `AGENTS.md` 被加载�
 
 ## 当前状态
 
-Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。收藏/Reader 切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。Wiki 资料库切片已复用 `WikiLibraryUseCases` 接管全部页面与历史记录，支持标题过滤、每批 100 项增量加载、历史日期分组和清空二次确认，Presentation 不直接访问 SQLite。Chat 使用轻量连续内容流，预览 Enter 发送且 Shift+Enter 换行；结果区显示输入、输出与合计 Token 花费。Agent 已取消美元费用预算，仍保留防循环、协议长度、context 与超时运行限位。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 253/253 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复；资料库人工 UI 验收尚未执行。其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。收藏/Reader 切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。Wiki 资料库切片已复用 `WikiLibraryUseCases` 接管全部页面与历史记录，支持标题过滤、每批 100 项增量加载、历史日期分组和清空二次确认，Presentation 不直接访问 SQLite。Chat 使用轻量连续内容流，预览 Enter 发送且 Shift+Enter 换行；结果区显示输入、输出与合计 Token 花费。Agent 已取消美元费用预算，仍保留防循环、协议长度、context 与超时运行限位。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；已迁移数据库只读检查锚点格式后直接使用，只有确实需要旧锚点升级时才创建同卷 staging；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 254/254 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复；资料库人工 UI 验收尚未执行。其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

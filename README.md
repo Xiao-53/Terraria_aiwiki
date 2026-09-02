@@ -109,7 +109,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation。收藏/Reader 切片已接通显式 AI 单轮收藏、现有 Wiki 收藏、顶部 Wiki 入口、页面星标和受限可调分栏；顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。第二个资料库切片已新增“Wiki 资料库”导航，在同一页面内接管全部页面与历史记录，支持标题过滤、每批 100 项继续加载、历史日期分组和清空二次确认；条目仍只在唯一共享 Reader 中打开。启动失败可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint；Reader 默认首页可直接收藏。Windows 用户级 `ai-runtime.json` v2 可保存 provider、Python 路径和本机 API key，并仅向所属 Sidecar 环境注入密钥。Chat 使用轻量连续内容流，以预览 Enter 发送、Shift+Enter 换行，结果区显示输入、输出与合计 Token 花费；Agent 不再设置美元费用预算，防循环、协议长度、context 与超时运行限位继续生效。Windows Release build 为 0 warning/0 error，当前 .NET 测试 253/253 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。资料库人工 UI 验收、其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器和 Android 尚未完成。
+**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation。收藏/Reader 切片已接通显式 AI 单轮收藏、现有 Wiki 收藏、顶部 Wiki 入口、页面星标和受限可调分栏；顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。第二个资料库切片已新增“Wiki 资料库”导航，在同一页面内接管全部页面与历史记录，支持标题过滤、每批 100 项继续加载、历史日期分组和清空二次确认；条目仍只在唯一共享 Reader 中打开。启动失败可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint；已迁移数据库启动时只读检查锚点格式，不再复制完整 `data.db`；Reader 默认首页可直接收藏。Windows 用户级 `ai-runtime.json` v2 可保存 provider、Python 路径和本机 API key，并仅向所属 Sidecar 环境注入密钥。Chat 使用轻量连续内容流，以预览 Enter 发送、Shift+Enter 换行，结果区显示输入、输出与合计 Token 花费；Agent 不再设置美元费用预算，防循环、协议长度、context 与超时运行限位继续生效。Windows Release build 为 0 warning/0 error，当前 .NET 测试 254/254 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。资料库人工 UI 验收、其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器和 Android 尚未完成。
 
 ## 工作区结构
 
