@@ -116,7 +116,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 267/267 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。多轮、内置 Python、安装器、发布渠道和 Android 尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
+**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 274/274 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。多轮、内置 Python、Credential Manager、安装器、发布渠道和 Android 尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
 
 ## 工作区结构
 
@@ -155,7 +155,7 @@ terraria_aiwiki/
 
 产品源码位于外层根级目录；参考 Submodule 保存 BigBearKing 上游的 .NET MAUI/Blazor Hybrid 旧宿主，仅用于行为与来源核对。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管。设置页随后增补了 DeepSeek 官方 API / 自定义 OpenAI-compatible provider 与思考强度配置入口，仍复用同一 v2 和显式 Runtime 重试。内置 Python、Credential Manager、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|

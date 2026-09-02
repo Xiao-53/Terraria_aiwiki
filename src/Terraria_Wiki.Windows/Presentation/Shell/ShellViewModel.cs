@@ -39,7 +39,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         IChatFavoriteStore? chatFavoriteStore = null,
         Func<CancellationToken, Task<string?>>? pickImportPackage = null,
         Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
-        Func<ApplicationPreferences, Task>? applyPreferences = null)
+        Func<ApplicationPreferences, Task>? applyPreferences = null,
+        Func<CancellationToken, Task<AiRuntimeConfigurationDraft>>? loadAiConfiguration = null,
+        Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
+        Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? restartAi = null,
+        Func<CancellationToken, Task<string?>>? pickPythonExecutable = null)
     {
         Reader = new ReaderPaneViewModel();
         Chat = new ChatViewModel(
@@ -54,7 +58,12 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OpenFavoriteWikiAsync);
         Library = new WikiLibraryViewModel(OpenLibraryWikiAsync);
         Management = new WikiManagementViewModel(pickImportPackage, exportPackage);
-        Settings = new SettingsViewModel(applyPreferences);
+        Settings = new SettingsViewModel(
+            applyPreferences,
+            loadAiConfiguration,
+            saveAiConfiguration,
+            restartAi,
+            pickPythonExecutable);
         Favorites.ChatFavoriteRemoved += Chat.MarkFavoriteRemoved;
         NavigateChatCommand = new RelayCommand(_ => NavigateChat());
         NavigateFavoritesCommand = new RelayCommand(_ => NavigateFavorites());

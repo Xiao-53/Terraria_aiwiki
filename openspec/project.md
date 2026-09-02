@@ -57,7 +57,7 @@ MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 
 - Windows data-root、设置、锁、外链和 Viewer Adapters 已实现最小链路，Android Adapters 后续实现；
 - 独立 Wiki Tool Adapter 通过无状态、动态 loopback MCP 只暴露 Application Search / Read，并由 Phase 07 Windows Runtime 在 Viewer 之后按需启停；
 - Python 单轮 Agent 通过受限 MCP 执行 Search → Read → typed Answer，实际来源由成功 Read 派生；业务逻辑与 Windows/Android Runtime 分离；
-- Windows Avalonia Host 通过严格 NDJSON v1 长驻 stdio Sidecar 组合 WikiTools 与 Python Agent，使用外部 Python 环境和用户级 `ai-runtime.json` v2；Host 将其中的 key 仅注入所属 Sidecar 环境，AI 故障不影响离线 Search/Viewer。
+- Windows Avalonia Host 通过严格 NDJSON v1 长驻 stdio Sidecar 组合 WikiTools 与 Python Agent，使用外部 Python 环境和用户级 `ai-runtime.json` v2；设置页可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider 与思考强度，并在原子保存后显式重启同一 Runtime。Host 将其中的 key 仅注入所属 Sidecar 环境，AI 故障不影响离线 Search/Viewer。
 - Windows Presentation 使用内部状态模型、XAML Chat/Wiki/Reader、安全原生 Markdown 和唯一共享 NativeWebView；宽屏默认 AI/Reader 双栏，窄屏按需覆盖 Reader，不引入第二套 Viewer 或公共 Application UI port。
 
 产品平台范围是 Windows（当前）与 Android（未来）；iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他平台均为明确非目标。WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。源码中存在某个平台 target、条件编译或框架能力，不代表该平台已经成为产品承诺；扩大平台范围必须由用户重新授权并更新架构决策。
@@ -92,7 +92,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使产品源码与根 `AGENTS
 
 产品源码已以 `d67d904` 内容建立外层独立基线，固定上游 Submodule 不再参与 build/runtime；迁移后的 Windows Release build、260/260 .NET tests、两种 publish smoke 与冻结 Python 回归均已通过。
 
-Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement。Windows Avalonia Shell 现有“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个真实入口：收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` Inspect/确认/Import 与安全导出、全部强类型设置和启动错误恢复都只经现有 Application/Core 能力运行。Presentation 不直接访问 SQLite；活动数据变化会刷新搜索、收藏和资料库，并按需让唯一共享 Reader 重新绑定动态 loopback Viewer。无页面数据时 Runtime 仍可进入管理和设置。Chat 继续保持独立单轮、安全原生 Markdown 与 Token 花费展示；Windows 用户级 AI 配置仍为严格 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 267/267 通过；Light/Dark、1280×820、900×600、管理确认和设置状态已在目标 Windows 实际窗口检查，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。公共 API、SQLite schema、包格式、AI 协议与 Viewer 内容协议未改变。多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement。Windows Avalonia Shell 现有“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个真实入口：收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` Inspect/确认/Import 与安全导出、全部强类型设置和启动错误恢复都只经现有 Application/Core 能力运行。Presentation 不直接访问 SQLite；活动数据变化会刷新搜索、收藏和资料库，并按需让唯一共享 Reader 重新绑定动态 loopback Viewer。无页面数据时 Runtime 仍可进入管理和设置。Chat 继续保持独立单轮、安全原生 Markdown 与 Token 花费展示；设置页包含常规/AI 二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、Python、遮蔽 key 与思考强度，Windows 用户级 AI 配置仍为严格 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 274/274 通过；Light/Dark、1280×820、900×600、管理确认和设置状态已在目标 Windows 实际窗口检查，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。公共 API、SQLite schema、包格式、AI 协议与 Viewer 内容协议未改变。多轮、内置 Python、Credential Manager、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

@@ -1,4 +1,6 @@
 using Terraria_Wiki.Application;
+using Terraria_Wiki.Windows.AI;
+using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 
 namespace Terraria_Wiki.Windows.Presentation.Settings;
@@ -22,14 +24,46 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     private decimal _resourceConcurrency = ApplicationPreferences.DefaultResourceConcurrency;
     private decimal _retryAttempts = ApplicationPreferences.DefaultRetryAttempts;
     private bool _isDirty;
+    private int _selectedPageIndex;
     private bool _disposed;
 
-    public SettingsViewModel(Func<ApplicationPreferences, Task>? applyPreferences = null)
+    public SettingsViewModel(
+        Func<ApplicationPreferences, Task>? applyPreferences = null,
+        Func<CancellationToken, Task<AiRuntimeConfigurationDraft>>? loadAiConfiguration = null,
+        Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
+        Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? restartAi = null,
+        Func<CancellationToken, Task<string?>>? pickPythonExecutable = null)
     {
         _applyPreferences = applyPreferences ?? (_ => Task.CompletedTask);
+        Ai = new AiSettingsViewModel(
+            loadAiConfiguration ?? (_ => throw new InvalidOperationException("AI configuration is unavailable.")),
+            saveAiConfiguration ?? ((_, _) => throw new InvalidOperationException("AI configuration is unavailable.")),
+            restartAi ?? (_ => throw new InvalidOperationException("AI Runtime is unavailable.")),
+            pickPythonExecutable ?? (_ => Task.FromResult<string?>(null)));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => IsAvailable && !IsBusy);
         SaveCommand = new AsyncCommand(_ => SaveAsync(), _ => CanSave);
+        SelectGeneralCommand = new RelayCommand(_ => SelectedPageIndex = 0);
+        SelectAiCommand = new RelayCommand(_ => SelectedPageIndex = 1);
     }
+
+    public AiSettingsViewModel Ai { get; }
+
+    public int SelectedPageIndex
+    {
+        get => _selectedPageIndex;
+        private set
+        {
+            if (!SetProperty(ref _selectedPageIndex, value))
+                return;
+            OnPropertyChanged(nameof(IsGeneralSelected));
+            OnPropertyChanged(nameof(IsAiSelected));
+            if (IsAiSelected)
+                _ = Ai.EnsureLoadedAsync();
+        }
+    }
+
+    public bool IsGeneralSelected => SelectedPageIndex == 0;
+    public bool IsAiSelected => SelectedPageIndex == 1;
 
     public string StatusMessage
     {
@@ -126,6 +160,8 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     public bool CanSave => IsAvailable && !IsBusy && IsDirty;
     public AsyncCommand RefreshCommand { get; }
     public AsyncCommand SaveCommand { get; }
+    public RelayCommand SelectGeneralCommand { get; }
+    public RelayCommand SelectAiCommand { get; }
 
     public void Attach(ApplicationSettingsUseCases settings)
     {
@@ -140,6 +176,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         _load = load ?? throw new ArgumentNullException(nameof(load));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         IsAvailable = true;
+        Ai.Attach();
         StatusMessage = "调整后点击“保存设置”统一验证并写入本机配置。";
     }
 
@@ -154,6 +191,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         IsAvailable = false;
         IsBusy = false;
         IsDirty = false;
+        Ai.Detach();
         StatusMessage = "应用设置不可用。";
     }
 
@@ -235,6 +273,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
             return;
         _disposed = true;
         Detach();
+        Ai.Dispose();
     }
 
     private CancellationTokenSource BeginOperation()

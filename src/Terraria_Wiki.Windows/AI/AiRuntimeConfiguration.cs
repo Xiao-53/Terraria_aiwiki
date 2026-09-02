@@ -1,6 +1,4 @@
 using System.Net;
-using System.Text.Json;
-using System.Text.Json.Serialization;
 
 namespace Terraria_Wiki.Windows.AI;
 
@@ -16,13 +14,6 @@ internal sealed record AiRuntimeConfiguration(
     string ApiKey,
     string ConfigurationPath)
 {
-    private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web)
-    {
-        PropertyNameCaseInsensitive = false,
-        UnmappedMemberHandling = JsonUnmappedMemberHandling.Disallow,
-        MaxDepth = 8,
-    };
-
     public override string ToString() =>
         $"AiRuntimeConfiguration {{ PythonExecutable = {PythonExecutable}, Provider = {Provider}, " +
         $"ApiKey = [REDACTED], ConfigurationPath = {ConfigurationPath} }}";
@@ -32,40 +23,25 @@ internal sealed record AiRuntimeConfiguration(
         CancellationToken cancellationToken = default)
     {
         var path = ParseConfigurationPath(arguments) ?? DefaultConfigurationPath();
-        if (!File.Exists(path))
-            throw new AiConfigurationException("ai-config-missing", "AI 配置不存在。");
+        return await new AiRuntimeConfigurationStore(path)
+            .LoadRequiredAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
 
-        AiRuntimeConfigurationFile? document;
-        try
-        {
-            await using var stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.Read,
-                4096,
-                FileOptions.Asynchronous | FileOptions.SequentialScan);
-            document = await JsonSerializer.DeserializeAsync<AiRuntimeConfigurationFile>(
-                stream,
-                JsonOptions,
-                cancellationToken).ConfigureAwait(false);
-        }
-        catch (OperationCanceledException)
-        {
-            throw;
-        }
-        catch (Exception exception) when (exception is IOException or JsonException or UnauthorizedAccessException)
-        {
-            throw new AiConfigurationException("ai-config-invalid", "AI 配置无法读取。", exception);
-        }
-
-        if (document is null || document.Version != 2)
-            throw new AiConfigurationException("ai-config-invalid", "AI 配置版本无效。");
-
-        var python = ValidatePythonExecutable(document.PythonExecutable);
-        var provider = ValidateProvider(document.Provider);
-        var apiKey = ValidateApiKey(document.ApiKey);
-        return new AiRuntimeConfiguration(python, provider, apiKey, path);
+    internal static AiRuntimeConfiguration Create(
+        string configurationPath,
+        string pythonExecutable,
+        AiProviderConfiguration provider,
+        string apiKey)
+    {
+        ArgumentNullException.ThrowIfNull(provider);
+        if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
+            throw new AiConfigurationException("ai-config-path-invalid", "AI 配置路径无效。");
+        return new AiRuntimeConfiguration(
+            ValidatePythonExecutable(pythonExecutable),
+            ValidateProvider(provider),
+            ValidateApiKey(apiKey),
+            Path.GetFullPath(configurationPath));
     }
 
     internal static string? ParseConfigurationPath(IReadOnlyList<string> arguments)
@@ -117,10 +93,9 @@ internal sealed record AiRuntimeConfiguration(
         return fullPath;
     }
 
-    private static AiProviderConfiguration ValidateProvider(AiProviderConfigurationFile? provider)
+    private static AiProviderConfiguration ValidateProvider(AiProviderConfiguration provider)
     {
-        if (provider is null
-            || string.IsNullOrWhiteSpace(provider.BaseUrl)
+        if (string.IsNullOrWhiteSpace(provider.BaseUrl)
             || provider.BaseUrl != provider.BaseUrl.Trim()
             || !Uri.TryCreate(provider.BaseUrl, UriKind.Absolute, out var uri)
             || !string.IsNullOrEmpty(uri.UserInfo)
@@ -171,22 +146,6 @@ internal sealed record AiRuntimeConfiguration(
         return uri.Scheme == Uri.UriSchemeHttp
             && IPAddress.TryParse(uri.Host, out var address)
             && IPAddress.IsLoopback(address);
-    }
-
-    private sealed record AiRuntimeConfigurationFile
-    {
-        public required int Version { get; init; }
-        public required string PythonExecutable { get; init; }
-        public required string ApiKey { get; init; }
-        public required AiProviderConfigurationFile Provider { get; init; }
-    }
-
-    private sealed record AiProviderConfigurationFile
-    {
-        public required string BaseUrl { get; init; }
-        public required string Model { get; init; }
-        public required string Api { get; init; }
-        public string? ReasoningEffort { get; init; }
     }
 }
 

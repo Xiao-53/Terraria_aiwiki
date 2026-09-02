@@ -52,7 +52,11 @@ internal sealed partial class MainWindow : Window
             CreateChatFavoriteStore(),
             PickImportPackageAsync,
             ExportPackageAsync,
-            ApplyPreferencesAsync);
+            ApplyPreferencesAsync,
+            LoadAiConfigurationDraftAsync,
+            SaveAiConfigurationAsync,
+            RestartAiAsync,
+            PickPythonExecutableAsync);
         _shellView.DataContext = _shellViewModel;
         _shellViewModel.RetryStartupRequested += OnRetryStartupRequested;
         _shellViewModel.SelectDataRootRequested += OnSelectDataRootRequested;
@@ -521,6 +525,46 @@ internal sealed partial class MainWindow : Window
         cancellationToken.ThrowIfCancellationRequested();
         var file = files.SingleOrDefault();
         return file?.Path is { IsFile: true } path ? path.LocalPath : null;
+    }
+
+    private Task<AiRuntimeConfigurationDraft> LoadAiConfigurationDraftAsync(
+        CancellationToken cancellationToken) =>
+        CreateAiConfigurationStore().LoadDraftAsync(cancellationToken);
+
+    private Task<AiRuntimeConfiguration> SaveAiConfigurationAsync(
+        AiRuntimeConfigurationDraft draft,
+        CancellationToken cancellationToken) =>
+        CreateAiConfigurationStore().SaveAsync(draft, cancellationToken);
+
+    private async Task<WindowsAiRuntimeStatus> RestartAiAsync(CancellationToken cancellationToken)
+    {
+        var runtime = _runtime ?? throw new InvalidOperationException("AI Runtime is unavailable.");
+        await runtime.RetryAiAsync(cancellationToken);
+        return runtime.AiStatus;
+    }
+
+    private async Task<string?> PickPythonExecutableAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择 AI Runtime 使用的 python.exe",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Python 可执行文件") { Patterns = ["python.exe", "*.exe"] },
+            ],
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        var file = files.SingleOrDefault();
+        return file?.Path is { IsFile: true } path ? path.LocalPath : null;
+    }
+
+    private AiRuntimeConfigurationStore CreateAiConfigurationStore()
+    {
+        var path = AiRuntimeConfiguration.ParseConfigurationPath(_runtimeArguments)
+            ?? AiRuntimeConfiguration.DefaultConfigurationPath();
+        return new AiRuntimeConfigurationStore(path);
     }
 
     private async Task<WikiPackageExportResponse?> ExportPackageAsync(

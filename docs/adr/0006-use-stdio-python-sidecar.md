@@ -1,7 +1,7 @@
 # ADR 0006：Windows AI Runtime 使用长驻 stdio Python Sidecar
 
-- 状态：accepted；2026-09-02 修订后台启动与有界退出
-- 日期：2026-08-27
+- 状态：accepted；2026-09-02 修订后台启动与有界退出；2026-09-03 增补最小设置 UI
+- 日期：2026-08-27；2026-09-03 由用户决定增补配置 UI
 - 决策范围：Windows Python 进程边界、非密钥配置、stdio 协议、生命周期与崩溃恢复；不外推 Android
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`
 
@@ -17,7 +17,7 @@ Phase 04 已建立 Avalonia Windows Host 与 Viewer，Phase 05/06 已建立嵌�
 2. 进程命令固定为 `python.exe -I -u -X utf8 <published-launcher>`。Windows 保存唯一进程句柄；正常 shutdown 超时后只能终止该所属进程树。
 3. 协议只公开 run/tool 状态、最终正文增量和 typed completion。stdout 禁止任何非协议输出；thinking、工具参数/返回、HTML、stderr 与底层异常不跨越边界。
 4. NDJSON 单行上限 256 KiB，消息使用 protocol version 与 request ID；严格拒绝未知字段、重复 ID、非法顺序、并发 answer、超长/不完整行和 stdout 污染。一次只允许一个活动问题，取消排空后可复用 Sidecar。
-5. Windows 用户级 `ai-runtime.json` v2 保存绝对 `python.exe`、API key 与显式 OpenAI-compatible provider/model/API/reasoning。Host 读取 key 后只写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入命令参数或 NDJSON。MCP endpoint/bearer 仍只经 initialize stdin 传入。
+5. Windows 用户级 `ai-runtime.json` v2 保存绝对 `python.exe`、API key 与显式 OpenAI-compatible provider/model/API/reasoning。设置页提供 DeepSeek 官方 API 与自定义 OpenAI-compatible 两个 UI 入口，但不把 provider kind 写入 schema；保存通过同目录临时文件原子替换，并显式重启 AI。设置页遮蔽 key，Host 读取后只写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入命令参数或 NDJSON。MCP endpoint/bearer 仍只经 initialize stdin 传入。
 6. Windows 不携带或安装 Python。构建与发布只复制 Agent launcher、源码和解析锁；握手验证 Python 3.12–3.14、Runtime 1 与 PydanticAI 2.31，依赖不匹配只禁用 AI。
 7. 前台启动按 Application → Viewer 首页就绪；AI 配置、WikiToolServer 与 Sidecar 在 Viewer 导航后独立后台启动。退出先统一取消，AI 分支按活动回答 → Sidecar → WikiToolServer 收尾并与 Viewer 停止并行，两个消费者都停止后才释放 Application。Application consumer 使用内部 composite 同时协调 Viewer 与 WikiTools，并逆序释放 pause leases。
 8. Sidecar 的活动回答排空、shutdown 和正常进程退出共享 1.5 秒优雅期限；超时后只终止当前 Host 持有的进程树，进程等待与连接释放分别最多再等待 500 ms。AI 启动、重试和退出用同一内部同步门阻止晚到 Runtime 挂接。
@@ -29,7 +29,7 @@ Phase 04 已建立 Avalonia Windows Host 与 Viewer，Phase 05/06 已建立嵌�
 - 长驻子进程避免每个问题重复导入 Python/PydanticAI，同时把 Python 崩溃、stdout 和取消边界隔离在 Windows 可拥有的进程中。
 - stdio 不新增鉴权、端口、防火墙或第二个 localhost 服务；MCP listener 仍只承担标准 Search/Read 工具协议。
 - 严格、小型 NDJSON 协议比把 PydanticAI/Python对象泄漏给客户端更稳定，也可由 fake process 和真实跨语言 fixture 覆盖。
-- provider 与 key 仍不进入发布物；用户选择本机 JSON 便于直接配置，同时 Host 保持 key 不进入命令行、协议、错误和日志。
+- provider 与 key 仍不进入发布物；用户可通过设置页编辑同一本机 JSON，同时 Host 保持 key 不进入命令行、协议、错误和日志。DeepSeek 只是受控 UI 预设，不改变 ADR 0005 的 Agent provider-neutral 边界。
 - 手动恢复阻止永久 crash loop；每次新建 MCP server 自动废弃旧端口/token。
 
 ## 后果
@@ -42,8 +42,8 @@ Phase 04 已建立 Avalonia Windows Host 与 Viewer，Phase 05/06 已建立嵌�
 
 负面后果与约束：
 
-- 用户在 Phase 11 产品化之前必须自行准备严格兼容的 Python 环境和本机配置；应用不会自动修复依赖。
-- API key 在 Phase 11 凭据 UI/Windows Credential Manager 完成前以明文存在用户级 JSON 中；能读取该 Windows 用户目录的进程也能读取该 key。
+- 用户在 Phase 11 产品化之前必须自行准备严格兼容的 Python 环境；设置页只允许选择已有 `python.exe`，应用不会自动修复依赖。
+- API key 虽在设置页遮蔽，但在 Phase 11 Windows Credential Manager 完成前仍以明文存在用户级 JSON 中；能读取该 Windows 用户目录的进程也能读取该 key。
 - Windows Host 需要维护流式顺序、取消/完成竞态、stderr drain、shutdown timeout 和进程树清理测试。
 - stdio v1 是双端兼容契约；Python 与 C# 不能单边更改字段或时序。
 - 完整 Wiki HTML 仍会发送给远程模型并可能触发高 token/context 问题；Reader 优化不属于本决策。

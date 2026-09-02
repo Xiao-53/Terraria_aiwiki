@@ -52,6 +52,13 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("选择并检查 Wiki 数据包", management, StringComparison.Ordinal);
         Assert.Contains("确认危险数据操作", management, StringComparison.Ordinal);
         Assert.Contains("保存应用设置", settings, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"GeneralSettingsTab\"", settings, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"AiSettingsTab\"", settings, StringComparison.Ordinal);
+        Assert.Equal(1, Count(settings, "<ComboBoxItem Content=\"DeepSeek 官方 API\" />"));
+        Assert.Equal(1, Count(settings, "<ComboBoxItem Content=\"自定义 OpenAI-compatible\" />"));
+        Assert.Contains("<settings:SecretTextBox", settings, StringComparison.Ordinal);
+        Assert.Contains("PasswordChar=\"●\"", settings, StringComparison.Ordinal);
+        Assert.Contains("AI 思考强度", settings, StringComparison.Ordinal);
         Assert.DoesNotContain("Wiki 阅读导航", shell, StringComparison.Ordinal);
     }
 

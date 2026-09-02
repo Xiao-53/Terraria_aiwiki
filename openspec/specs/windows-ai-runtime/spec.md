@@ -12,9 +12,11 @@
 
 - Windows 本机配置固定为 `ai-runtime.json` v2。默认路径是 `%LOCALAPPDATA%\Terraria AI Wiki\ai-runtime.json`；命令行可用唯一 `--ai-config <absolute-path>` 覆盖。
 - 文档字段固定为 `version`、`pythonExecutable`、`apiKey` 和 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本、空白密钥、相对路径和非法 provider 值必须拒绝。
+- Windows 设置页可以读取并显式保存同一 v2 文件。当前 UI 只提供 `DeepSeek 官方 API` 与 `自定义 OpenAI-compatible` 两种选择：DeepSeek 预设固定 `https://api.deepseek.com` 与 Responses API，并提供 `deepseek-v4-flash` / `deepseek-v4-pro`；自定义项要求用户显式填写 endpoint、model 与 Responses / Chat Completions。provider 类型是 UI 预设，不写入 schema；不能严格识别为该官方组合的既有配置一律作为自定义项显示。
+- 思考强度 UI 固定为服务默认、关闭、低、高、最大，分别保存为 `null`、`none`、`low`、`high`、`max`。自定义兼容服务可以忽略或拒绝该参数，必须按 endpoint 分别验证，不能因 UI 可选择而宣称通用支持。
 - `pythonExecutable` 必须是存在的绝对 `python.exe`。首个 Runtime 支持 Python 3.12–3.14，并在 Sidecar 握手中固定验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。
 - 应用不下载、安装、升级或修复 Python 与依赖。发布物只携带 launcher、Agent 包源码、`pyproject.toml` 和 `uv.lock`；Python 本体与虚拟环境由用户在 Phase 11 之前外部准备。
-- API key 按用户明确选择保存在 Windows 用户级配置中。Host 读取后只写入自己启动的 Sidecar `TERRARIA_AI_API_KEY` 进程环境；不得进入命令参数、协议 JSON、公开错误、日志、Git 或 smoke 结果。配置文件继承用户目录访问控制，产品化凭据存储留 Phase 11。
+- API key 按用户明确选择保存在 Windows 用户级配置中。设置页使用遮蔽输入，但不会改变 v2 明文持久化决策。Host 读取后只写入自己启动的 Sidecar `TERRARIA_AI_API_KEY` 进程环境；不得进入命令参数、协议 JSON、公开错误、日志、Git 或 smoke 结果。配置文件继承用户目录访问控制，Windows Credential Manager 等产品化凭据存储留 Phase 11。
 
 配置形状：
 
@@ -49,6 +51,7 @@
 - 正常退出先统一取消 Host 生命周期；AI 分支执行“取消活动回答并排空 → Sidecar shutdown → 超时后仅终止所属进程树 → WikiToolServer”，同时 Viewer 分支停止 WebView/transport，两个消费者都结束后才释放 Application。
 - Sidecar 的活动回答、shutdown 与进程退出共享 1.5 秒优雅期限；期限耗尽后只终止所属进程树，并以 500 ms 期限收尾进程等待和连接释放。后台启动、显式重试和退出由同一内部同步门协调，退出后不得挂接晚到的 Runtime。
 - Sidecar fatal、协议错误或意外退出后，停止其关联 WikiToolServer；不无限自动重启。用户显式“重试 AI”时先释放旧 Runtime，再创建新的 MCP server，因此必须轮换端口与 bearer。
+- 设置页保存先统一验证并在同目录 durable 临时文件完成后原子替换 v2 配置，再调用同一个显式重试入口。验证或写入失败保留旧文件与当前 Runtime；写入成功但重启失败时保留新配置并如实显示 AI 尚未就绪，不把持久化成功误报为失败。
 - 只有宿主启动并保存句柄的 Python `Process` 可以在 shutdown 超时后使用 `Kill(entireProcessTree: true)`；不得按进程名扫描或终止其他 Python。
 
 ## Presentation Runtime 边界与故障隔离
@@ -66,9 +69,10 @@
 4. AI 配置缺失时正式 Avalonia WinExe 仍通过 Search/Viewer/assets/返回/退出 smoke。
 5. framework-dependent 与 self-contained `win-x64` 发布目录都包含同一 AgentRuntime 文件，并用同一配置 Python 环境通过取消、再次提问、工具进度、流式完成和退出清理。
 6. 有有效本机配置 key 时，对明确 provider/model 进行一次不自动重试的发布验收；记录首段、总耗时与 usage，不在日志保存问题、正文或 secret。没有 key 时阶段保持未完成，不把离线 fixture 当作真实 provider 结果。
+7. 设置页覆盖缺失配置的 DeepSeek 默认草稿、既有自定义配置载入、两种 provider 切换、思考强度映射、key 遮蔽、非法值不覆盖旧文件，以及保存后显式重启的成功/失败状态。
 
 ## 非目标与变更规则
 
-本能力不包含多轮、凭据 UI/Windows Credential Manager、内置 Python、自动安装、Reader/HTML 精简、安装器、签名、WebView2 bootstrap、Android、Vector/Embedding 或数据格式变化。
+本能力不包含多轮、Windows Credential Manager、内置 Python、自动安装、Provider/模型在线发现、API key 联网校验、Reader/HTML 精简、安装器、签名、WebView2 bootstrap、Android、Vector/Embedding 或数据格式变化。
 
 协议版本、消息字段/顺序、配置 schema、Python/依赖范围、secret 边界、进程终止策略或启动退出顺序变化时必须更新本 spec 与 ADR 0006。Android Runtime 必须另行决定，不能继承 Windows stdio、路径、loopback 或打包假设。

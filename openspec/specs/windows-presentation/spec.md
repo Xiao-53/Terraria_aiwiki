@@ -58,6 +58,9 @@
 - 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键返回、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。
 - 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
 - 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
+- 设置页使用“常规设置 / AI 配置”二级菜单，不增加第六个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v2。
+- DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。Python 使用原生文件选择器选择已有 `python.exe`，API key 始终遮蔽显示，思考强度提供服务默认、关闭、低、高、最大五档。
+- AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
 
 ## 安全 Markdown
 

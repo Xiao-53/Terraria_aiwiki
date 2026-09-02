@@ -3,22 +3,47 @@
              xmlns:settings="clr-namespace:Terraria_Wiki.Windows.Presentation.Settings"
              x:Class="Terraria_Wiki.Windows.Presentation.Settings.SettingsView"
              x:DataType="settings:SettingsViewModel">
-  <Grid RowDefinitions="Auto,Auto,*" Margin="24">
+  <Grid RowDefinitions="Auto,Auto,Auto,*" Margin="24">
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
         <TextBlock Text="设置" Classes="page-title" />
-        <TextBlock Text="管理界面、阅读、搜索和下载偏好" Classes="page-subtitle" />
+        <TextBlock Text="管理应用偏好与 AI 服务连接" Classes="page-subtitle" />
       </StackPanel>
-      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                  VerticalAlignment="Center" IsVisible="{Binding IsGeneralSelected}">
         <Button Content="重新载入" Classes="toolbar-action" Command="{Binding RefreshCommand}"
                 AutomationProperties.Name="重新载入应用设置" />
         <Button Content="保存设置" Classes="primary-action" Command="{Binding SaveCommand}"
                 AutomationProperties.Name="保存应用设置" />
       </StackPanel>
+      <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                  VerticalAlignment="Center" IsVisible="{Binding IsAiSelected}">
+        <Button Content="重新载入" Classes="toolbar-action" Command="{Binding Ai.RefreshCommand}"
+                AutomationProperties.Name="重新载入 AI 配置" />
+        <Button Content="保存并应用" Classes="primary-action" Command="{Binding Ai.SaveCommand}"
+                AutomationProperties.Name="保存并应用 AI 配置" />
+      </StackPanel>
     </Grid>
 
-    <Border Grid.Row="1" Classes="management-status" Margin="0,16,0,0"
-            MaxWidth="820" HorizontalAlignment="Stretch">
+    <StackPanel Grid.Row="1" Orientation="Horizontal" Spacing="4" Margin="0,16,0,0"
+                MaxWidth="820" HorizontalAlignment="Stretch"
+                AutomationProperties.Name="设置二级菜单">
+      <Button Content="常规设置" Classes="segment-button"
+              Classes.selected="{Binding IsGeneralSelected}"
+              Command="{Binding SelectGeneralCommand}"
+              AutomationProperties.AutomationId="GeneralSettingsTab"
+              AutomationProperties.Name="常规设置" />
+      <Button Content="AI 配置" Classes="segment-button"
+              Classes.selected="{Binding IsAiSelected}"
+              Command="{Binding SelectAiCommand}"
+              AutomationProperties.AutomationId="AiSettingsTab"
+              AutomationProperties.Name="AI 配置" />
+    </StackPanel>
+
+    <Border Grid.Row="2" Classes="management-status" Margin="0,12,0,0"
+            MaxWidth="820" HorizontalAlignment="Stretch"
+            IsVisible="{Binding IsGeneralSelected}">
       <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
         <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
                    VerticalAlignment="Center" AutomationProperties.Name="应用设置状态" />
@@ -26,111 +51,263 @@
                      IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
       </Grid>
     </Border>
+    <Border Grid.Row="2" Classes="management-status" Margin="0,12,0,0"
+            MaxWidth="820" HorizontalAlignment="Stretch"
+            IsVisible="{Binding IsAiSelected}">
+      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock Text="{Binding Ai.StatusMessage}" TextWrapping="Wrap"
+                   VerticalAlignment="Center" AutomationProperties.Name="AI 配置状态" />
+        <ProgressBar Grid.Column="1" Width="72" IsIndeterminate="True"
+                     IsVisible="{Binding Ai.IsBusy}" VerticalAlignment="Center" />
+      </Grid>
+    </Border>
 
-    <ScrollViewer Grid.Row="2" Margin="0,16,0,0"
+    <ScrollViewer Grid.Row="3" Margin="0,16,0,0"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
-      <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="20" Margin="0,0,16,24">
-        <StackPanel Spacing="12">
-          <TextBlock Text="个性化" Classes="section-title" />
-          <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-            <StackPanel Spacing="3" VerticalAlignment="Center">
-              <TextBlock Text="界面语言偏好" FontWeight="SemiBold" />
-              <TextBlock Text="保存既有语言设置；当前新 Windows 界面以简体中文交付。"
-                         Classes="muted" TextWrapping="Wrap" />
+      <Grid MaxWidth="820" HorizontalAlignment="Stretch" Margin="0,0,16,24">
+        <StackPanel Spacing="20" IsVisible="{Binding IsGeneralSelected}">
+          <StackPanel Spacing="12">
+            <TextBlock Text="个性化" Classes="section-title" />
+            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="界面语言偏好" FontWeight="SemiBold" />
+                <TextBlock Text="保存既有语言设置；当前新 Windows 界面以简体中文交付。"
+                           Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="界面语言偏好">
+                <ComboBoxItem Content="简体中文" />
+                <ComboBoxItem Content="English (US)" />
+              </ComboBox>
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="应用主题" FontWeight="SemiBold" />
+                <TextBlock Text="跟随系统，或固定使用浅色/深色。" Classes="muted" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding AppThemeIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="应用主题">
+                <ComboBoxItem Content="跟随系统" />
+                <ComboBoxItem Content="浅色" />
+                <ComboBoxItem Content="深色" />
+              </ComboBox>
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="Wiki 内容主题" FontWeight="SemiBold" />
+                <TextBlock Text="跟随应用明暗主题，或保留 Wiki 原始样式。" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding ContentThemeIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="Wiki 内容主题">
+                <ComboBoxItem Content="跟随应用" />
+                <ComboBoxItem Content="Wiki 原始样式" />
+              </ComboBox>
+            </Grid>
+          </StackPanel>
+
+          <Border Classes="section-surface">
+            <StackPanel Margin="0,20,0,0" Spacing="12">
+              <TextBlock Text="阅读与搜索" Classes="section-title" />
+              <Grid Classes="setting-row" ColumnDefinitions="*,Auto" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="鼠标侧键返回" FontWeight="SemiBold" />
+                  <TextBlock Text="允许 Reader 使用鼠标侧键返回上一页。" Classes="muted" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                            VerticalAlignment="Center" HorizontalAlignment="Right">
+                  <ToggleSwitch IsChecked="{Binding IsSideButtonBackEnabled, Mode=TwoWay}"
+                                OnContent="" OffContent=""
+                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="鼠标侧键返回" />
+                  <TextBlock Text="{Binding SideButtonStateText}" MinWidth="16"
+                             VerticalAlignment="Center" AutomationProperties.Name="鼠标侧键返回状态" />
+                </StackPanel>
+              </Grid>
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="最大搜索结果" FontWeight="SemiBold" />
+                  <TextBlock Text="手动搜索与 Application 默认查询上限。" Classes="muted" />
+                </StackPanel>
+                <NumericUpDown Grid.Column="1" Value="{Binding SearchLimit, Mode=TwoWay}"
+                               Minimum="1" Maximum="100" Increment="1" FormatString="0"
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="最大搜索结果" />
+              </Grid>
             </StackPanel>
-            <ComboBox Grid.Column="1" SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}"
-                      IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="界面语言偏好">
-              <ComboBoxItem Content="简体中文" />
-              <ComboBoxItem Content="English (US)" />
-            </ComboBox>
-          </Grid>
-          <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-            <StackPanel Spacing="3" VerticalAlignment="Center">
-              <TextBlock Text="应用主题" FontWeight="SemiBold" />
-              <TextBlock Text="跟随系统，或固定使用浅色/深色。" Classes="muted" />
+          </Border>
+
+          <Border Classes="section-surface">
+            <StackPanel Margin="0,20,0,0" Spacing="12">
+              <TextBlock Text="下载" Classes="section-title" />
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="页面并发数" FontWeight="SemiBold" />
+                  <TextBlock Text="允许范围 1–3，默认 2。" Classes="muted" />
+                </StackPanel>
+                <NumericUpDown Grid.Column="1" Value="{Binding PageConcurrency, Mode=TwoWay}"
+                               Minimum="1" Maximum="3" Increment="1" FormatString="0"
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="页面下载并发数" />
+              </Grid>
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="资源并发数" FontWeight="SemiBold" />
+                  <TextBlock Text="允许范围 1–20，默认 10。" Classes="muted" />
+                </StackPanel>
+                <NumericUpDown Grid.Column="1" Value="{Binding ResourceConcurrency, Mode=TwoWay}"
+                               Minimum="1" Maximum="20" Increment="1" FormatString="0"
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="资源下载并发数" />
+              </Grid>
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="失败重试次数" FontWeight="SemiBold" />
+                  <TextBlock Text="允许范围 0–20；0 表示不自动重试。" Classes="muted" />
+                </StackPanel>
+                <NumericUpDown Grid.Column="1" Value="{Binding RetryAttempts, Mode=TwoWay}"
+                               Minimum="0" Maximum="20" Increment="1" FormatString="0"
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="下载失败重试次数" />
+              </Grid>
             </StackPanel>
-            <ComboBox Grid.Column="1" SelectedIndex="{Binding AppThemeIndex, Mode=TwoWay}"
-                      IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="应用主题">
-              <ComboBoxItem Content="跟随系统" />
-              <ComboBoxItem Content="浅色" />
-              <ComboBoxItem Content="深色" />
-            </ComboBox>
-          </Grid>
-          <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-            <StackPanel Spacing="3" VerticalAlignment="Center">
-              <TextBlock Text="Wiki 内容主题" FontWeight="SemiBold" />
-              <TextBlock Text="跟随应用明暗主题，或保留 Wiki 原始样式。" Classes="muted" TextWrapping="Wrap" />
-            </StackPanel>
-            <ComboBox Grid.Column="1" SelectedIndex="{Binding ContentThemeIndex, Mode=TwoWay}"
-                      IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="Wiki 内容主题">
-              <ComboBoxItem Content="跟随应用" />
-              <ComboBoxItem Content="Wiki 原始样式" />
-            </ComboBox>
-          </Grid>
+          </Border>
         </StackPanel>
 
-        <Border Classes="section-surface">
-          <StackPanel Margin="0,20,0,0" Spacing="12">
-            <TextBlock Text="阅读与搜索" Classes="section-title" />
-            <Grid Classes="setting-row" ColumnDefinitions="*,Auto" ColumnSpacing="24">
+        <StackPanel Spacing="20" IsVisible="{Binding IsAiSelected}">
+          <StackPanel Spacing="12">
+            <TextBlock Text="模型服务" Classes="section-title" />
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="鼠标侧键返回" FontWeight="SemiBold" />
-                <TextBlock Text="允许 Reader 使用鼠标侧键返回上一页。" Classes="muted" />
+                <TextBlock Text="提供商" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Ai.ProviderDescription}" Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
-              <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
-                          VerticalAlignment="Center" HorizontalAlignment="Right">
-                <ToggleSwitch IsChecked="{Binding IsSideButtonBackEnabled, Mode=TwoWay}"
-                              OnContent="" OffContent=""
-                              IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="鼠标侧键返回" />
-                <TextBlock Text="{Binding SideButtonStateText}" MinWidth="16"
-                           VerticalAlignment="Center" AutomationProperties.Name="鼠标侧键返回状态" />
-              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ProviderIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding Ai.IsAvailable}"
+                        AutomationProperties.AutomationId="AiProviderSelector"
+                        AutomationProperties.Name="AI 提供商">
+                <ComboBoxItem Content="DeepSeek 官方 API" />
+                <ComboBoxItem Content="自定义 OpenAI-compatible" />
+              </ComboBox>
             </Grid>
-            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-              <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="最大搜索结果" FontWeight="SemiBold" />
-                <TextBlock Text="手动搜索与 Application 默认查询上限。" Classes="muted" />
-              </StackPanel>
-              <NumericUpDown Grid.Column="1" Value="{Binding SearchLimit, Mode=TwoWay}"
-                             Minimum="1" Maximum="100" Increment="1" FormatString="0"
-                             IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="最大搜索结果" />
-            </Grid>
-          </StackPanel>
-        </Border>
 
-        <Border Classes="section-surface">
-          <StackPanel Margin="0,20,0,0" Spacing="12">
-            <TextBlock Text="下载" Classes="section-title" />
-            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
+                  IsVisible="{Binding Ai.IsDeepSeek}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="页面并发数" FontWeight="SemiBold" />
-                <TextBlock Text="允许范围 1–3，默认 2。" Classes="muted" />
+                <TextBlock Text="DeepSeek 模型" FontWeight="SemiBold" />
+                <TextBlock Text="使用官方 Responses API；默认选择 V4 Flash。" Classes="muted" />
               </StackPanel>
-              <NumericUpDown Grid.Column="1" Value="{Binding PageConcurrency, Mode=TwoWay}"
-                             Minimum="1" Maximum="3" Increment="1" FormatString="0"
-                             IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="页面下载并发数" />
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.DeepSeekModelIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding Ai.IsAvailable}"
+                        AutomationProperties.AutomationId="DeepSeekModelSelector"
+                        AutomationProperties.Name="DeepSeek 模型">
+                <ComboBoxItem Content="DeepSeek V4 Flash" />
+                <ComboBoxItem Content="DeepSeek V4 Pro" />
+              </ComboBox>
             </Grid>
-            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
+                  IsVisible="{Binding Ai.IsDeepSeek}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="资源并发数" FontWeight="SemiBold" />
-                <TextBlock Text="允许范围 1–20，默认 10。" Classes="muted" />
+                <TextBlock Text="官方服务地址" FontWeight="SemiBold" />
+                <TextBlock Text="预设地址不可编辑，避免误接入非官方域名。" Classes="muted" />
               </StackPanel>
-              <NumericUpDown Grid.Column="1" Value="{Binding ResourceConcurrency, Mode=TwoWay}"
-                             Minimum="1" Maximum="20" Increment="1" FormatString="0"
-                             IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="资源下载并发数" />
+              <SelectableTextBlock Grid.Column="1" Text="https://api.deepseek.com"
+                                   VerticalAlignment="Center" TextWrapping="Wrap"
+                                   AutomationProperties.Name="DeepSeek 官方服务地址" />
             </Grid>
-            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
+                  IsVisible="{Binding Ai.IsCustomProvider}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="失败重试次数" FontWeight="SemiBold" />
-                <TextBlock Text="允许范围 0–20；0 表示不自动重试。" Classes="muted" />
+                <TextBlock Text="服务地址" FontWeight="SemiBold" />
+                <TextBlock Text="远程地址必须使用 HTTPS；HTTP 仅允许本机回环 IP。" Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
-              <NumericUpDown Grid.Column="1" Value="{Binding RetryAttempts, Mode=TwoWay}"
-                             Minimum="0" Maximum="20" Increment="1" FormatString="0"
-                             IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="下载失败重试次数" />
+              <TextBox Grid.Column="1" Text="{Binding Ai.CustomBaseUrl, Mode=TwoWay}"
+                       PlaceholderText="https://api.example.com/v1"
+                       IsEnabled="{Binding Ai.IsAvailable}"
+                       AutomationProperties.AutomationId="CustomAiEndpointInput"
+                       AutomationProperties.Name="自定义 AI 服务地址" />
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
+                  IsVisible="{Binding Ai.IsCustomProvider}">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="模型名称" FontWeight="SemiBold" />
+                <TextBlock Text="填写服务商文档中的精确 model id。" Classes="muted" />
+              </StackPanel>
+              <TextBox Grid.Column="1" Text="{Binding Ai.CustomModel, Mode=TwoWay}"
+                       PlaceholderText="provider-model"
+                       IsEnabled="{Binding Ai.IsAvailable}" AutomationProperties.Name="自定义模型名称" />
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
+                  IsVisible="{Binding Ai.IsCustomProvider}">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="API 格式" FontWeight="SemiBold" />
+                <TextBlock Text="不同兼容服务支持范围不同，需要分别验证。" Classes="muted" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.CustomApiIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding Ai.IsAvailable}" AutomationProperties.Name="自定义 API 格式">
+                <ComboBoxItem Content="Responses API" />
+                <ComboBoxItem Content="Chat Completions API" />
+              </ComboBox>
             </Grid>
           </StackPanel>
-        </Border>
-      </StackPanel>
+
+          <Border Classes="section-surface">
+            <StackPanel Margin="0,20,0,0" Spacing="12">
+              <TextBlock Text="本机运行环境" Classes="section-title" />
+              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="Python" FontWeight="SemiBold" />
+                  <TextBlock Text="选择已准备依赖的 Python 3.12–3.14 python.exe。" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
+                  <TextBox Text="{Binding Ai.PythonExecutable, Mode=TwoWay}"
+                           PlaceholderText="C:\path\to\.venv\Scripts\python.exe"
+                           IsEnabled="{Binding Ai.IsAvailable}" AutomationProperties.Name="AI Python 路径" />
+                  <Button Grid.Column="1" Content="选择…" Classes="secondary-action"
+                          Command="{Binding Ai.BrowsePythonCommand}"
+                          AutomationProperties.Name="选择 AI Python 可执行文件" />
+                </Grid>
+              </Grid>
+              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="API Key" FontWeight="SemiBold" />
+                  <TextBlock Text="保存在当前 Windows 用户配置中，界面始终遮蔽显示。" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <settings:SecretTextBox Grid.Column="1" Text="{Binding Ai.ApiKey, Mode=TwoWay}"
+                                        PasswordChar="●" PlaceholderText="输入 API Key"
+                                        IsEnabled="{Binding Ai.IsAvailable}"
+                                        AutomationProperties.AutomationId="AiApiKeyInput"
+                                        AutomationProperties.Name="AI API Key"
+                                        AutomationProperties.HelpText="受保护的密钥输入，内容始终遮蔽。" />
+              </Grid>
+            </StackPanel>
+          </Border>
+
+          <Border Classes="section-surface">
+            <StackPanel Margin="0,20,0,0" Spacing="12">
+              <TextBlock Text="模型行为" Classes="section-title" />
+              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="思考强度" FontWeight="SemiBold" />
+                  <TextBlock Text="服务默认最兼容；其他档位会作为 reasoning effort 发送。" Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ReasoningEffortIndex, Mode=TwoWay}"
+                          IsEnabled="{Binding Ai.IsAvailable}"
+                          AutomationProperties.AutomationId="AiReasoningEffort"
+                          AutomationProperties.Name="AI 思考强度">
+                  <ComboBoxItem Content="服务默认" />
+                  <ComboBoxItem Content="关闭" />
+                  <ComboBoxItem Content="低" />
+                  <ComboBoxItem Content="高" />
+                  <ComboBoxItem Content="最大" />
+                </ComboBox>
+              </Grid>
+              <Border Classes="card" Padding="16">
+                <StackPanel Spacing="4">
+                  <TextBlock Text="连接说明" FontWeight="SemiBold" />
+                  <TextBlock Text="提问时读取的本地 Wiki 内容会发送给所选远程模型服务。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
+                             Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+              </Border>
+            </StackPanel>
+          </Border>
+        </StackPanel>
+      </Grid>
     </ScrollViewer>
   </Grid>
 </UserControl>
