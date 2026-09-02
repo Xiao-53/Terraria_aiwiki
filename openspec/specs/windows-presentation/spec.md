@@ -1,16 +1,16 @@
 # Windows Presentation 能力契约
 
-- 状态：implemented baseline；Phase 09 收藏与 Reader 交互切片已在 Windows 11 x64 验证
-- 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
+- 状态：implemented baseline；Phase 09 收藏/Reader 与 Wiki 资料库切片已通过 Windows 11 x64 Release build/tests，资料库人工 UI 验收待执行
+- 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
 - 来源：Master Architecture v0.6、Phase 08、Phase 09 进行中计划、ADR 0001、Application/Viewer/Windows AI Runtime 能力契约
 
 ## 信息架构与响应式布局
 
-- 应用默认进入 AI 问答，左侧只显示可用的“AI 问答”和“收藏”两个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前 Chat/收藏主页面。历史、全部页面、数据管理和设置仍不显示无功能占位入口。
+- 应用默认进入 AI 问答，左侧显示可用的“AI 问答”“收藏”和“Wiki 资料库”三个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前 Chat/收藏/资料库主页面。数据管理和设置仍不显示无功能占位入口。
 - Windows Shell 使用固定窄导航栏、标题区和细描边工作区。初始窗口为 1280×820 DIP，最小窗口为 900×600 DIP。
 - 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。拖动分隔条不会自动关闭 Reader；关闭只由 Reader 叉号执行，顶部 Wiki 按钮可重新打开。
 - 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
-- Chat/收藏/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
+- Chat/收藏/资料库/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
 
 ## Chat 交互
 
@@ -27,6 +27,14 @@
 - Chat 收藏采用版本化宿主 JSON，默认位于 `%LocalAppData%\Terraria AI Wiki\chat-favorites.json`；最多 200 项，问题、Markdown 与来源沿用受限长度，写入失败只影响收藏功能。
 - Wiki 收藏继续使用现有数据源和 schema。Reader 标题栏星标当前由宿主明确打开的 Wiki 页面；收藏项在唯一共享 Reader 中打开，并可从收藏页移除。
 - 收藏不是多轮会话或自动历史，不改变 AI 独立单轮契约，也不跨设备同步。
+
+## Wiki 资料库
+
+- 左侧“Wiki 资料库”在同一主页面内提供“全部页面”和“历史记录”两个内页，只经 Application `WikiLibraryUseCases` 访问当前活动 Wiki；Presentation 不直接访问 SQLite 或 Core。
+- 两个内页均按标题过滤并通过 `PageRequest` 分批加载，每批 100 项；继续加载沿用当前过滤和 offset。输入变化、切换内页或刷新必须取消过期请求，旧结果不得覆盖新筛选结果。
+- 全部页面显示标题和更新时间；历史记录保持 Application 返回的最新优先顺序并按日期分组。空列表、加载失败和数据源不可用使用页内状态，不修改本地数据。
+- 清空历史必须先显示页内二次确认，只调用既有 `ClearHistoryAsync`；失败保留当前列表并显示安全状态，不影响页面、收藏或 Wiki 内容。
+- 点击全部页面或历史条目在唯一共享 Reader 中打开对应标题；窄屏沿用既有 Reader 覆盖层，宽屏沿用既有分栏，不创建第二个 Viewer。
 
 ## 安全 Markdown
 
@@ -48,4 +56,4 @@ Application/Core 公共 API、Python Agent、NDJSON v1、`ai-runtime.json`、SQL
 
 启动失败时必须同时提供“重试”和“重新选择 Wiki 数据文件夹”，后者验证并替换已保存路径后重新组合 Runtime。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
-若增加多轮、自动会话历史或同步、Phase 09 其余 P0 页面、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化或 Android UI，必须建立独立变更并更新相应能力契约。
+若增加多轮、自动会话历史或同步、数据管理/设置/导入导出/维护等 Phase 09 其余 P0 页面、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化或 Android UI，必须建立独立变更并更新相应能力契约。

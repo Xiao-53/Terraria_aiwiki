@@ -109,7 +109,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation；当前首个 Phase 09 切片已把左侧星标入口改为统一收藏页，接通显式 AI 单轮收藏与现有 Wiki 收藏，并为共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏。顶部 Wiki 只展开 Reader，拖动分隔条不会自动关闭；启动失败时可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint。Reader 默认首页已可直接收藏；Windows 用户级 `ai-runtime.json` v2 可保存 provider、Python 路径和本机 API key，并仅向所属 Sidecar 环境注入密钥。Chat 思考态已改为轻量连续内容流，并以预览 Enter 发送、Shift+Enter 换行；结果区显示输入、输出与合计 Token 花费。Agent 不再设置美元费用预算，防循环、协议长度、context 与超时运行限位继续生效。普通问答仍不自动持久化，Viewer 仍只有一个。Windows Release build 为 0 warning/0 error，当前 .NET 测试 249/249 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。完整 P0 管理 UI、多轮、内置 Python、安装器和 Android 尚未完成。
+**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation。收藏/Reader 切片已接通显式 AI 单轮收藏、现有 Wiki 收藏、顶部 Wiki 入口、页面星标和受限可调分栏；顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。第二个资料库切片已新增“Wiki 资料库”导航，在同一页面内接管全部页面与历史记录，支持标题过滤、每批 100 项继续加载、历史日期分组和清空二次确认；条目仍只在唯一共享 Reader 中打开。启动失败可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint；Reader 默认首页可直接收藏。Windows 用户级 `ai-runtime.json` v2 可保存 provider、Python 路径和本机 API key，并仅向所属 Sidecar 环境注入密钥。Chat 使用轻量连续内容流，以预览 Enter 发送、Shift+Enter 换行，结果区显示输入、输出与合计 Token 花费；Agent 不再设置美元费用预算，防循环、协议长度、context 与超时运行限位继续生效。Windows Release build 为 0 warning/0 error，当前 .NET 测试 253/253 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。资料库人工 UI 验收、其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器和 Android 尚未完成。
 
 ## 工作区结构
 
@@ -142,7 +142,7 @@ terraria_aiwiki/
 
 现有源码位于 `terraria-wiki-offline/`，它的基线技术包括 C#、.NET 10、.NET MAUI、Blazor Hybrid / Razor、SQLite / FTS5、HtmlAgilityPack 和 MediaWiki API。MAUI/Blazor 是旧宿主事实，不再是 Windows 目标架构。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 正以小切片接管 P0 UI，当前已实现统一收藏页、Chat/Wiki 收藏和受限可调 Reader 分栏。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 正以小切片接管 P0 UI，当前已实现统一收藏页、Chat/Wiki 收藏、受限可调 Reader 分栏，以及复用 Application 分页边界的全部页面/历史资料库。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|

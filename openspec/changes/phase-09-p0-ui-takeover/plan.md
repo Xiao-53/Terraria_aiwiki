@@ -1,11 +1,11 @@
-# Phase 09 — P0 UI Takeover（收藏与 Reader 交互切片）
+# Phase 09 — P0 UI Takeover
 
 - 状态：in-progress
 - Phase：09 — P0 UI Takeover
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
-- 最后更新：2026-08-28
-- 范围：Windows Avalonia 收藏导航、Chat/Wiki 收藏、Reader 入口、可调整分栏、本机 AI 配置、Chat 交互视觉与 Token 花费展示
+- 最后更新：2026-09-02
+- 范围：Windows Avalonia 收藏与 Reader 交互、Wiki 资料库、本机 AI 配置、Chat 交互视觉与 Token 花费展示
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -16,9 +16,11 @@
 
 决定：本切片启动 Phase 09，但不宣称整个 P0 UI Takeover 完成。Chat 收藏使用 Windows 宿主级、版本化原子 JSON，只保存用户显式收藏的当前已完成单轮，不保存普通问答历史，不修改 SQLite schema、Application 公共 API、AI 协议或 Agent。
 
+2026-09-02 继续 Phase 09 时确认：收藏与 Reader 切片已由独立源码/治理提交保存；新 Avalonia Shell 尚未显示旧 UI 的“全部页面”和“历史记录”，但 `WikiLibraryUseCases.GetPagesAsync`、`GetHistoryAsync` 与 `ClearHistoryAsync` 已提供排序、分页、标题过滤和清空语义。下一最小切片接管这两项只读/低风险资料库入口，Presentation 不直接访问 SQLite，也不进入数据管理、设置或 MAUI 退休。
+
 ## 目标与完成定义
 
-- 左侧导航固定为“AI 问答”和“收藏”；收藏页同时列出对话收藏与活动 Wiki 的 Wiki 收藏。
+- 左侧导航显示已实现的“AI 问答”“收藏”和“Wiki 资料库”；收藏页同时列出对话收藏与活动 Wiki 的 Wiki 收藏。
 - Chat 右上角星标只在已有最终回答时可用；添加/移除显式收藏并提供状态反馈。
 - Reader 标题栏可收藏当前 Wiki 页面；收藏页 Wiki 项可在唯一共享 Reader 中打开并可移除。
 - 顶部最右侧 Wiki 按钮打开/恢复共享 Reader；不创建第二个 Viewer。
@@ -33,6 +35,9 @@
 - Chat 思考期间的停止按钮图标必须固定居中，不因无边框 Button 模板的默认 content alignment 偏移；回答内容与右上角收藏星标使用独立布局列，窄分栏下也不得重叠。
 - Chat 回答标题使用独立的小型“AI 结论”标签，不与 Markdown 正文的标题或粗体混淆；可信来源使用等宽整行卡片，Token 花费与完成状态使用轻量信息条。
 - Windows Release build 0 warning/0 error；既有和新增测试通过；高 DPI 下实际拖动两端、收藏页、Chat/Reader 星标与窄窗口无方框错位。
+- 左侧新增可用的“Wiki 资料库”入口；资料库内可在“全部页面”和“历史记录”间切换，按标题过滤并按 Application 分页继续加载。
+- 全部页面显示标题与更新时间；历史记录保持最新优先和日期分组，清空历史必须经过明确的二次确认。
+- 点击任一页面或历史项只在唯一共享 Reader 中打开，不创建第二个 Viewer，不替换或复制 Wiki 数据。
 
 ## 前置条件
 
@@ -42,13 +47,14 @@
 
 ## 范围与非目标
 
-范围内：Windows Presentation 内部状态/view models/XAML；Windows Chat 收藏 JSON；复用 Application Wiki Library；相关测试、持续 Presentation spec 和当前状态文档。
+范围内：Windows Presentation 内部状态/view models/XAML；Windows Chat 收藏 JSON；复用 Application Wiki Library；资料库的全部页面、历史记录、标题过滤、增量分页和历史清空确认；相关测试、持续 Presentation spec 和当前状态文档。
 
-非目标：多轮会话、自动保存历史、同步 Chat 收藏、云账户、第二个 Viewer、SQLite/schema 变化、AI/NDJSON 变化、全部页面、历史、数据管理、设置、导入导出、维护、旧 MAUI 退休、Android。
+非目标：多轮会话、自动保存 Chat 历史、同步 Chat 收藏、云账户、第二个 Viewer、SQLite/schema 变化、AI/NDJSON 变化、数据管理、设置、导入导出、维护、旧 MAUI 退休、Android。
 
 ## P0 / 兼容性影响
 
 - Wiki 收藏只经 `WikiLibraryUseCases` 读写现有 `WikiFavorite`，不直接访问 Core/SQLite。
+- 全部页面与历史只经 `WikiLibraryUseCases` 分页读取；清空历史调用既有 `ClearHistoryAsync`，并在 Presentation 显式二次确认，不改变历史写入或排序语义。
 - Chat 收藏写独立宿主 JSON，失败只影响收藏 UI，不阻塞 AI、Search 或 Viewer。
 - 唯一 Reader、Viewer 内容协议、访问记录、返回、主题和资源链路保持不变。
 - 分栏只改变 Presentation 布局；窄布局继续使用覆盖层。
@@ -63,7 +69,9 @@
 - 已保存数据根失效或内容不兼容时，错误区提供重新选择入口；旧数据遗留 WAL/SHM 先正常 checkpoint 并切回 DELETE journal，不直接删除 sidecar。
 - `ai-runtime.json` 升级为严格 v2，新增顶层 `apiKey`；值只在内存中传给 `ProcessStartInfo.Environment["TERRARIA_AI_API_KEY"]`。配置与用户级 Python 环境位于 `%LOCALAPPDATA%`，不纳入仓库。
 - Agent 的 `UsageLimits` 不再设置 `cost_limit`；typed usage 与 NDJSON 继续兼容 provider 返回的可选 `cost_usd`，避免改变协议。其余限位属于稳定性与协议护栏，不作为费用预算展示。
-- 待决问题：无；收藏跨设备同步和完整 Phase 09 其余页面留给后续明确任务。
+- 资料库使用一个 Windows 内部 view model 和两个内页状态，调用 Application 的 `PageRequest`（每批不超过 200）；过滤或切页时取消过期请求，避免大 Wiki 一次性载入内存。
+- 历史清空采用页内二次确认，不新增平台对话框 port；操作失败只显示安全状态并保留当前列表。
+- 待决问题：无；收藏跨设备同步、数据管理、设置和完整 Phase 09 其余页面留给后续明确任务。
 
 ## 文件变更
 
@@ -82,8 +90,10 @@
 - MODIFY Chat XAML/App styles 与 Presentation boundary tests：修正停止图标居中，并为收藏星标建立独立布局栏。
 - MODIFY Chat XAML/App styles 与 Presentation boundary tests：重排回答标签、来源列表、Token 与完成状态的视觉层级。
 - MODIFY Chat input behavior/view model/XAML 与 Presentation flow/boundary tests：识别 IME preedit、保留 composer 问题文字并移除重复问题卡。
+- ADD `Presentation/Library/*`：全部页面/历史的分页状态、过滤、日期分组、清空确认与 Avalonia 视图。
+- MODIFY `Presentation/Shell/ShellViewModel.cs` / `ShellView.axaml`：增加资料库导航，组合 Application Library 并继续复用唯一 Reader。
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
-- MODIFY Windows tests：持久化、收藏流程、唯一 Reader、导航、分隔条静态和目标行为。
+- MODIFY Windows tests：持久化、收藏流程、资料库分页/过滤/清空、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
 - KEEP Application/Core、SQLite、Python、协议、Viewer 内容和旧 MAUI。
 
@@ -108,6 +118,10 @@
 - [x] 执行最小 Windows Presentation 定向验证并分别提交源码与治理变更；人工 UI 验收由用户执行。
 - [x] 修正中文输入法 Enter 抢发、候选条锚点错位和发送后输入栏空白。
 - [x] 执行最小 Windows Presentation 定向验证并分别提交源码与治理变更；人工 IME/UI 验收由用户执行。
+- [x] 实现 Wiki 资料库 view model/XAML，接通全部页面、历史、过滤、增量分页和清空确认。
+- [x] 将资料库加入 Shell，接通 Application Library 与唯一共享 Reader；补齐 Presentation flow/boundary 回归。
+- [x] 执行 Windows Release build、相关/全量 tests 与静态边界检查；记录人工 UI 未验证项。
+- [x] 更新持续 Presentation spec、README/项目状态和本计划；检查双 Git 状态并分别提交源码与治理变更。
 
 ## 验证与回归计划
 
@@ -115,6 +129,7 @@
 - Windows：Release restore/build/test；目标为 0 warning/0 error、全部测试通过。
 - Windows UI：本切片自动化覆盖宽屏限位、顶部 Wiki 重开与收藏页布局；分隔拖动不得自动关闭 Reader。Chat/Wiki 收藏状态、收藏页打开和窄布局由 Presentation 回归测试覆盖。显式切换到 225% 缩放的人工检查留作后续目标平台验收，不在本切片结果中宣称通过。
 - 回归：只存在一个 `NativeWebView`/`ViewerWebViewSession`；AI 单轮发送、Wiki Search、来源精确页面/anchor、Reader 返回与 AI 故障隔离不变。
+- 资料库：用确定性 fake Application delegates 覆盖首批/继续加载、过滤取消、全部页面与历史打开、日期分组、清空确认/失败；静态检查 Presentation 不出现 Core/SQLite 访问。
 
 ## 风险与回退
 
@@ -122,6 +137,8 @@
 - 极端分栏导致测量循环：用 Grid `MinWidth` 和一次性布局状态限制；不以自动关闭掩盖测量错误，可回退到上一提交 `6844809`。
 - Wiki 收藏数据操作占用：捕获 Application 稳定错误并留在收藏页，不改变收藏数据库语义。
 - 新导航与 Phase 08 spec 冲突：实现完成后更新持续 spec；本计划保持 Phase 09 in-progress，不提前宣称其余 P0 接管完成。
+- 大 Wiki 列表一次载入导致卡顿：严格使用 Application 分页和增量加载；过滤重置 offset 并取消过期请求，可整体回退到资料库切片前源码提交 `37fbccf`。
+- 清空历史误操作：只有页内二次确认后调用既有用例；失败保留可恢复状态，不触碰页面、收藏或 Wiki 内容。
 
 ## 进度记录
 
@@ -146,12 +163,16 @@
 - 2026-08-28：完成“AI 结论”标签、绿色来源容器、等宽无边框来源行、圆形箭头，以及 Token/状态信息条。标准 Release 输出被用户正在运行的进程锁定后，未关闭该进程，改用 Windows 临时独立输出完成最小验证。源码提交为 `3f5d8f5`。
 - 2026-08-28：用户实机截图确认中文输入法候选条锚到右侧 Reader，底部输入栏在回答期间为空，问题文字另成右上角小卡。代码确认 Tunnel Enter 未判断 `TextPresenter.PreeditText` 且发送时主动清空 `Question`；决定让 preedit Enter 只提交候选，并将问题保留在底部 composer。
 - 2026-08-28：完成 IME preedit 检测、composer 问题保留与右上角问题卡移除；使用独立 Windows Temp 输出避免运行中应用锁定，最小相关验证通过。源码提交为 `37fbccf`。
+- 2026-09-02：用户要求继续工作。读取计划规范、Application/Presentation/data compatibility specs、Phase 08 记录、旧全部页面/历史实现、当前 Shell/Favorites/Wiki、Application Library contracts/use cases 与 Windows tests；确定下一个最小切片为 Wiki 资料库，恢复点为内层 `37fbccf`、外层 `5c48f9e`。
+- 2026-09-02：新增 Windows 内部 Wiki 资料库 view model/XAML 和 Shell 导航；每批 100 项，支持标题过滤、过期请求取消、继续加载、历史日期分组与页内清空确认。全部页面和历史项继续在唯一 Reader 中打开；Windows Presentation 定向编译与 tests 23/23 通过。
+- 2026-09-02：Windows Release build 0 warning/0 error；全量 .NET tests 253/253 通过（Core 90、Application 54、Windows 81、WikiTools 28）。静态边界确认资料库 Presentation 不访问 Core/SQLite，且仍只有一个 `NativeWebView`/`ViewerWebViewSession`；本次未启动真实 UI，人工视觉验收待用户执行。
+- 2026-09-02：Wiki 资料库源码以 `379ec17`（`feat(windows): add wiki library navigation`）保存；持续 Presentation spec、README、项目基线、架构状态和本计划由独立外层治理提交保存，不 push。
 
 ## 发现、偏差与决策
 
 - 发现：现有 Application 已完整覆盖 Wiki 收藏，无需新增公共 API。
 - 决定：Chat 收藏是用户显式操作的快照，不改变“每次提问独立单轮、普通问答不持久化”的 AI 契约。
-- 决定：本次是 Phase 09 的首个切片；其余 P0 页面不在当前授权中，完成本切片后计划仍保留进行中状态。
+- 决定：收藏/Reader 是 Phase 09 首个切片，本次 Wiki 资料库是第二个切片；数据管理、设置、导入导出和维护仍不在当前授权中，完成资料库切片后计划继续保持进行中状态。
 - 决定：用户明确覆盖 ADR 0006 原有“密钥不落配置文件”选择；仅 Windows 本机配置改变，Python Agent 仍只从子进程环境读取，NDJSON 和命令参数继续不携带密钥。
 
 ## 验证结果
@@ -170,7 +191,8 @@
 - 停止按钮/收藏栏修正后：Windows Release 编译由定向 `Terraria_Wiki.Windows.Tests` 测试命令完成；Presentation boundary/flow 19/19 通过。未运行完整测试集、未启动 UI，人工视觉验收由用户执行。
 - 回答结果视觉修正后：首次定向命令因运行中的 `Terraria_Wiki.Windows` 锁定既有 Release DLL 而未完成；使用独立 Windows Temp `OutDir` 后 XAML/Release 编译成功，Presentation boundary 4/4 通过。未运行完整测试集、未关闭或启动 UI。
 - IME/composer 修正后：独立 Windows Temp `OutDir` XAML/Release 编译成功，IME key behavior、composer state 与 Presentation boundary 定向测试 6/6 通过。未运行完整测试集、未关闭或启动 UI；真实中文输入法视觉验收由用户执行。
+- Wiki 资料库切片：Windows Release build 通过，0 warning / 0 error；Presentation flow/boundary 定向 tests 23/23、全量 .NET tests 253/253 通过（Core 90、Application 54、Windows 81、WikiTools 28）。覆盖首批/继续加载、标题过滤与过期请求取消、日期分组、清空确认/失败和唯一 Reader 打开；未启动真实 UI，人工视觉验收尚未执行。
 
 ## 完成摘要
 
-当前授权的收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存；Phase 09 整体仍为 `in-progress`，人工 UI/IME 验收由用户执行，其余 P0 页面不在本次完成范围内。
+收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存。Wiki 资料库切片已由源码提交 `379ec17` 保存并通过 Windows Release build 与 253/253 全量 .NET tests；人工 UI 验收尚未执行。Phase 09 整体仍为 `in-progress`，其余 P0 管理页面未完成。
