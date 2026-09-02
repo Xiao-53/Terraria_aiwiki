@@ -92,7 +92,7 @@ Codex CLI 必须从外层 WSL 工作区根启动，使产品源码与根 `AGENTS
 
 产品源码已以 `d67d904` 内容建立外层独立基线，固定上游 Submodule 不再参与 build/runtime；迁移后的 Windows Release build、260/260 .NET tests、两种 publish smoke 与冻结 Python 回归均已通过。
 
-Phase 00–08 已完成；Phase 09 P0 UI Takeover 正在进行。收藏/Reader 切片已用左侧统一收藏页接管显式 AI 单轮收藏与既有 Wiki 收藏，并为唯一共享 Reader 增加顶部 Wiki 入口、页面星标和有安全限位的可调分栏；默认 Reader 首页可直接收藏，顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。Wiki 资料库切片已复用 `WikiLibraryUseCases` 接管全部页面与历史记录，支持标题过滤、每批 100 项增量加载、历史日期分组和清空二次确认，Presentation 不直接访问 SQLite。Chat 使用轻量连续内容流，预览 Enter 发送且 Shift+Enter 换行；结果区显示输入、输出与合计 Token 花费。Agent 已取消美元费用预算，仍保留防循环、协议长度、context 与超时运行限位。启动失败可重新选择数据根，旧内容数据库 WAL/SHM 通过 SQLite checkpoint 安全合并后再进入既有兼容迁移；已迁移数据库只读检查锚点格式后直接使用，只有确实需要旧锚点升级时才创建同卷 staging；公共 API、SQLite schema 与 Viewer 协议不变。Windows 用户级 AI 配置为 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 254/254 通过，真实 3.4 GB 旧 Wiki 数据已完成启动恢复；资料库人工 UI 验收尚未执行。其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
+Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement。Windows Avalonia Shell 现有“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个真实入口：收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` Inspect/确认/Import 与安全导出、全部强类型设置和启动错误恢复都只经现有 Application/Core 能力运行。Presentation 不直接访问 SQLite；活动数据变化会刷新搜索、收藏和资料库，并按需让唯一共享 Reader 重新绑定动态 loopback Viewer。无页面数据时 Runtime 仍可进入管理和设置。Chat 继续保持独立单轮、安全原生 Markdown 与 Token 花费展示；Windows 用户级 AI 配置仍为严格 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 267/267 通过；Light/Dark、1280×820、900×600、管理确认和设置状态已在目标 Windows 实际窗口检查，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。公共 API、SQLite schema、包格式、AI 协议与 Viewer 内容协议未改变。多轮、内置 Python、安装器、Windows Productization 与 Android 尚未实施。
 
 ## 治理关系
 

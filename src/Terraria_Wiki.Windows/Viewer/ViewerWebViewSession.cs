@@ -41,11 +41,11 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
     public string? LastCompletedMethod => Volatile.Read(ref _lastCompletedMethod);
     public string? LastBridgeErrorCode => Volatile.Read(ref _lastBridgeErrorCode);
 
-    public void Navigate(Uri baseUri)
+    public void Navigate(Uri baseUri, bool forceReload = false)
     {
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
         ArgumentNullException.ThrowIfNull(baseUri);
-        if (_baseUri == baseUri)
+        if (!forceReload && _baseUri == baseUri)
             return;
         _baseUri = baseUri;
         lock (_readyGate)

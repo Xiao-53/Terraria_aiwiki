@@ -113,6 +113,27 @@ public sealed class ViewerBridgeTests
         Assert.Equal("duplicate-request-id", duplicate?.Error?.Code);
     }
 
+    [Fact]
+    public async Task SideButtonBackSettingCanChangeWithoutRecreatingBridge()
+    {
+        await using var fixture = await BridgeApplicationFixture.CreateAsync();
+        var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
+        await SendAsync(bridge, "history-setting", "SaveToTabHistory", "{\"title\":\"Home\",\"position\":0}");
+
+        bridge.SetSideButtonBackEnabled(false);
+        var disabled = await SendAsync(bridge, "back-disabled", "WikiBackAsync", "");
+
+        Assert.Equal("side-button-back-disabled", disabled.Error?.Code);
+        Assert.Single(bridge.History);
+
+        bridge.SetSideButtonBackEnabled(true);
+        var enabled = await SendAsync(bridge, "back-enabled", "WikiBackAsync", "");
+
+        Assert.Null(enabled.Error);
+        Assert.Equal("BackToPage", enabled.Command?.Method);
+        Assert.Empty(bridge.History);
+    }
+
     private static async Task<ViewerDispatchResult> SendAsync(
         ViewerBridge bridge,
         string id,

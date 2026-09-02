@@ -1,0 +1,198 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:management="clr-namespace:Terraria_Wiki.Windows.Presentation.Management"
+             x:Class="Terraria_Wiki.Windows.Presentation.Management.WikiManagementView"
+             x:DataType="management:WikiManagementViewModel">
+  <Grid RowDefinitions="Auto,Auto,*" Margin="24">
+    <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
+      <StackPanel Spacing="4">
+        <TextBlock Text="数据管理" Classes="page-title" />
+        <TextBlock Text="切换、下载、迁移并维护本地 Wiki 数据" Classes="page-subtitle" />
+      </StackPanel>
+      <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
+              VerticalAlignment="Center" AutomationProperties.Name="刷新 Wiki 数据状态">
+        <StackPanel Orientation="Horizontal" Spacing="8">
+          <Path Width="16" Height="16" Stretch="Uniform"
+                Data="M 20,11 C 20,16 16,20 11,20 C 6,20 2,16 2,11 C 2,6 6,2 11,2 C 14.2,2 17.1,3.7 18.7,6.4 M 18.7,2 L 18.7,6.4 L 14.3,6.4"
+                Stroke="{DynamicResource TerrariaBrandBrush}" StrokeThickness="1.8"
+                StrokeLineCap="Round" StrokeJoin="Round" />
+          <TextBlock Text="刷新" FontSize="13" FontWeight="SemiBold" />
+        </StackPanel>
+      </Button>
+    </Grid>
+
+    <Border Grid.Row="1" Classes="management-status" Margin="0,16,0,0"
+            MaxWidth="820" HorizontalAlignment="Stretch">
+      <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" ColumnSpacing="12">
+        <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
+                   VerticalAlignment="Center" AutomationProperties.Name="数据管理状态" />
+        <Button Grid.Column="1" Content="取消" Classes="secondary-action"
+                Command="{Binding CancelOperationCommand}" IsVisible="{Binding IsBusy}"
+                AutomationProperties.Name="取消当前数据操作" />
+        <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,10,0,0" Height="3"
+                     Minimum="0" Maximum="{Binding ProgressMaximum}"
+                     Value="{Binding ProgressValue}"
+                     IsIndeterminate="{Binding IsProgressIndeterminate}"
+                     IsVisible="{Binding IsBusy}" />
+      </Grid>
+    </Border>
+
+    <ScrollViewer Grid.Row="2" Margin="0,16,0,0"
+                  VerticalScrollBarVisibility="Auto"
+                  HorizontalScrollBarVisibility="Disabled">
+      <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="20"
+                  Margin="0,0,0,24">
+        <Border Classes="confirmation-card" IsVisible="{Binding IsConfirmationVisible}"
+                AutomationProperties.Name="数据操作确认">
+          <Grid RowDefinitions="Auto,Auto,Auto" Margin="20">
+            <TextBlock Text="{Binding ConfirmationTitle}" Classes="section-title" />
+            <TextBlock Grid.Row="1" Text="{Binding ConfirmationMessage}" TextWrapping="Wrap"
+                       Classes="page-subtitle" Margin="0,8,0,0" />
+            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8"
+                        HorizontalAlignment="Right" Margin="0,18,0,0">
+              <Button Content="取消" Classes="secondary-action"
+                      Command="{Binding CancelConfirmationCommand}"
+                      AutomationProperties.Name="取消数据操作确认" />
+              <Button Content="{Binding ConfirmationActionText}" Classes="primary-action"
+                      IsVisible="{Binding IsStandardConfirmation}"
+                      Command="{Binding ConfirmCommand}"
+                      AutomationProperties.Name="确认标准数据操作" />
+              <Button Content="{Binding ConfirmationActionText}" Classes="danger-action"
+                      IsVisible="{Binding IsDangerousConfirmation}"
+                      Command="{Binding ConfirmCommand}"
+                      AutomationProperties.Name="确认危险数据操作" />
+            </StackPanel>
+          </Grid>
+        </Border>
+
+        <StackPanel Spacing="10">
+          <TextBlock Text="Wiki 数据源" Classes="section-title" />
+          <TextBlock Text="选择其他 Wiki 前会先确认；Viewer、搜索和资料库会共同切换。"
+                     Classes="page-subtitle" TextWrapping="Wrap" />
+          <ItemsControl ItemsSource="{Binding Wikis}">
+            <ItemsControl.ItemTemplate>
+              <DataTemplate x:DataType="management:WikiBookItemViewModel">
+                <Button Command="{Binding SelectCommand}" Classes="list-row"
+                        AutomationProperties.Name="选择 Wiki 数据源">
+                  <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                    <StackPanel Spacing="3">
+                      <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" />
+                        <TextBlock Text="当前" Classes="tag" IsVisible="{Binding IsActive}" />
+                      </StackPanel>
+                      <TextBlock Text="{Binding Description}" Classes="muted"
+                                 TextWrapping="Wrap" MaxLines="2" />
+                    </StackPanel>
+                    <StackPanel Grid.Column="1" HorizontalAlignment="Right" VerticalAlignment="Center">
+                      <TextBlock Text="{Binding InstallStatus}" Classes="tag" />
+                      <TextBlock Text="{Binding Id, StringFormat='ID {0}'}" Classes="muted"
+                                 HorizontalAlignment="Right" />
+                    </StackPanel>
+                  </Grid>
+                </Button>
+              </DataTemplate>
+            </ItemsControl.ItemTemplate>
+          </ItemsControl>
+        </StackPanel>
+
+        <Border Classes="section-surface">
+          <StackPanel Margin="0,20,0,0" Spacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="{Binding ActiveWikiTitle}" Classes="section-title" />
+              <TextBlock Text="{Binding ActiveWikiDescription}" Classes="page-subtitle"
+                         TextWrapping="Wrap" />
+            </StackPanel>
+            <Grid ColumnDefinitions="*,*,*" RowDefinitions="Auto,Auto" ColumnSpacing="20" RowSpacing="12">
+              <StackPanel>
+                <TextBlock Text="页面" Classes="muted" />
+                <TextBlock Text="{Binding PageCountText}" FontSize="18" FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Grid.Column="1">
+                <TextBlock Text="重定向" Classes="muted" />
+                <TextBlock Text="{Binding RedirectCountText}" FontSize="18" FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Grid.Column="2">
+                <TextBlock Text="资源" Classes="muted" />
+                <TextBlock Text="{Binding ResourceCountText}" FontSize="18" FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Grid.Row="1">
+                <TextBlock Text="占用空间" Classes="muted" />
+                <TextBlock Text="{Binding DataSizeText}" FontWeight="SemiBold" />
+              </StackPanel>
+              <StackPanel Grid.Row="1" Grid.Column="1" Grid.ColumnSpan="2">
+                <TextBlock Text="最近更新" Classes="muted" />
+                <TextBlock Text="{Binding UpdateTimeText}" FontWeight="SemiBold" />
+              </StackPanel>
+            </Grid>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="section-surface">
+          <StackPanel Margin="0,20,0,0" Spacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="下载与更新" Classes="section-title" />
+              <TextBlock Text="所有内容继续写入同一份 SQLite/FTS5 数据，不建立 AI 专用副本。"
+                         Classes="page-subtitle" TextWrapping="Wrap" />
+            </StackPanel>
+            <WrapPanel ItemWidth="190" ItemHeight="44">
+              <Button Content="下载页面与资源" Classes="primary-action"
+                      Margin="0,0,8,8" Command="{Binding DownloadAllCommand}"
+                      IsVisible="{Binding NeedsPageData}"
+                      AutomationProperties.Name="下载 Wiki 页面与资源" />
+              <Button Content="仅下载页面" Classes="secondary-action"
+                      Margin="0,0,8,8" Command="{Binding DownloadPagesCommand}"
+                      IsVisible="{Binding NeedsPageData}"
+                      AutomationProperties.Name="仅下载 Wiki 页面" />
+              <Button Content="检查并更新" Classes="primary-action"
+                      Margin="0,0,8,8" Command="{Binding UpdateCommand}"
+                      IsVisible="{Binding HasPageData}"
+                      AutomationProperties.Name="检查并更新 Wiki 数据" />
+              <Button Content="下载缺失资源" Classes="secondary-action"
+                      Margin="0,0,8,8" Command="{Binding DownloadResourcesCommand}"
+                      IsVisible="{Binding NeedsResources}"
+                      AutomationProperties.Name="下载 Wiki 资源" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="section-surface">
+          <StackPanel Margin="0,20,0,0" Spacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="导入与导出" Classes="section-title" />
+              <TextBlock Text="导入先只读检查，再由你确认；导出使用当前 Wiki 的一致数据库快照。"
+                         Classes="page-subtitle" TextWrapping="Wrap" />
+            </StackPanel>
+            <StackPanel Orientation="Horizontal" Spacing="8">
+              <Button Content="导入 .pkg" Classes="secondary-action"
+                      Command="{Binding ImportCommand}" AutomationProperties.Name="选择并检查 Wiki 数据包" />
+              <Button Content="导出 .pkg" Classes="secondary-action"
+                      Command="{Binding ExportCommand}" AutomationProperties.Name="导出当前 Wiki 数据包" />
+            </StackPanel>
+          </StackPanel>
+        </Border>
+
+        <Border Classes="section-surface">
+          <StackPanel Margin="0,20,0,0" Spacing="12">
+            <StackPanel Spacing="4">
+              <TextBlock Text="维护与恢复" Classes="section-title" />
+              <TextBlock Text="重试失败下载或整理数据库；清理与删除操作都需要确认。"
+                         Classes="page-subtitle" TextWrapping="Wrap" />
+            </StackPanel>
+            <WrapPanel ItemWidth="170" ItemHeight="44">
+              <Button Content="重试失败项" Classes="secondary-action" Margin="0,0,8,8"
+                      Command="{Binding RetryFailuresCommand}" AutomationProperties.Name="重试 Wiki 下载失败项" />
+              <Button Content="清理失败记录" Classes="danger-action" Margin="0,0,8,8"
+                      Command="{Binding RequestClearFailuresCommand}" AutomationProperties.Name="请求清理下载失败记录" />
+              <Button Content="整理数据库" Classes="secondary-action" Margin="0,0,8,8"
+                      Command="{Binding VacuumCommand}" AutomationProperties.Name="整理 Wiki 数据库" />
+              <Button Content="删除全部资源" Classes="danger-action" Margin="0,0,8,8"
+                      Command="{Binding RequestDeleteResourcesCommand}" AutomationProperties.Name="请求删除 Wiki 资源" />
+              <Button Content="删除当前 Wiki 数据" Classes="danger-action" Margin="0,0,8,8"
+                      Command="{Binding RequestDeleteWikiDataCommand}" AutomationProperties.Name="请求删除当前 Wiki 数据" />
+            </WrapPanel>
+          </StackPanel>
+        </Border>
+      </StackPanel>
+    </ScrollViewer>
+  </Grid>
+</UserControl>

@@ -60,8 +60,44 @@
   <Style Selector="Button.primary-action:pressed">
     <Setter Property="Opacity" Value="0.78" />
   </Style>
+  <Style Selector="Button.primary-action:disabled">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="Opacity" Value="0.55" />
+  </Style>
+  <Style Selector="Button.secondary-action">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.secondary-action:pointerover">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
+  </Style>
+  <Style Selector="Button.secondary-action:pressed">
+    <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+  </Style>
+  <Style Selector="Button.secondary-action:disabled">
+    <Setter Property="Opacity" Value="0.4" />
+  </Style>
   <Style Selector="Button.danger-action">
+    <Setter Property="Theme" Value="{StaticResource ChromeLessButtonTheme}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaDangerSoftBrush}" />
     <Setter Property="Foreground" Value="{DynamicResource TerrariaDangerBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaDangerBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+  </Style>
+  <Style Selector="Button.danger-action:pointerover">
+    <Setter Property="Opacity" Value="0.86" />
+  </Style>
+  <Style Selector="Button.danger-action:pressed">
+    <Setter Property="Opacity" Value="0.7" />
+  </Style>
+  <Style Selector="Button.danger-action:disabled">
+    <Setter Property="Opacity" Value="0.4" />
   </Style>
 
   <Style Selector="Border.navigation-rail">
@@ -101,7 +137,20 @@
   </Style>
   <Style Selector="Border.confirmation-card">
     <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
     <Setter Property="BoxShadow" Value="{DynamicResource OverlayShadow}" />
+  </Style>
+  <Style Selector="Border.management-status">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+    <Setter Property="BorderBrush" Value="{DynamicResource TerrariaStrokeBrush}" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+    <Setter Property="Padding" Value="14,10" />
+  </Style>
+  <Style Selector="Grid.setting-row">
+    <Setter Property="MinHeight" Value="56" />
   </Style>
   <Style Selector="Border.status-banner, Border.reader-header, Border.reader-status">
     <Setter Property="Background" Value="Transparent" />

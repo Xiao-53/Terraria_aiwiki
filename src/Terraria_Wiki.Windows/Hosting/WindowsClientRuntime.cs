@@ -13,6 +13,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
     private readonly WindowsMountGuard _mountGuard;
     private readonly string[] _arguments;
     private readonly WikiToolConsumerCoordinator _wikiToolCoordinator;
+    private readonly Action<ApplicationPreferences> _updateViewerPreferences;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly SemaphoreSlim _aiGate = new(1, 1);
     private AiRuntimeConfiguration? _aiConfiguration;
@@ -31,6 +32,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         WebView2RuntimeStatus webView2,
         string[] arguments,
         WikiToolConsumerCoordinator wikiToolCoordinator,
+        Action<ApplicationPreferences> updateViewerPreferences,
         WindowsAiRuntimeStatus aiStatus)
     {
         DataRoot = dataRoot;
@@ -43,6 +45,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         WebView2 = webView2;
         _arguments = arguments;
         _wikiToolCoordinator = wikiToolCoordinator;
+        _updateViewerPreferences = updateViewerPreferences;
         AiStatus = aiStatus;
     }
 
@@ -50,7 +53,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
     public WikiApplication Application { get; }
     public ViewerConsumerCoordinator Viewer { get; }
     public ViewerBridge Bridge { get; }
-    public ApplicationPreferences Preferences { get; }
+    public ApplicationPreferences Preferences { get; private set; }
     public WebView2RuntimeStatus WebView2 { get; }
     public WindowsAiRuntime? Ai => _ai;
     public WindowsAiRuntimeStatus AiStatus { get; private set; }
@@ -120,6 +123,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
                 webView2,
                 arguments.ToArray(),
                 wikiToolCoordinator,
+                value => loadedPreferences = value,
                 new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Starting, "AI 配置等待后台加载。"));
         }
         catch
@@ -136,6 +140,14 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             guard.Dispose();
             throw;
         }
+    }
+
+    public void ApplyPreferences(ApplicationPreferences preferences)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        Preferences = preferences;
+        _updateViewerPreferences(preferences);
+        Bridge.SetSideButtonBackEnabled(preferences.IsSideButtonBackEnabled);
     }
 
     public async Task EnableAiAsync(CancellationToken cancellationToken = default)

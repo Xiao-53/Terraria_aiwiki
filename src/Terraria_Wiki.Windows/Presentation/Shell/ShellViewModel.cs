@@ -1,3 +1,4 @@
+using Terraria_Wiki.Application;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
@@ -5,8 +6,10 @@ using Terraria_Wiki.Windows.Presentation.Chat;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 using Terraria_Wiki.Windows.Presentation.Library;
+using Terraria_Wiki.Windows.Presentation.Management;
 using Terraria_Wiki.Windows.Presentation.Markdown;
 using Terraria_Wiki.Windows.Presentation.Reader;
+using Terraria_Wiki.Windows.Presentation.Settings;
 using Terraria_Wiki.Windows.Presentation.Wiki;
 
 namespace Terraria_Wiki.Windows.Presentation.Shell;
@@ -16,6 +19,8 @@ internal enum ShellSection
     Chat,
     Favorites,
     Library,
+    Management,
+    Settings,
     Wiki,
 }
 
@@ -30,7 +35,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _hasStartupError;
     private bool _disposed;
 
-    public ShellViewModel(IChatFavoriteStore? chatFavoriteStore = null)
+    public ShellViewModel(
+        IChatFavoriteStore? chatFavoriteStore = null,
+        Func<CancellationToken, Task<string?>>? pickImportPackage = null,
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
+        Func<ApplicationPreferences, Task>? applyPreferences = null)
     {
         Reader = new ReaderPaneViewModel();
         Chat = new ChatViewModel(
@@ -44,10 +53,14 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OpenChatFavoriteAsync,
             OpenFavoriteWikiAsync);
         Library = new WikiLibraryViewModel(OpenLibraryWikiAsync);
+        Management = new WikiManagementViewModel(pickImportPackage, exportPackage);
+        Settings = new SettingsViewModel(applyPreferences);
         Favorites.ChatFavoriteRemoved += Chat.MarkFavoriteRemoved;
         NavigateChatCommand = new RelayCommand(_ => NavigateChat());
         NavigateFavoritesCommand = new RelayCommand(_ => NavigateFavorites());
         NavigateLibraryCommand = new RelayCommand(_ => NavigateLibrary());
+        NavigateManagementCommand = new RelayCommand(_ => NavigateManagement());
+        NavigateSettingsCommand = new RelayCommand(_ => NavigateSettings());
         OpenWikiReaderCommand = new RelayCommand(_ => OpenWikiReader());
         CloseReaderCommand = new RelayCommand(_ => CloseReader(), _ => IsReaderVisible);
         RetryStartupCommand = new RelayCommand(_ => RetryStartupRequested?.Invoke(this, EventArgs.Empty), _ => HasStartupError);
@@ -63,6 +76,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public WikiViewModel Wiki { get; }
     public FavoritesViewModel Favorites { get; }
     public WikiLibraryViewModel Library { get; }
+    public WikiManagementViewModel Management { get; }
+    public SettingsViewModel Settings { get; }
     public ReaderPaneViewModel Reader { get; }
 
     public ShellSection CurrentSection
@@ -75,10 +90,14 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsChatSelected));
             OnPropertyChanged(nameof(IsFavoritesSelected));
             OnPropertyChanged(nameof(IsLibrarySelected));
+            OnPropertyChanged(nameof(IsManagementSelected));
+            OnPropertyChanged(nameof(IsSettingsSelected));
             OnPropertyChanged(nameof(IsWikiSelected));
             OnPropertyChanged(nameof(IsChatVisible));
             OnPropertyChanged(nameof(IsFavoritesVisible));
             OnPropertyChanged(nameof(IsLibraryVisible));
+            OnPropertyChanged(nameof(IsManagementVisible));
+            OnPropertyChanged(nameof(IsSettingsVisible));
             OnPropertyChanged(nameof(IsWikiVisible));
             RefreshReaderProperties();
         }
@@ -126,10 +145,14 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public bool IsChatSelected => CurrentSection == ShellSection.Chat;
     public bool IsFavoritesSelected => CurrentSection == ShellSection.Favorites;
     public bool IsLibrarySelected => CurrentSection == ShellSection.Library;
+    public bool IsManagementSelected => CurrentSection == ShellSection.Management;
+    public bool IsSettingsSelected => CurrentSection == ShellSection.Settings;
     public bool IsWikiSelected => CurrentSection == ShellSection.Wiki;
     public bool IsChatVisible => IsChatSelected;
     public bool IsFavoritesVisible => IsFavoritesSelected;
     public bool IsLibraryVisible => IsLibrarySelected;
+    public bool IsManagementVisible => IsManagementSelected;
+    public bool IsSettingsVisible => IsSettingsSelected;
     public bool IsWikiVisible => IsWikiSelected;
     public bool IsReaderVisible => ReaderState switch
     {
@@ -144,6 +167,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public RelayCommand NavigateChatCommand { get; }
     public RelayCommand NavigateFavoritesCommand { get; }
     public RelayCommand NavigateLibraryCommand { get; }
+    public RelayCommand NavigateManagementCommand { get; }
+    public RelayCommand NavigateSettingsCommand { get; }
     public RelayCommand OpenWikiReaderCommand { get; }
     public RelayCommand CloseReaderCommand { get; }
     public RelayCommand RetryStartupCommand { get; }
@@ -158,10 +183,15 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Wiki.Attach((query, token) => runtime.Application.Query.SearchAsync(query, cancellationToken: token));
         Favorites.AttachWikiLibrary(runtime.Application.Library);
         Library.Attach(runtime.Application.Library);
+        Management.Attach(runtime.Application);
+        Settings.Attach(runtime.Application.Settings);
         Reader.AttachFavorites(Favorites.IsWikiFavoriteAsync, Favorites.SetWikiFavoriteAsync);
         _ = Favorites.RefreshAsync();
+        _ = Settings.RefreshAsync();
         if (IsLibrarySelected)
             _ = Library.RefreshAsync();
+        if (IsManagementSelected)
+            _ = Management.RefreshAsync();
     }
 
     public void AttachReader(
@@ -174,6 +204,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Wiki.Detach();
         Favorites.DetachWikiLibrary();
         Library.Detach();
+        Management.Detach();
+        Settings.Detach();
         Reader.DetachFavorites();
         Reader.Detach();
     }
@@ -215,6 +247,29 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         _ = Library.RefreshAsync();
     }
 
+    public void NavigateManagement()
+    {
+        CurrentSection = ShellSection.Management;
+        if (ReaderState == ReaderPaneState.Wiki)
+            ReaderState = ReaderPaneState.Home;
+        _ = Management.RefreshAsync();
+    }
+
+    public void NavigateSettings()
+    {
+        CurrentSection = ShellSection.Settings;
+        if (ReaderState == ReaderPaneState.Wiki)
+            ReaderState = ReaderPaneState.Home;
+    }
+
+    public void RefreshAfterWikiDataChange()
+    {
+        Wiki.ResetForDataSourceChange();
+        _ = Favorites.RefreshAsync();
+        if (IsLibrarySelected)
+            _ = Library.RefreshAsync();
+    }
+
     public void OpenWikiReader() => ReaderState = ReaderPaneState.Wiki;
 
     public void CloseReader() => ReaderState = ReaderPaneState.Closed;
@@ -228,6 +283,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Chat.Dispose();
         Wiki.Dispose();
         Library.Dispose();
+        Management.Dispose();
+        Settings.Dispose();
         Reader.Detach();
     }
 

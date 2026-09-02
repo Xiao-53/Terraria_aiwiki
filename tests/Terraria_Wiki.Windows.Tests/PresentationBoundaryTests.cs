@@ -19,7 +19,7 @@ public sealed class PresentationBoundaryTests
     }
 
     [Fact]
-    public void ShellCreatesOnlyOneNativeViewerAndExposesPhaseNineFavoritesLibraryAndWikiPreview()
+    public void ShellCreatesOnlyOneNativeViewerAndExposesCompletePhaseNineNavigation()
     {
         var root = FindSourceRoot();
         var sourceFiles = Directory.GetFiles(root, "*", SearchOption.AllDirectories)
@@ -32,12 +32,16 @@ public sealed class PresentationBoundaryTests
             .Select(File.ReadAllText));
         var shell = File.ReadAllText(Path.Combine(root, "Presentation", "Shell", "ShellView.axaml"));
         var library = File.ReadAllText(Path.Combine(root, "Presentation", "Library", "WikiLibraryView.axaml"));
+        var management = File.ReadAllText(Path.Combine(root, "Presentation", "Management", "WikiManagementView.axaml"));
+        var settings = File.ReadAllText(Path.Combine(root, "Presentation", "Settings", "SettingsView.axaml"));
 
         Assert.Equal(1, Count(xaml, "<NativeWebView"));
         Assert.Equal(1, Count(combined, "new ViewerWebViewSession("));
         Assert.Contains("AI 问答导航", shell, StringComparison.Ordinal);
         Assert.Contains("收藏导航", shell, StringComparison.Ordinal);
         Assert.Contains("Wiki 资料库导航", shell, StringComparison.Ordinal);
+        Assert.Contains("数据管理导航", shell, StringComparison.Ordinal);
+        Assert.Contains("设置导航", shell, StringComparison.Ordinal);
         Assert.Contains("打开 Wiki 预览", shell, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding OpenWikiReaderCommand}\"", shell, StringComparison.Ordinal);
         Assert.Contains("重新选择 Wiki 数据文件夹", shell, StringComparison.Ordinal);
@@ -45,9 +49,10 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("查看历史记录", library, StringComparison.Ordinal);
         Assert.Contains("确认清空浏览历史", library, StringComparison.Ordinal);
         Assert.Contains("继续加载 Wiki 资料库", library, StringComparison.Ordinal);
+        Assert.Contains("选择并检查 Wiki 数据包", management, StringComparison.Ordinal);
+        Assert.Contains("确认危险数据操作", management, StringComparison.Ordinal);
+        Assert.Contains("保存应用设置", settings, StringComparison.Ordinal);
         Assert.DoesNotContain("Wiki 阅读导航", shell, StringComparison.Ordinal);
-        Assert.DoesNotContain("数据管理", shell, StringComparison.Ordinal);
-        Assert.DoesNotContain("设置导航", shell, StringComparison.Ordinal);
     }
 
     [Fact]

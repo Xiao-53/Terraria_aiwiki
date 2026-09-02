@@ -119,6 +119,20 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
         StatusMessage = "本地 Wiki 数据源不可用。";
     }
 
+    public void ResetForDataSourceChange()
+    {
+        _searchCancellation?.Cancel();
+        _searchCancellation?.Dispose();
+        _searchCancellation = null;
+        Results.Clear();
+        Query = string.Empty;
+        IsSearching = false;
+        StatusMessage = IsAvailable
+            ? "活动 Wiki 已改变；请输入新的搜索内容。"
+            : "本地 Wiki 数据源不可用。";
+        RefreshResultProperties();
+    }
+
     internal Task SearchNowAsync() => SearchCoreAsync(useDebounce: false);
 
     public void Dispose()

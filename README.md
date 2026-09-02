@@ -35,7 +35,7 @@ codex
 - 已完成 Phase 06 记录：[`openspec/changes/archive/phase-06-ai-backend/plan.md`](./openspec/changes/archive/phase-06-ai-backend/plan.md)
 - 已完成 Phase 07 记录：[`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`](./openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md)
 - 已完成 Phase 08 记录：[`openspec/changes/archive/phase-08-presentation-rebuild/plan.md`](./openspec/changes/archive/phase-08-presentation-rebuild/plan.md)
-- 进行中 Phase 09 计划：[`openspec/changes/phase-09-p0-ui-takeover/plan.md`](./openspec/changes/phase-09-p0-ui-takeover/plan.md)
+- 已完成 Phase 09 记录：[`openspec/changes/archive/phase-09-p0-ui-takeover/plan.md`](./openspec/changes/archive/phase-09-p0-ui-takeover/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
@@ -97,7 +97,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 当前路线与状态
 
-产品源码已从参考仓库迁到外层根级目录，Windows build/publish/runtime 不再读取固定上游 Submodule；迁移基线已完成 Windows/Python 回归，Phase 09 后续从根 solution 继续。
+产品源码已从参考仓库迁到外层根级目录，Windows build/publish/runtime 不再读取固定上游 Submodule；迁移基线与 Phase 09 P0 UI Takeover 均已完成 Windows 回归，下一阶段是 Phase 10 Legacy MAUI Retirement。
 
 ```text
 Migration Baseline & Host Spike
@@ -116,7 +116,7 @@ Migration Baseline & Host Spike
 → Android
 ```
 
-**Phase 00–08 已完成，Phase 09 正在进行。** Windows Avalonia Client 默认进入 AI-first Presentation。收藏/Reader 切片已接通显式 AI 单轮收藏、现有 Wiki 收藏、顶部 Wiki 入口、页面星标和受限可调分栏；顶部 Wiki 只展开 Reader，分隔拖动不自动关闭。第二个资料库切片已新增“Wiki 资料库”导航，在同一页面内接管全部页面与历史记录，支持标题过滤、每批 100 项继续加载、历史日期分组和清空二次确认；条目仍只在唯一共享 Reader 中打开。启动失败可重新选择数据文件夹，旧数据遗留 WAL 会先安全 checkpoint；已迁移数据库启动时只读检查锚点格式，不再复制完整 `data.db`；Reader 默认首页可直接收藏。Windows 用户级 `ai-runtime.json` v2 可保存 provider、Python 路径和本机 API key，并仅向所属 Sidecar 环境注入密钥。Chat 使用轻量连续内容流，以预览 Enter 发送、Shift+Enter 换行，结果区显示输入、输出与合计 Token 花费；Agent 不再设置美元费用预算，防循环、协议长度、context 与超时运行限位继续生效。Windows Release build 为 0 warning/0 error，当前 .NET 测试 254/254 通过；真实 3.4 GB 旧 Wiki 数据已完成启动恢复验证。资料库人工 UI 验收、其余 P0 数据管理/设置/导入导出/维护、多轮、内置 Python、安装器和 Android 尚未完成。
+**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 267/267 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。多轮、内置 Python、安装器、发布渠道和 Android 尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
 
 ## 工作区结构
 
@@ -155,7 +155,7 @@ terraria_aiwiki/
 
 产品源码位于外层根级目录；参考 Submodule 保存 BigBearKing 上游的 .NET MAUI/Blazor Hybrid 旧宿主，仅用于行为与来源核对。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 正以小切片接管 P0 UI，当前已实现统一收藏页、Chat/Wiki 收藏、受限可调 Reader 分栏，以及复用 Application 分页边界的全部页面/历史资料库。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管。内置 Python、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|

@@ -3,6 +3,8 @@
              xmlns:chat="clr-namespace:Terraria_Wiki.Windows.Presentation.Chat"
              xmlns:favorites="clr-namespace:Terraria_Wiki.Windows.Presentation.Favorites"
              xmlns:library="clr-namespace:Terraria_Wiki.Windows.Presentation.Library"
+             xmlns:management="clr-namespace:Terraria_Wiki.Windows.Presentation.Management"
+             xmlns:settings="clr-namespace:Terraria_Wiki.Windows.Presentation.Settings"
              xmlns:wiki="clr-namespace:Terraria_Wiki.Windows.Presentation.Wiki"
              xmlns:reader="clr-namespace:Terraria_Wiki.Windows.Presentation.Reader"
              xmlns:shell="clr-namespace:Terraria_Wiki.Windows.Presentation.Shell"
@@ -65,10 +67,42 @@
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
+          <Button Command="{Binding NavigateManagementCommand}"
+                  Classes="rail-nav"
+                  Classes.selected="{Binding IsManagementSelected}"
+                  ToolTip.Tip="数据管理"
+                  AutomationProperties.AutomationId="ManagementNavigation"
+                  AutomationProperties.Name="数据管理导航">
+            <Grid RowDefinitions="34,Auto">
+              <Border Classes="rail-indicator" HorizontalAlignment="Left"
+                      Grid.RowSpan="2" IsVisible="{Binding IsManagementSelected}" />
+              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="M 4,4 L 20,4 L 20,9 L 4,9 Z M 4,10 L 20,10 L 20,15 L 4,15 Z M 4,16 L 20,16 L 20,21 L 4,21 Z" />
+              <TextBlock Grid.Row="1" Text="数据" FontSize="11" LineHeight="14"
+                         HorizontalAlignment="Center" />
+            </Grid>
+          </Button>
         </StackPanel>
 
-        <StackPanel Grid.Row="2" Spacing="4" Margin="0,0,0,16"
+        <StackPanel Grid.Row="2" Spacing="4" Margin="0,0,0,12"
                     HorizontalAlignment="Center">
+          <Button Command="{Binding NavigateSettingsCommand}"
+                  Classes="rail-nav"
+                  Classes.selected="{Binding IsSettingsSelected}"
+                  ToolTip.Tip="设置"
+                  AutomationProperties.AutomationId="SettingsNavigation"
+                  AutomationProperties.Name="设置导航">
+            <Grid RowDefinitions="34,Auto">
+              <Border Classes="rail-indicator" HorizontalAlignment="Left"
+                      Grid.RowSpan="2" IsVisible="{Binding IsSettingsSelected}" />
+              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="M 9,2 L 15,2 L 16,6 L 20,4 L 23,9 L 20,12 L 23,15 L 20,20 L 16,18 L 15,22 L 9,22 L 8,18 L 4,20 L 1,15 L 4,12 L 1,9 L 4,4 L 8,6 Z M 12,8 C 9.8,8 8,9.8 8,12 C 8,14.2 9.8,16 12,16 C 14.2,16 16,14.2 16,12 C 16,9.8 14.2,8 12,8 Z" />
+              <TextBlock Grid.Row="1" Text="设置" FontSize="11" LineHeight="14"
+                         HorizontalAlignment="Center" />
+            </Grid>
+          </Button>
           <Border Width="8" Height="8" CornerRadius="4"
                   Background="{DynamicResource TerrariaBrandBrush}"
                   ToolTip.Tip="本地 Wiki" />
@@ -93,11 +127,13 @@
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
                      AutomationProperties.Name="应用状态" />
           <Button Content="选择数据" Command="{Binding SelectDataRootCommand}"
+                  Classes="secondary-action"
                   IsVisible="{Binding HasStartupError}"
                   ToolTip.Tip="重新选择包含 Manager.db 的 Wiki 数据文件夹"
                   AutomationProperties.AutomationId="SelectDataRoot"
                   AutomationProperties.Name="重新选择 Wiki 数据文件夹" />
           <Button Content="重试" Command="{Binding RetryStartupCommand}"
+                  Classes="secondary-action"
                   IsVisible="{Binding HasStartupError}"
                   AutomationProperties.Name="重试应用启动" />
           <Button Content="打开 Wiki" Command="{Binding OpenWikiReaderCommand}"
@@ -126,6 +162,12 @@
           </Grid>
           <Grid IsVisible="{Binding IsLibraryVisible}">
             <library:WikiLibraryView DataContext="{Binding Library}" />
+          </Grid>
+          <Grid IsVisible="{Binding IsManagementVisible}">
+            <management:WikiManagementView DataContext="{Binding Management}" />
+          </Grid>
+          <Grid IsVisible="{Binding IsSettingsVisible}">
+            <settings:SettingsView DataContext="{Binding Settings}" />
           </Grid>
         </Grid>
       </Border>

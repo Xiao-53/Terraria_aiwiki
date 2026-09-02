@@ -32,7 +32,7 @@ internal sealed class ViewerBridge
 
     private readonly WikiApplication _application;
     private readonly IExternalUriLauncher _externalUris;
-    private readonly bool _sideButtonBackEnabled;
+    private int _sideButtonBackEnabled;
     private readonly ConcurrentDictionary<string, byte> _activeRequestIds = new(StringComparer.Ordinal);
     private readonly object _historyGate = new();
     private readonly List<ViewerHistoryEntry> _history = [];
@@ -44,7 +44,7 @@ internal sealed class ViewerBridge
     {
         _application = application ?? throw new ArgumentNullException(nameof(application));
         _externalUris = externalUris ?? throw new ArgumentNullException(nameof(externalUris));
-        _sideButtonBackEnabled = sideButtonBackEnabled;
+        _sideButtonBackEnabled = sideButtonBackEnabled ? 1 : 0;
     }
 
     public IReadOnlyList<ViewerHistoryEntry> History
@@ -139,7 +139,7 @@ internal sealed class ViewerBridge
             }
             case "WikiBackAsync":
             {
-                if (!_sideButtonBackEnabled)
+                if (Volatile.Read(ref _sideButtonBackEnabled) == 0)
                     return Error(envelope.Id, "side-button-back-disabled", "Mouse side-button navigation is disabled in Application settings.");
                 var command = TryTakeBackCommand();
                 if (command is null)
@@ -169,6 +169,9 @@ internal sealed class ViewerBridge
                 return Error(envelope.Id, "unknown-viewer-method", $"Viewer method '{envelope.Method}' is not supported.");
         }
     }
+
+    public void SetSideButtonBackEnabled(bool enabled) =>
+        Volatile.Write(ref _sideButtonBackEnabled, enabled ? 1 : 0);
 
     public ViewerOutboundCommand? TryTakeBackCommand()
     {

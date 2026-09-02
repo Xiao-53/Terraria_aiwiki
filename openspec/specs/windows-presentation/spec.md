@@ -1,16 +1,16 @@
 # Windows Presentation 能力契约
 
-- 状态：implemented baseline；Phase 09 收藏/Reader 与 Wiki 资料库切片已通过 Windows 11 x64 Release build/tests，资料库人工 UI 验收待执行
-- 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
-- 来源：Master Architecture v0.6、Phase 08、Phase 09 进行中计划、ADR 0001、Application/Viewer/Windows AI Runtime 能力契约
+- 状态：implemented；Phase 09 P0 UI Takeover 已通过 Windows 11 x64 Release build、全量 tests 与目标窗口验收
+- 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、数据管理、设置、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
+- 来源：Master Architecture v0.6、Phase 08、已归档 Phase 09 计划、ADR 0001、Application/Viewer/Windows AI Runtime 能力契约
 
 ## 信息架构与响应式布局
 
-- 应用默认进入 AI 问答，左侧显示可用的“AI 问答”“收藏”和“Wiki 资料库”三个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前 Chat/收藏/资料库主页面。数据管理和设置仍不显示无功能占位入口。
+- 应用默认进入 AI 问答，左侧显示可用的“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前主页面。
 - Windows Shell 使用固定窄导航栏、标题区和细描边工作区。初始窗口为 1280×820 DIP，最小窗口为 900×600 DIP。
 - 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。拖动分隔条不会自动关闭 Reader；关闭只由 Reader 叉号执行，顶部 Wiki 按钮可重新打开。
 - 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
-- Chat/收藏/资料库/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
+- Chat/收藏/资料库/数据管理/设置/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
 
 ## 视觉系统与交互状态
 
@@ -44,6 +44,21 @@
 - 清空历史必须先显示页内二次确认，只调用既有 `ClearHistoryAsync`；失败保留当前列表并显示安全状态，不影响页面、收藏或 Wiki 内容。
 - 点击全部页面或历史条目在唯一共享 Reader 中打开对应标题；窄屏沿用既有 Reader 覆盖层，宽屏沿用既有分栏，不创建第二个 Viewer。
 
+## 数据管理与迁移
+
+- 左侧“数据管理”只经 Application `ActiveWikiUseCases` 与 `WikiDataUseCases` 列出/切换 Wiki、刷新统计，并执行页面/资源下载、更新、失败项重试或清理、数据库整理、资源删除和整库删除；Presentation 不直接访问 SQLite 或复制 Core 生命周期实现。
+- 下载、更新、重试和维护等长操作显示页内进度、当前动作与取消入口。失败只显示不含本机路径的安全状态，不阻塞 Chat、资料库和离线设置访问。
+- 切换 Wiki、清理失败项、删除资源、删除整库和导入覆盖必须先显示目标与影响范围，再经页内确认调用既有 Application 用例。活动数据变化后刷新搜索、收藏和资料库；需要时让同一个 Viewer/Reader 重新绑定动态 loopback，不创建第二个会话。
+- Windows `.pkg` 导入先调用 `InspectPackageAsync`，保存 inspection token 并显示元数据；用户确认后才调用 `ImportPackageAsync`。0.4 之前的数据包必须明确提示兼容迁移并传递 legacy consent，包格式与既有 staging/backup/rollback 不变。
+- Windows 导出由原生保存文件选择器决定目标。若目标已存在，宿主先在同目录写唯一临时包，完整成功后才替换目标；失败或取消清理临时文件并保留旧目标。
+- 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；Reader 保持关闭并提示先下载或导入，不把无内容状态升级为整应用启动失败。
+
+## 设置
+
+- 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键返回、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。
+- 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
+- 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
+
 ## 安全 Markdown
 
 - 生产依赖固定使用 Markdig 1.3.2，启用 `DisableHtml`、CJK emphasis 和 pipe table；Markdig 只产生 AST，不生成 HTML。
@@ -64,4 +79,4 @@ Application/Core 公共 API、Python Agent、NDJSON v1、`ai-runtime.json`、SQL
 
 启动失败时必须同时提供“重试”和“重新选择 Wiki 数据文件夹”，后者验证并替换已保存路径后重新组合 Runtime。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
-若增加多轮、自动会话历史或同步、数据管理/设置/导入导出/维护等 Phase 09 其余 P0 页面、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化或 Android UI，必须建立独立变更并更新相应能力契约。
+若增加多轮、自动会话历史或同步、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化、Windows 产品化或 Android UI，必须建立独立变更并更新相应能力契约。

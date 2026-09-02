@@ -1,11 +1,11 @@
 # Phase 09 — P0 UI Takeover
 
-- 状态：in-progress
+- 状态：complete
 - Phase：09 — P0 UI Takeover
 - 执行环境：WSL Codex CLI；Windows 11 x64 构建、测试与 UI 验证
 - 创建日期：2026-08-28
-- 最后更新：2026-09-02
-- 范围：Windows Avalonia 收藏与 Reader 交互、Wiki 资料库、本机 AI 配置、Chat 交互视觉与 Token 花费展示、空状态与页头操作样式
+- 最后更新：2026-09-03
+- 范围：Windows Avalonia 收藏与 Reader 交互、Wiki 资料库、数据管理、设置、导入导出、维护与错误流程、本机 AI 配置、Chat 交互视觉与 Token 花费展示、空状态与页头操作样式
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0001-use-avalonia-client.md`
 
 ## 背景与当前证据
@@ -22,9 +22,11 @@
 
 2026-09-02 确认新产品不应继续寄存在上游参考仓库的本地分支中。Phase 09 功能开发暂停，先执行非 Phase 变更 `separate-product-from-reference`：以产品提交 `d67d904` 建立外层根级 `src/`、`tests/`、`agent/`、`assets/` 与 solution 基线，并把 `terraria-wiki-offline/` 固定为只读上游 Submodule。此次前置修正不改变本 Phase 行为范围、完成状态或历史提交路径。
 
+2026-09-02 用户明确要求完成 Phase 09，因而授权补齐此前留待后续切片的数据管理、设置、导入导出、维护与对应错误流程；授权不扩展到 Phase 10 的参考 MAUI 退休或 Phase 11 的安装、更新渠道和日志产品化。外层 tracked 工作树在实施前干净，恢复点为 `ca1c031`；现有未跟踪治理归档、`.codex/`、`experiments/` 与历史架构文件保持原样，不纳入本 Phase。
+
 ## 目标与完成定义
 
-- 左侧导航显示已实现的“AI 问答”“收藏”和“Wiki 资料库”；收藏页同时列出对话收藏与活动 Wiki 的 Wiki 收藏。
+- 左侧导航显示已实现的“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”；收藏页同时列出对话收藏与活动 Wiki 的 Wiki 收藏。
 - Chat 右上角星标只在已有最终回答时可用；添加/移除显式收藏并提供状态反馈。
 - Reader 标题栏可收藏当前 Wiki 页面；收藏页 Wiki 项可在唯一共享 Reader 中打开并可移除。
 - 顶部最右侧 Wiki 按钮打开/恢复共享 Reader；不创建第二个 Viewer。
@@ -43,6 +45,12 @@
 - 全部页面显示标题与更新时间；历史记录保持最新优先和日期分组，清空历史必须经过明确的二次确认。
 - 点击任一页面或历史项只在唯一共享 Reader 中打开，不创建第二个 Viewer，不替换或复制 Wiki 数据。
 - Chat 空状态移除三个示例问题按钮，仅保留品牌图形、标题与说明；两个页头刷新入口使用统一的 Terraria 次级操作样式、刷新图标及完整交互状态。
+- 左侧新增可用的“数据管理”和“设置”入口；数据管理只经现有 Application 用例列出/切换 Wiki、显示统计并执行下载、更新、资源、失败项和数据库维护操作。
+- 长操作显示安全进度、当前动作与取消入口；切换 Wiki、删除资源、删除整库、清理失败项和导入覆盖均使用页内确认，失败不泄漏本机路径且不阻塞离线可用页面。
+- `.pkg` 导入遵守 Inspect → inspection token → 显式确认 → Import；导出由 Windows 保存文件选择器决定目标并在同目录临时输出成功后替换已确认的旧文件，不改变包格式。
+- 设置页加载并保存 Application 全部强类型设置；应用主题、内容主题和侧键返回在当前 Runtime 生效，下载/Search 参数供后续用例立即读取。
+- 活动 Wiki 切换、活动库导入或整库删除后，同一个 Viewer 重新绑定到恢复后的动态 loopback 地址；收藏、资料库与 Reader 首页刷新，不创建第二个 Viewer。
+- Windows Release build 0 warning/0 error、全量测试通过；Light/Dark、1280×820、900×600、宽/窄 Reader 和关键确认/错误状态完成目标 Windows 验收后，Phase 09 才标记完成并归档。
 
 ## 前置条件
 
@@ -52,9 +60,9 @@
 
 ## 范围与非目标
 
-范围内：Windows Presentation 内部状态/view models/XAML；Windows Chat 收藏 JSON；复用 Application Wiki Library；资料库的全部页面、历史记录、标题过滤、增量分页和历史清空确认；相关测试、持续 Presentation spec 和当前状态文档。
+范围内：Windows Presentation 内部状态/view models/XAML；Windows Chat 收藏 JSON；复用 Application Wiki Library、ActiveWiki、Data 与 Settings；资料库的全部页面、历史记录、标题过滤、增量分页和历史清空确认；Wiki 切换、数据下载/更新/失败处理/维护、`.pkg` 导入导出、强类型设置、宿主文件选择与 Runtime 内主题/侧键应用；相关测试、持续 specs 和当前状态文档。
 
-非目标：多轮会话、自动保存 Chat 历史、同步 Chat 收藏、云账户、第二个 Viewer、SQLite/schema 变化、AI/NDJSON 变化、数据管理、设置、导入导出、维护、旧 MAUI 退休、Android。
+非目标：多轮会话、自动保存 Chat 历史、同步 Chat 收藏、云账户、第二个 Viewer、SQLite/schema 或包格式变化、AI/NDJSON 变化、应用更新检查/发布渠道、日志系统重建、旧 MAUI 退休、Windows 产品化、Android。
 
 ## P0 / 兼容性影响
 
@@ -76,7 +84,9 @@
 - Agent 的 `UsageLimits` 不再设置 `cost_limit`；typed usage 与 NDJSON 继续兼容 provider 返回的可选 `cost_usd`，避免改变协议。其余限位属于稳定性与协议护栏，不作为费用预算展示。
 - 资料库使用一个 Windows 内部 view model 和两个内页状态，调用 Application 的 `PageRequest`（每批不超过 200）；过滤或切页时取消过期请求，避免大 Wiki 一次性载入内存。
 - 历史清空采用页内二次确认，不新增平台对话框 port；操作失败只显示安全状态并保留当前列表。
-- 待决问题：无；收藏跨设备同步、数据管理、设置和完整 Phase 09 其余页面留给后续明确任务。
+- 数据管理以一个 Windows 内部 view model 编排现有 Application 用例；不增加公共 port、Core 接口或第二把数据门闩。Windows 文件选择和安全覆盖留在宿主边缘，Presentation 只接收选择结果。
+- 设置使用显式保存，Application 先整体验证再持久化；宿主随后更新当前主题、Viewer 内容主题与侧键返回。内容主题变化通过既有 Viewer 重启/重绑路径生效。
+- 待决问题：无；收藏跨设备同步、应用更新、日志产品化、MAUI 退休和发布打包留给后续明确 Phase。
 
 ## 文件变更
 
@@ -100,7 +110,12 @@
 - MODIFY `MainWindow.cs`：组合 Chat 收藏存储与 Application Wiki 收藏用例。
 - MODIFY Windows tests：持久化、收藏流程、资料库分页/过滤/清空、唯一 Reader、导航、分隔条静态和目标行为。
 - MODIFY Chat XAML/view model、收藏/资料库 XAML、共享控件样式与 Presentation boundary tests：移除示例问题入口，统一两个页头刷新按钮的 Terraria 次级操作视觉和交互状态。
-- MODIFY `openspec/specs/windows-presentation/spec.md`、README/架构当前状态：只记录完成能力与 Phase 09 仍在进行。
+- ADD `Presentation/Management/*`：Wiki 列表/切换、统计、下载更新、失败项、维护、导入导出、取消与页内确认。
+- ADD `Presentation/Settings/*`：Application 强类型设置表单、显式保存与安全状态。
+- MODIFY `Presentation/Shell/*`：增加数据管理/设置导航，组合新页面并在活动 Wiki 改变后刷新依赖状态。
+- MODIFY `MainWindow.cs` / `WindowsClientRuntime.cs` / `ViewerBridge.cs`：Windows `.pkg` 打开/保存边缘、安全导出替换、设置实时应用与动态 Viewer 重绑。
+- MODIFY Windows tests：数据管理状态机、确认/取消、两阶段导入、设置保存、导航/唯一 Viewer/Presentation 边界与宿主文件策略。
+- MODIFY `openspec/specs/windows-presentation/spec.md`、README/项目基线/架构当前状态：记录完整 P0 UI 接管能力与 Phase 09 完成证据。
 - KEEP Application/Core、SQLite、Python、协议、Viewer 内容和旧 MAUI。
 
 ## 执行步骤
@@ -131,12 +146,19 @@
 - [x] 删除 Chat 空状态三个示例问题及其内部命令，统一收藏/资料库刷新按钮样式。
 - [x] 执行 Windows Presentation build/tests、静态样式检查与差异检查；更新契约和本计划并分别保存源码/治理提交。
 - [x] 完成并验证 `separate-product-from-reference` 外层源码基线；后续从根 solution 继续 Phase 09 功能开发。
+- [x] 更新 Phase 09 完整接管范围并记录外层恢复点；复读 Application/Data/Settings、Windows Runtime、旧 UI 行为和 UI Skill。
+- [x] 实现数据管理 view model/XAML 与 Shell 导航，复用 ActiveWiki/Data 用例并覆盖进度、取消、确认和安全错误。
+- [x] 接通 Windows `.pkg` 打开/保存、两阶段导入与成功后安全覆盖；活动数据变化后重绑唯一 Viewer 并刷新依赖页面。
+- [x] 实现设置 view model/XAML 与 Shell 导航，保存全部 Application 设置并在当前 Runtime 应用主题、内容主题和侧键返回。
+- [x] 补齐 Presentation/宿主行为与边界测试，执行 Windows Release build、全量 tests、静态边界和 diff/status 检查。
+- [x] 在目标 Windows 检查 Light/Dark、默认/最小窗口、宽/窄 Reader、管理操作确认与设置状态；记录证据。
+- [x] 更新持续 specs、README、项目基线和架构当前状态；完成并归档 Phase 09，仅提交当前 tracked 范围。
 
 ## 验证与回归计划
 
 - WSL：`rg` 静态边界、`git diff --check`、secret/生成物/双 Git 状态。
 - Windows：Release restore/build/test；目标为 0 warning/0 error、全部测试通过。
-- Windows UI：本切片自动化覆盖宽屏限位、顶部 Wiki 重开与收藏页布局；分隔拖动不得自动关闭 Reader。Chat/Wiki 收藏状态、收藏页打开和窄布局由 Presentation 回归测试覆盖。显式切换到 225% 缩放的人工检查留作后续目标平台验收，不在本切片结果中宣称通过。
+- Windows UI：真实窗口以隔离宿主设置覆盖 Light/Dark、1280×820、900×600、宽/窄布局、数据源列表、页内切换确认、设置滚动与状态；只打开确认而不执行数据变更，不发起 AI provider 请求。
 - 回归：只存在一个 `NativeWebView`/`ViewerWebViewSession`；AI 单轮发送、Wiki Search、来源精确页面/anchor、Reader 返回与 AI 故障隔离不变。
 - 资料库：用确定性 fake Application delegates 覆盖首批/继续加载、过滤取消、全部页面与历史打开、日期分组、清空确认/失败；静态检查 Presentation 不出现 Core/SQLite 访问。
 - 空状态/页头操作：静态回归确认 Chat 不再包含示例问题或废弃命令，两个刷新入口复用同一语义样式，且该样式包含 pointer-over、pressed、focus-visible 与 disabled 状态；Windows XAML 编译确认图标和模板有效。
@@ -146,9 +168,13 @@
 - Chat JSON 损坏：返回空收藏并显示安全状态；保留 `.backup`，不影响主 Runtime。
 - 极端分栏导致测量循环：用 Grid `MinWidth` 和一次性布局状态限制；不以自动关闭掩盖测量错误，可回退到上一提交 `6844809`。
 - Wiki 收藏数据操作占用：捕获 Application 稳定错误并留在收藏页，不改变收藏数据库语义。
-- 新导航与 Phase 08 spec 冲突：实现完成后更新持续 spec；本计划保持 Phase 09 in-progress，不提前宣称其余 P0 接管完成。
+- 新导航与 Phase 08 spec 冲突：已在完成时更新持续 Presentation spec，五个真实入口成为当前契约。
 - 大 Wiki 列表一次载入导致卡顿：严格使用 Application 分页和增量加载；过滤重置 offset 并取消过期请求，可整体回退到资料库切片前源码提交 `37fbccf`。
 - 清空历史误操作：只有页内二次确认后调用既有用例；失败保留可恢复状态，不触碰页面、收藏或 Wiki 内容。
+- 数据删除或 import 覆盖误操作：必须显示目标 Wiki 与影响范围并二次确认；Core 既有 pause/staging/backup/rollback 继续负责数据安全，UI 不复制交换算法。
+- 动态 Viewer 在活动数据切换后持有旧端口：宿主只复用现有 `ViewerWebViewSession`，等待消费者恢复 Ready 后导航到新 BaseUri；失败留在页内/顶栏并允许重试。
+- 导出覆盖损坏既有包：Windows 保存选择后先在目标同目录写唯一临时包，成功后再替换目标；失败清理临时文件并保留原文件。
+- 长操作关闭窗口或用户取消：所有命令使用可取消 token，窗口生命周期继续取消 Runtime；取消不显示为数据失败。
 
 ## 进度记录
 
@@ -181,12 +207,16 @@
 - 2026-09-02：删除三个示例按钮及未再使用的 `UseExampleCommand`；为收藏/资料库页头增加共享 `toolbar-action`，使用品牌浅色底、绿色描边与刷新图标，并定义 hover/pressed/focus-visible/disabled 状态。Windows 实际窗口截图确认 Chat 空状态和两个页头按钮在当前缩放下布局正常；测试产生的截图/脚本已清理，测试误写的数据根配置已恢复为真实目录。源码提交为 `d67d904`。
 - 2026-09-02：暂停 Phase 09 功能开发，启动 `separate-product-from-reference` 前置修正。迁移内容基线为内层 `d67d904`，外层恢复点为 `d73436b`，上游参考点为 `a1dd899`；迁移后产品路径改为外层根级目录，Phase 09 仍保持 `in-progress`。
 - 2026-09-02：外层源码基线完成 Windows Release 0-warning build、260/260 .NET tests、framework-dependent/self-contained publish smoke 与冻结 Python 回归；参考 Submodule 固定 `a1dd899`，Phase 09 仍为 `in-progress` 并可从根 solution 继续。
+- 2026-09-02：用户明确要求完成 Phase 09。以外层 `ca1c031` 为恢复点，复读 Application Data/Settings、Windows Runtime、旧 MAUI 行为与 Terraria UI Skill；未跟踪治理归档、`.codex/`、`experiments/` 和历史架构文件保持用户原样。
+- 2026-09-02：新增数据管理与设置页面，接通 Wiki 列表/切换、统计、下载更新、失败处理、维护、删除、`.pkg` 两阶段导入/安全导出和全部强类型设置；活动数据变化刷新依赖页面并只重绑既有 Viewer 会话。
+- 2026-09-03：修正完整数据状态下更新入口被隐藏和高缩放开关状态裁切；Windows Release build 0 warning/0 error，全量 .NET tests 267/267 通过（Core 91、Application 54、Windows 94、WikiTools 28）。
+- 2026-09-03：使用隔离 host settings 在目标 Windows 实际窗口检查 Light/Dark、1280×820、900×600、宽/窄布局、数据源列表、切换确认和设置状态；未确认任何数据操作、未保存设置、未请求 AI provider。完成持续文档同步并归档 Phase 09。
 
 ## 发现、偏差与决策
 
 - 发现：现有 Application 已完整覆盖 Wiki 收藏，无需新增公共 API。
 - 决定：Chat 收藏是用户显式操作的快照，不改变“每次提问独立单轮、普通问答不持久化”的 AI 契约。
-- 决定：收藏/Reader 是 Phase 09 首个切片，本次 Wiki 资料库是第二个切片；数据管理、设置、导入导出和维护仍不在当前授权中，完成资料库切片后计划继续保持进行中状态。
+- 决定：收藏/Reader 与 Wiki 资料库是 Phase 09 的前两个切片；用户于 2026-09-02 明确授权完成本 Phase，后续切片补齐数据管理、设置、导入导出、维护和错误流程，但不进入 Phase 10/11。
 - 决定：用户明确覆盖 ADR 0006 原有“密钥不落配置文件”选择；仅 Windows 本机配置改变，Python Agent 仍只从子进程环境读取，NDJSON 和命令参数继续不携带密钥。
 - 决定：空状态不再提供预设问题；用户仍从底部 composer 直接输入。页头刷新使用品牌浅色次级操作，不使用 Fluent 默认中性灰背景，也不改变命令语义。
 
@@ -208,7 +238,9 @@
 - IME/composer 修正后：独立 Windows Temp `OutDir` XAML/Release 编译成功，IME key behavior、composer state 与 Presentation boundary 定向测试 6/6 通过。未运行完整测试集、未关闭或启动 UI；真实中文输入法视觉验收由用户执行。
 - Wiki 资料库切片：Windows Release build 通过，0 warning / 0 error；Presentation flow/boundary 定向 tests 23/23、全量 .NET tests 253/253 通过（Core 90、Application 54、Windows 81、WikiTools 28）。覆盖首批/继续加载、标题过滤与过期请求取消、日期分组、清空确认/失败和唯一 Reader 打开；未启动真实 UI，人工视觉验收尚未执行。
 - 空状态/刷新操作视觉切片：Windows `Terraria_Wiki.Core.slnx` Release build 通过，0 warning / 0 error；Presentation boundary/flow 定向 tests 24/24、Windows tests 85/85 通过。真实 Windows 客户端使用现有数据根启动，自动切换并截取 Chat、收藏和资料库三个页面；确认示例问题已移除，两个刷新按钮均显示 Terraria 浅绿色语义样式和刷新图标。应用正常关闭，无残留 Windows 客户端或 Python 进程；临时验证文件已清理。
+- Phase 09 完整接管：Windows `Terraria_Wiki.Core.slnx` Release build 通过，0 warning / 0 error；全量 .NET tests 267/267 通过（Core 91、Application 54、Windows 94、WikiTools 28），其中 Phase 09/Presentation/Viewer 定向 17/17。静态检查确认 Presentation 无 SQLite/`DatabaseService` 访问、页面 XAML 无散落 raw hex、全应用仍只有一个 `NativeWebView`/`ViewerWebViewSession`。
+- Phase 09 目标窗口：在 216 DPI（225%）下按 per-monitor DPI API 精确设置 1280×820 与 900×600 DIP；Light/Dark、宽/窄 Reader、数据管理列表、设置完整滚动和页内切换确认均可读，开关状态未被覆盖式滚动条裁切。验证使用临时 host settings 与缺失 AI 配置，只读取现有数据统计；确认动作未执行，真实活动 Wiki、设置和内容未改变。
 
 ## 完成摘要
 
-收藏、Reader 交互、本机 AI 配置、Chat 视觉与 Token 花费切片已由源码提交 `5ee1600`、`df9c723`、`ec124ff`、`c23c4b9`、`28f2d82`、`27e5dde`、`3f5d8f5` 和 `37fbccf` 保存。Wiki 资料库切片已由源码提交 `379ec17` 保存并通过 Windows Release build 与 253/253 全量 .NET tests；空状态/刷新操作视觉切片已由源码提交 `d67d904` 保存并通过 Windows Release build、Windows 85/85 tests 与真实窗口截图检查。Phase 09 整体仍为 `in-progress`，其余 P0 管理页面未完成。
+Phase 09 已完成。Windows Avalonia Presentation 现以五个真实导航入口接管 AI 问答、收藏、Wiki 资料库、数据管理和设置；P0 Wiki 生命周期、导入导出、维护与错误流程继续复用现有 Application/Core 和唯一共享 Reader。最终 Windows Release build、267/267 .NET tests、静态边界和目标窗口验收均通过；公共 API、SQLite schema、`.pkg` 格式、AI/NDJSON 与 Viewer 内容协议未改变。Phase 10 的参考 MAUI 退休和 Phase 11 的 Windows 产品化保持独立范围。

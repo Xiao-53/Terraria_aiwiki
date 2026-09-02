@@ -3,12 +3,14 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Controls;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
 using Terraria_Wiki.Application;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Favorites;
+using Terraria_Wiki.Windows.Presentation.Management;
 using Terraria_Wiki.Windows.Presentation.Shell;
 using Terraria_Wiki.Windows.Viewer;
 
@@ -46,10 +48,15 @@ internal sealed partial class MainWindow : Window
 
         AvaloniaXamlLoader.Load(this);
         _shellView = this.FindControl<ShellView>("ShellHost")!;
-        _shellViewModel = new ShellViewModel(CreateChatFavoriteStore());
+        _shellViewModel = new ShellViewModel(
+            CreateChatFavoriteStore(),
+            PickImportPackageAsync,
+            ExportPackageAsync,
+            ApplyPreferencesAsync);
         _shellView.DataContext = _shellViewModel;
         _shellViewModel.RetryStartupRequested += OnRetryStartupRequested;
         _shellViewModel.SelectDataRootRequested += OnSelectDataRootRequested;
+        _shellViewModel.Management.DataChanged += OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted += OnViewerNavigationCompleted;
 
         Opened += OnOpened;
@@ -73,6 +80,26 @@ internal sealed partial class MainWindow : Window
     private async void OnRetryStartupRequested(object? sender, EventArgs args) => await RetryStartupAsync();
 
     private async void OnSelectDataRootRequested(object? sender, EventArgs args) => await SelectDataRootAsync();
+
+    private async void OnWikiDataChanged(object? sender, WikiDataChangedEventArgs args)
+    {
+        _shellViewModel.RefreshAfterWikiDataChange();
+        if (!args.RequiresViewerRebind || _runtime is null)
+            return;
+        try
+        {
+            await RebindViewerAsync(_runtime, _lifetime.Token);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
+        {
+        }
+        catch
+        {
+            _shellViewModel.SetStartupStatus(
+                "Wiki 数据已改变，但 Reader 暂时无法恢复；离线数据管理仍可使用。",
+                isError: true);
+        }
+    }
 
     private async Task StartAsync()
     {
@@ -109,14 +136,22 @@ internal sealed partial class MainWindow : Window
                     runtime.Viewer.Status.Message ?? "Viewer is not ready.");
 
             _shellViewModel.AttachRuntime(runtime);
-            var activeWikiTask = runtime.Application.ActiveWiki.GetActiveAsync(_lifetime.Token);
+            var activeWiki = await runtime.Application.ActiveWiki.GetActiveAsync(_lifetime.Token);
+            _aiStartupTask = EnableAiInBackgroundAsync(runtime);
+            if (!activeWiki.IsPageDownloaded)
+            {
+                _shellViewModel.Reader.Detach();
+                _shellViewModel.Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
+                _shellViewModel.CloseReader();
+                _shellViewModel.SetStartupStatus("本地 Runtime 已就绪 · 当前 Wiki 尚未下载数据");
+                return;
+            }
+
             _shellViewModel.Reader.SetStatus("正在载入本地 Wiki 首页…");
             session.Navigate(ready.BaseUri);
-            _aiStartupTask = EnableAiInBackgroundAsync(runtime);
 
             await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), _lifetime.Token);
             _timings.ViewerReadyMilliseconds = ElapsedFromProcessStart();
-            var activeWiki = await activeWikiTask;
             await _shellViewModel.Reader.SetHomePageAsync(activeWiki.DefaultPageTitle);
             _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
             _shellViewModel.SetStartupStatus(
@@ -401,6 +436,7 @@ internal sealed partial class MainWindow : Window
         _shellViewModel.Dispose();
         _shellViewModel.RetryStartupRequested -= OnRetryStartupRequested;
         _shellViewModel.SelectDataRootRequested -= OnSelectDataRootRequested;
+        _shellViewModel.Management.DataChanged -= OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted -= OnViewerNavigationCompleted;
         _lifetime.Dispose();
         _cleanupComplete = true;
@@ -468,6 +504,150 @@ internal sealed partial class MainWindow : Window
         {
             _timings.AiStartCompletedMilliseconds = ElapsedFromProcessStart();
         }
+    }
+
+    private async Task<string?> PickImportPackageAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "选择 Wiki 数据包",
+            AllowMultiple = false,
+            FileTypeFilter =
+            [
+                new FilePickerFileType("Wiki 数据包") { Patterns = ["*.pkg"] },
+            ],
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        var file = files.SingleOrDefault();
+        return file?.Path is { IsFile: true } path ? path.LocalPath : null;
+    }
+
+    private async Task<WikiPackageExportResponse?> ExportPackageAsync(
+        WikiBookSnapshot wiki,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(wiki);
+        var runtime = _runtime;
+        if (runtime is null)
+            return null;
+        cancellationToken.ThrowIfCancellationRequested();
+        var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
+        {
+            Title = "导出 Wiki 数据包",
+            SuggestedFileName = SanitizeFileName(wiki.Title) + "-" + DateTime.Now.ToString("yyyyMMdd") + ".pkg",
+            DefaultExtension = "pkg",
+            FileTypeChoices =
+            [
+                new FilePickerFileType("Wiki 数据包") { Patterns = ["*.pkg"] },
+            ],
+        });
+        cancellationToken.ThrowIfCancellationRequested();
+        if (file?.Path is not { IsFile: true } path)
+            return null;
+
+        var targetPath = Path.GetFullPath(path.LocalPath);
+        var exportPath = File.Exists(targetPath) ? CreateTemporaryExportPath(targetPath) : targetPath;
+        try
+        {
+            var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
+            var result = await runtime.Application.Data.ExportPackageAsync(
+                wiki.Id,
+                exportPath,
+                version,
+                cancellationToken);
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!string.Equals(exportPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                CompleteExportTarget(exportPath, targetPath);
+            return result with { PackagePath = targetPath };
+        }
+        finally
+        {
+            if (!string.Equals(exportPath, targetPath, StringComparison.OrdinalIgnoreCase))
+                TryDeleteFile(exportPath);
+        }
+    }
+
+    private async Task ApplyPreferencesAsync(ApplicationPreferences preferences)
+    {
+        var runtime = _runtime;
+        if (runtime is null)
+            return;
+        var previous = runtime.Preferences;
+        runtime.ApplyPreferences(preferences);
+        RequestedThemeVariant = preferences.AppTheme switch
+        {
+            "dark" => ThemeVariant.Dark,
+            "light" => ThemeVariant.Light,
+            _ => ThemeVariant.Default,
+        };
+
+        if (!string.Equals(previous.ContentTheme, preferences.ContentTheme, StringComparison.Ordinal))
+        {
+            await runtime.Viewer.RetryAsync(_lifetime.Token);
+            await RebindViewerAsync(runtime, _lifetime.Token);
+        }
+        else if (!string.Equals(previous.AppTheme, preferences.AppTheme, StringComparison.Ordinal)
+                 && preferences.ContentTheme == "auto"
+                 && _viewerSession is { IsReady: true } session)
+        {
+            await session.ChangeThemeAsync(IsDarkTheme(), _lifetime.Token);
+        }
+    }
+
+    private async Task RebindViewerAsync(
+        WindowsClientRuntime runtime,
+        CancellationToken cancellationToken)
+    {
+        var session = _viewerSession ?? throw new InvalidOperationException("Viewer session is unavailable.");
+        var active = await runtime.Application.ActiveWiki.GetActiveAsync(cancellationToken);
+        if (!active.IsPageDownloaded)
+        {
+            _shellViewModel.Reader.Detach();
+            _shellViewModel.Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
+            _shellViewModel.CloseReader();
+            return;
+        }
+
+        if (runtime.Viewer.Status.State != ViewerConsumerState.Ready)
+            await runtime.Viewer.RetryAsync(cancellationToken);
+        if (runtime.Viewer.Status is not { State: ViewerConsumerState.Ready, BaseUri: not null } ready)
+            throw new InvalidOperationException("Viewer did not resume after the Wiki data operation.");
+
+        _shellViewModel.Reader.SetTransportReady(false);
+        session.Navigate(ready.BaseUri, forceReload: true);
+        await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), cancellationToken);
+        await _shellViewModel.Reader.SetHomePageAsync(active.DefaultPageTitle);
+        _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
+        _shellViewModel.SetStartupStatus(
+            $"{active.Title} 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
+    }
+
+    internal static string CreateTemporaryExportPath(string targetPath)
+    {
+        var fullPath = Path.GetFullPath(targetPath);
+        var directory = Path.GetDirectoryName(fullPath)
+            ?? throw new ArgumentException("The export target requires a parent directory.", nameof(targetPath));
+        return Path.Combine(directory, $".{Path.GetFileName(fullPath)}.{Guid.NewGuid():N}.exporting");
+    }
+
+    internal static void CompleteExportTarget(string temporaryPath, string targetPath)
+    {
+        if (!File.Exists(temporaryPath))
+            throw new FileNotFoundException("The completed temporary export is missing.", temporaryPath);
+        File.Move(temporaryPath, targetPath, overwrite: true);
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var sanitized = new string(value.Select(character => invalid.Contains(character) ? '_' : character).ToArray()).Trim();
+        return sanitized.Length == 0 ? "Terraria-Wiki" : sanitized;
+    }
+
+    private static void TryDeleteFile(string path)
+    {
+        try { if (File.Exists(path)) File.Delete(path); } catch { }
     }
 
     private async Task WriteSmokeLogAsync()
