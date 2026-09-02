@@ -1,0 +1,7 @@
+interface:
+  display_name: "Terraria UI"
+  short_description: "Create consistent Fluent Terraria Windows pages"
+  default_prompt: "Use $terraria-ui to design and implement a consistent Windows Avalonia page for this project."
+
+policy:
+  allow_implicit_invocation: true

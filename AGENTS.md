@@ -65,6 +65,13 @@ Codex CLI 已自动加载本文件；随后按 `INIT.md` 的顺序读取必要�
 
 找不到事实依据时明确标为待确认，不得用经验或架构图补全不存在的实现。
 
+## Windows UI 规范与 Skill
+
+- 新建 Windows Avalonia 页面或共享视觉组件、增加导航/表单/列表/卡片/按钮，或显著重做现有页面布局与视觉时，必须使用项目级 `.agents/skills/terraria-ui/` Skill，并完整读取其 `SKILL.md` 与 `references/windows-ui-standard.md`。
+- 当前用户需求、持续 Presentation spec、当前 change/plan 与 ADR 决定产品行为和架构边界；UI Skill 负责默认视觉、组件复用和验收流程。发现冲突时按职责报告，不得用视觉规范自行改变行为契约。
+- 小型文案修正、纯后端任务、Legacy MAUI UI 和未来 Android UI 不触发该 Skill。Windows 规范不得被解释为其他平台实现授权。
+- Skill 或本文件变更后应重新启动 Codex 会话，使新的项目级发现和指令链完整生效。
+
 ## 实施纪律
 
 - 只修改完成当前任务所需的文件，保持改动小、可审查、可回退。
