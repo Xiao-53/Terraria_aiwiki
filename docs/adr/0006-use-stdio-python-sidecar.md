@@ -1,6 +1,6 @@
 # ADR 0006：Windows AI Runtime 使用长驻 stdio Python Sidecar
 
-- 状态：accepted；2026-08-28 按用户决定修订 Windows 本机密钥来源
+- 状态：accepted；2026-09-02 修订后台启动与有界退出
 - 日期：2026-08-27
 - 决策范围：Windows Python 进程边界、非密钥配置、stdio 协议、生命周期与崩溃恢复；不外推 Android
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`
@@ -19,9 +19,10 @@ Phase 04 已建立 Avalonia Windows Host 与 Viewer，Phase 05/06 已建立嵌�
 4. NDJSON 单行上限 256 KiB，消息使用 protocol version 与 request ID；严格拒绝未知字段、重复 ID、非法顺序、并发 answer、超长/不完整行和 stdout 污染。一次只允许一个活动问题，取消排空后可复用 Sidecar。
 5. Windows 用户级 `ai-runtime.json` v2 保存绝对 `python.exe`、API key 与显式 OpenAI-compatible provider/model/API/reasoning。Host 读取 key 后只写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入命令参数或 NDJSON。MCP endpoint/bearer 仍只经 initialize stdin 传入。
 6. Windows 不携带或安装 Python。构建与发布只复制 Agent launcher、源码和解析锁；握手验证 Python 3.12–3.14、Runtime 1 与 PydanticAI 2.31，依赖不匹配只禁用 AI。
-7. 启动按 Application → Viewer → WikiToolServer → Sidecar；退出按活动回答 → Sidecar → WikiToolServer → Viewer → Application。Application consumer 使用内部 composite 同时协调 Viewer 与 WikiTools，并逆序释放 pause leases。
-8. Sidecar fatal/崩溃后停止对应 MCP server，不无限自动重启。只有显式“重试 AI”创建新 Sidecar 与新 MCP server，因而轮换端口和 bearer。
-9. 本决策只适用于 Windows。Android Phase 必须根据设备 Runtime、进程模型、功耗、打包与网络限制独立决定，不能复用 Windows 路径或进程假设。
+7. 前台启动按 Application → Viewer 首页就绪；AI 配置、WikiToolServer 与 Sidecar 在 Viewer 导航后独立后台启动。退出先统一取消，AI 分支按活动回答 → Sidecar → WikiToolServer 收尾并与 Viewer 停止并行，两个消费者都停止后才释放 Application。Application consumer 使用内部 composite 同时协调 Viewer 与 WikiTools，并逆序释放 pause leases。
+8. Sidecar 的活动回答排空、shutdown 和正常进程退出共享 1.5 秒优雅期限；超时后只终止当前 Host 持有的进程树，进程等待与连接释放分别最多再等待 500 ms。AI 启动、重试和退出用同一内部同步门阻止晚到 Runtime 挂接。
+9. Sidecar fatal/崩溃后停止对应 MCP server，不无限自动重启。只有显式“重试 AI”创建新 Sidecar 与新 MCP server，因而轮换端口和 bearer。
+10. 本决策只适用于 Windows。Android Phase 必须根据设备 Runtime、进程模型、功耗、打包与网络限制独立决定，不能复用 Windows 路径或进程假设。
 
 ## 选择理由
 

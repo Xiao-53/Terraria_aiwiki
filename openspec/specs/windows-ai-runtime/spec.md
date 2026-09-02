@@ -44,9 +44,10 @@
 
 ## 生命周期与恢复
 
-- 启动顺序固定为 Application 初始化 → Viewer enable → WikiToolServer → Python Sidecar ready。AI 配置或 Runtime 错误不能回滚已经可用的 Application/Viewer。
+- 前台启动顺序固定为 Application 初始化 → Viewer enable → Viewer 首页 DOM 就绪；AI 配置读取、WikiToolServer 和 Python Sidecar ready 在 Viewer 导航后进入独立后台启动，不阻塞离线 Reader 可交互。AI 配置或 Runtime 错误不能回滚已经可用的 Application/Viewer。
 - Application 使用内部组合 consumer coordinator 同时暂停 Viewer 与 WikiTools；按声明顺序取得 pause lease，成功和失败回滚都按逆序释放。
-- 正常退出顺序固定为取消活动回答并排空 → Sidecar shutdown → 超时后仅终止所属进程树 → WikiToolServer → Viewer → Application。
+- 正常退出先统一取消 Host 生命周期；AI 分支执行“取消活动回答并排空 → Sidecar shutdown → 超时后仅终止所属进程树 → WikiToolServer”，同时 Viewer 分支停止 WebView/transport，两个消费者都结束后才释放 Application。
+- Sidecar 的活动回答、shutdown 与进程退出共享 1.5 秒优雅期限；期限耗尽后只终止所属进程树，并以 500 ms 期限收尾进程等待和连接释放。后台启动、显式重试和退出由同一内部同步门协调，退出后不得挂接晚到的 Runtime。
 - Sidecar fatal、协议错误或意外退出后，停止其关联 WikiToolServer；不无限自动重启。用户显式“重试 AI”时先释放旧 Runtime，再创建新的 MCP server，因此必须轮换端口与 bearer。
 - 只有宿主启动并保存句柄的 Python `Process` 可以在 shutdown 超时后使用 `Kill(entireProcessTree: true)`；不得按进程名扫描或终止其他 Python。
 

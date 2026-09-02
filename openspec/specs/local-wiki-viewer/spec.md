@@ -27,6 +27,8 @@
 
 - loopback 是可接受的基线候选，不因“localhost”本身被提前否决；端口、启动、停止和健康状态必须由 Adapter 管理。
 - transport 必须处理端口冲突、重复启动、并发实例、前后台切换、窗口关闭和异常恢复，启动失败不得静默伪装为 Viewer 成功。
+- Windows Host 只有在首页 Redirect 已返回且正文 DOM 已写入后才把 Viewer 标为可交互；同一 Base URI 的重复 Ready 状态不得触发第二次导航或替换正在等待的就绪信号。Viewer 未就绪时 Reader 命令必须禁用或明确失败，不能静默丢失点击。
+- Windows 退出先取消 Viewer 生命周期并停止 WebView；loopback 必须主动关闭已接受的 socket，使 client drain 有明确上限，然后才释放共享 Application 数据源。
 - 本地资源映射只有在目标平台实际支持响应内容、相对 URL、媒体、脚本和消息桥后才可采用；平台支持表不能替代项目验证。
 - WebView 的 origin、CORS、外部导航和消息来源必须限制到完成 Viewer 所需的最小范围。
 
@@ -37,6 +39,7 @@
 - `/src/*` 只通过 Application `Query.ReadAssetAsync`；页面与 Redirect 只通过 `Query.ReadAsync`；页面成功读取后由宿主显式调用 `Library.RecordVisitAsync`。
 - outer host 与 C# 分别校验精确 origin/source、`req/res`、request ID 和方法；HTTP(S) 外链交给系统浏览器，未知或未支持方法返回可观察错误。
 - pause lease 停止 listener；释放后仅在宿主仍存活时按当前活动 Wiki 重启。退出后不得遗留 listener 或继续访问已释放 Application。
+- Avalonia 站点首屏通过内部 `ViewerReady` 方法报告 DOM 已写入；该方法不扩展公共 Viewer 业务能力。WebView stop 最多等待 500 ms，listener 主动关闭活动连接并最多排空 1 秒。
 - Windows 默认依赖系统 Evergreen WebView2；framework-dependent/self-contained .NET 均不等于捆绑 WebView2。安装器、bootstrap 和签名仍属于 Phase 11。
 - 以上行为由 Windows 11 x64 验证支持；Android transport 仍保持开放，不能从 Windows 结论外推。
 
