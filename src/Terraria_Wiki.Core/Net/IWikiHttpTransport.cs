@@ -25,10 +25,15 @@ public sealed record WikiHttpContentResponse(
 
 public sealed class HttpClientWikiHttpTransport : IWikiHttpTransport
 {
+    internal const string DefaultUserAgent = "TerrariaAIWiki/1.0";
     private readonly HttpClient _httpClient;
 
-    public HttpClientWikiHttpTransport(HttpClient httpClient) =>
+    public HttpClientWikiHttpTransport(HttpClient httpClient)
+    {
         _httpClient = httpClient ?? throw new ArgumentNullException(nameof(httpClient));
+        if (_httpClient.DefaultRequestHeaders.UserAgent.Count == 0)
+            _httpClient.DefaultRequestHeaders.UserAgent.ParseAdd(DefaultUserAgent);
+    }
 
     public async Task<string> GetStringAsync(WikiBook book, Uri uri, CancellationToken cancellationToken = default)
     {
