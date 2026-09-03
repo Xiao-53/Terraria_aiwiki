@@ -6,7 +6,7 @@
 
 项目会继续复用成熟的 C# Wiki 获取、更新、SQLite、FTS5、导入导出、资源和离线阅读能力；在其上建立可移植 Wiki Core、薄 Application、新的客户端 Presentation 与 Python AI。目标不是给旧界面简单增加 Chat，也不是重写已有 Wiki Core。
 
-Windows 新版本已经确定不再使用 .NET MAUI。当前首选路线是 **.NET 10 portable Core + Avalonia Presentation + NativeWebView**；Phase 00 垂直 PoC 已在 Windows 11 x64 通过宿主选择门槛，Phase 01 已完成单一 portable Core 提取与旧 MAUI façade 接入。产品当前目标仅为 Windows，未来只考虑 Android，除此之外的产品平台全部为非目标。Windows 开发不要求安装 MAUI workload、Android SDK、JDK 或 Emulator；Android 工具链只在后续 Android Phase 引入。
+Windows 新版本已经确定不再使用 .NET MAUI。当前首选路线是 **.NET 10 portable Core + Avalonia Presentation + NativeWebView**；Phase 00 垂直 PoC 已在 Windows 11 x64 通过宿主选择门槛，Phase 01 已完成单一 portable Core 提取与旧 MAUI façade 接入。产品当前目标仅为 Windows，未来只考虑 Android，除此之外的产品平台全部为非目标。Windows 开发不要求安装 MAUI workload、Android SDK、JDK 或 Emulator；已暂缓的 Phase 13 获用户重新明确授权前不引入 Android 工具链。
 
 ## 先从这里开始
 
@@ -113,10 +113,11 @@ Migration Baseline & Host Spike
 → Legacy MAUI Retirement
 → Windows Productization
 → Extensions
-→ Android
+
+暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 274/274 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。多轮、内置 Python、Credential Manager、安装器、发布渠道和 Android 尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
+**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 274/274 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。当前执行队列为 Phase 10、Phase 11，以及按真实需求决定是否实施的 Phase 12；Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。多轮、内置 Python、Credential Manager、安装器和发布渠道尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
 
 ## 工作区结构
 
@@ -161,7 +162,7 @@ terraria_aiwiki/
 |---|---|
 | WSL2 + Codex CLI | 主要开发会话、代码阅读、搜索、编辑、计划维护、测试与平台无关检查 |
 | Windows | .NET/Avalonia 客户端构建、运行、调试、发布和目标平台验证；不安装 MAUI/Android 工具链 |
-| Android 环境 | 仅在后续 Phase 安装 .NET Android workload、SDK/JDK，并在物理设备或必要的模拟器验证 |
+| Android 环境 | Phase 13 已暂缓；只有用户重新明确授权恢复后，才安装 .NET Android workload、SDK/JDK 并在物理设备或必要的模拟器验证 |
 
 固定路径：
 

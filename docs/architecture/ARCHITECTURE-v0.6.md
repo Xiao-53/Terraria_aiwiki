@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement
+> **项目状态**：实施中；Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement；Phase 13 Android 已暂缓，不在当前执行队列
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -70,7 +70,7 @@
 
 - **P0**：不破坏 Existing Core Capabilities 与已有数据。
 - **P1**：完成 Portable Core、Application、新 Windows 客户端、AI 与产品化。
-- **P2**：在稳定边界上增加扩展能力并适配 Android。
+- **P2**：在稳定边界上增加扩展能力；Android 适配保留为已暂缓的未来选项。
 
 产品平台是闭集：当前只交付 Windows，未来只考虑 Android。iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他产品平台均为明确非目标；WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。旧源码 target、条件编译或框架能力表不产生产品承诺；若未来改变范围，必须由用户重新授权并更新架构决策。
 
@@ -171,7 +171,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 4. Phase Roadmap
 
-默认按依赖顺序推进。每个 Phase 在实施前必须建立并批准独立计划；本表只定义阶段边界和出口。
+默认按依赖顺序推进。当前执行队列为 Phase 10、Phase 11，以及按真实需求决定是否实施的 Phase 12。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
 
 | Phase | 目标与边界 | 前置 | 阶段出口 | 计划文件 |
 |---|---|---|---|---|
@@ -188,9 +188,9 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **10 — Legacy MAUI Retirement** | 只清理已被替代、确认无依赖且获准删除的旧 Presentation/宿主 | 09 | 新客户端无功能缺口，旧宿主可回退或归档 | `openspec/changes/phase-10-legacy-maui-retirement/plan.md` |
 | **11 — Windows Productization** | 完成错误恢复、安装打包、升级和发布准备 | 07、10 | Windows 成品达到发布门槛 | `openspec/changes/phase-11-windows-productization/plan.md` |
 | **12 — Extensions** | 按真实需求增加其他 Toolset；每项独立决策 | 11 | 扩展通过既有边界接入且可独立关闭 | `openspec/changes/phase-12-extensions/plan.md` |
-| **13 — Android** | 在目标环境验证客户端、数据、Viewer、平台行为和 AI Runtime | 11；可在边界稳定后预研 | Android 方案以目标平台实测为准 | `openspec/changes/phase-13-android/plan.md` |
+| **13 — Android（暂缓）** | 当前不实施；恢复后在目标环境验证客户端、数据、Viewer、平台行为和 AI Runtime | 11，且须用户重新明确授权 | 暂不设置当前阶段出口；恢复后以 Android 目标平台实测为准 | 恢复后建立 `openspec/changes/phase-13-android/plan.md` |
 
-Windows 当前开发不安装 MAUI/Android 工具链。Android workload、SDK 与 JDK 只在 Phase 13 引入；文档支持矩阵不能替代目标平台实测。
+Windows 当前开发不安装 MAUI/Android 工具链。Phase 13 恢复并获用户明确授权前，不安装 Android workload、SDK、JDK 或 Emulator，不创建 Android 实施计划，也不建立 Android 交付或验证承诺。文档支持矩阵不能替代目标平台实测。
 
 ---
 
@@ -221,7 +221,7 @@ Windows 当前开发不安装 MAUI/Android 工具链。Android workload、SDK �
 |---|---|
 | Windows 安装、WebView2 bootstrap 与发布渠道 | 11 |
 | Windows Python Runtime 封装 | 07 / 11 |
-| Android 平台行为与设备内/远程 AI Runtime | 13 |
+| Android 平台行为与设备内/远程 AI Runtime | 13（暂缓；用户重新授权恢复后收敛） |
 
 开放问题不是默认许可。长期选择确认后写 ADR；影响 P0、分层、Phase 或平台方向时同步更新本文件。
 
@@ -246,7 +246,7 @@ Windows 当前开发不安装 MAUI/Android 工具链。Android workload、SDK �
 - 新 Presentation 不依赖数据库、全局状态或具体平台 Runtime；
 - Viewer 继续使用同一份本地页面与资源；
 - AI 通过稳定 Search / Read 使用本地事实；
-- Windows 可可靠发布，Android 可在稳定边界上后续适配；
+- Windows 可可靠发布；Android 保留为已暂缓的未来选项，不构成当前阶段出口；
 - 每个阶段小步、可验证、可回退。
 
 > **本文件只定义方向、边界与顺序；specs 定义持续契约，Phase 计划定义实现。**
