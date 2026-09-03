@@ -2,7 +2,7 @@
 
 这是一个基于现有 **Terraria Wiki Offline** 源码逐步建设的 Terraria AI 应用工作区，后续开发由 **WSL2 中安装的 Codex CLI** 执行。
 
-外层仓库现在是唯一产品源码仓库，根级 `src/`、`tests/`、`agent/`、`assets/` 与 `Terraria_Wiki.Core.slnx` 构成产品基线。`terraria-wiki-offline/` 只作为固定到上游提交的只读参考 Submodule，不参与正常 build/runtime。
+当前仓库是唯一产品源码仓库，根级 `src/`、`tests/`、`agent/`、`assets/` 与 `Terraria_Wiki.Core.slnx` 构成产品基线。旧 MAUI 参考 Submodule 已在 Phase 10 退休；上游 URL、固定提交、资产来源和回退方式保留在 ADR 0007 与归档计划中。
 
 项目会继续复用成熟的 C# Wiki 获取、更新、SQLite、FTS5、导入导出、资源和离线阅读能力；在其上建立可移植 Wiki Core、薄 Application、新的客户端 Presentation 与 Python AI。目标不是给旧界面简单增加 Chat，也不是重写已有 Wiki Core。
 
@@ -17,7 +17,7 @@ cd /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 codex
 ```
 
-不要从 `terraria-wiki-offline/` 参考 Submodule 启动主会话，否则会把参考仓库误当作产品根，并漏掉外层产品源码与 `AGENTS.md`。`AGENTS.md` 在 Codex 会话开始时加载；修改后请重启会话。
+`AGENTS.md` 在 Codex 会话开始时加载；修改后请重启会话。
 
 - 项目级方向、P0 护栏和 Phase 路线：[`docs/architecture/ARCHITECTURE-v0.6.md`](./docs/architecture/ARCHITECTURE-v0.6.md)
 - Agent 强制工作规则：[`AGENTS.md`](./AGENTS.md)
@@ -36,6 +36,7 @@ codex
 - 已完成 Phase 07 记录：[`openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md`](./openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md)
 - 已完成 Phase 08 记录：[`openspec/changes/archive/phase-08-presentation-rebuild/plan.md`](./openspec/changes/archive/phase-08-presentation-rebuild/plan.md)
 - 已完成 Phase 09 记录：[`openspec/changes/archive/phase-09-p0-ui-takeover/plan.md`](./openspec/changes/archive/phase-09-p0-ui-takeover/plan.md)
+- 已完成 Phase 10 记录：[`openspec/changes/archive/phase-10-legacy-maui-retirement/plan.md`](./openspec/changes/archive/phase-10-legacy-maui-retirement/plan.md)
 - Windows Viewer transport 决策：[`docs/adr/0003-use-loopback-local-viewer-transport.md`](./docs/adr/0003-use-loopback-local-viewer-transport.md)
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
@@ -97,7 +98,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 当前路线与状态
 
-产品源码已从参考仓库迁到外层根级目录，Windows build/publish/runtime 不再读取固定上游 Submodule；迁移基线与 Phase 09 P0 UI Takeover 均已完成 Windows 回归，下一阶段是 Phase 10 Legacy MAUI Retirement。
+产品源码已迁到当前仓库根级目录，Windows build/publish/runtime 不读取旧 MAUI checkout；Phase 10 已移除参考 gitlink 并通过独立 Windows 回归，下一阶段是 Phase 11 Windows Productization。
 
 ```text
 Migration Baseline & Host Spike
@@ -117,7 +118,7 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–09 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Windows Release build 为 0 warning/0 error，当前 .NET 测试 274/274 通过；Light/Dark、1280×820、900×600、数据源确认和设置状态已在目标 Windows 实际窗口检查。真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。当前执行队列为 Phase 10、Phase 11，以及按真实需求决定是否实施的 Phase 12；Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。多轮、内置 Python、Credential Manager、安装器和发布渠道尚未完成，旧 MAUI 参考清理由 Phase 10 决定。
+**Phase 00–10 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Phase 10 在不保留旧 MAUI checkout 的状态下完成 Windows Release 0-warning build、275/275 .NET tests 和两种 `win-x64` 发布 smoke；Light/Dark、1280×820、900×600、数据源确认和设置状态的 Phase 09 目标窗口证据继续有效，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。当前执行队列为 Phase 11，以及按真实需求决定是否实施的 Phase 12；Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。多轮、内置 Python、Credential Manager、安装器和发布渠道尚未完成。
 
 ## 工作区结构
 
@@ -149,14 +150,13 @@ terraria_aiwiki/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约
 │  └─ changes/                       # 进行中与已归档变更
-└─ terraria-wiki-offline/            # 只读上游参考 Submodule
 ```
 
 ## 开发环境与平台分工
 
-产品源码位于外层根级目录；参考 Submodule 保存 BigBearKing 上游的 .NET MAUI/Blazor Hybrid 旧宿主，仅用于行为与来源核对。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
+产品源码位于仓库根级目录；BigBearKing 上游 .NET MAUI/Blazor Hybrid 旧宿主只通过 ADR 0007 记录的 URL 与固定提交追溯，不保留在当前 checkout。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管。设置页随后增补了 DeepSeek 官方 API / 自定义 OpenAI-compatible provider 与思考强度配置入口，仍复用同一 v2 和显式 Runtime 重试。内置 Python、Credential Manager、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管；Phase 10 已退休旧 MAUI 参考 checkout。设置页随后增补了 DeepSeek 官方 API / 自定义 OpenAI-compatible provider 与思考强度配置入口，仍复用同一 v2 和显式 Runtime 重试。内置 Python、Credential Manager、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
 
 | 环境 | 职责 |
 |---|---|

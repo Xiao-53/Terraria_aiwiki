@@ -11,8 +11,6 @@ cd /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 codex
 ```
 
-不要从 `terraria-wiki-offline/` 内启动主会话；该目录是只读参考 Submodule，不是产品源码根，也不会提供完整的 `AGENTS.md` 指令链。
-
 ## 固定位置
 
 - 工作区：当前目录
@@ -20,12 +18,12 @@ codex
 - WSL 路径：`/mnt/c/Users/Xiao/mypython/terraria_aiwiki`
 - 产品 solution：`Terraria_Wiki.Core.slnx`
 - 产品源码与测试：`src/`、`tests/`、`agent/`、`assets/`
-- 旧实现参考：`terraria-wiki-offline/`（只读 Submodule）
+- 旧实现参考：ADR 0007、归档 Phase 计划与 `assets/windows/README.md` 记录的上游固定提交
 - Master Architecture：`docs/architecture/ARCHITECTURE-v0.6.md`
 - 项目基线：`openspec/project.md`
 - 计划规范：`.agent/PLANS.md`
 
-产品源码和工作区治理文件都属于外层仓库；不得放入或从构建读取 `terraria-wiki-offline/`。参考 Submodule 默认只读。修改 `AGENTS.md` 后重新启动 Codex 会话。
+产品源码和工作区治理文件都属于当前仓库；不得重新引入旧 MAUI checkout 作为产品 build/runtime 依赖。修改 `AGENTS.md` 后重新启动 Codex 会话。
 
 ## 新任务读取顺序
 
@@ -36,7 +34,7 @@ codex
 5. `openspec/project.md`
 6. 与任务相关的 `openspec/specs/`、`openspec/changes/` 和 `docs/adr/`
 7. 需要建立计划时完整读取 `.agent/PLANS.md`
-8. 涉及源码时，再读取根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、调用方、实现、数据模型和测试；只有核对旧行为或资产来源时才读取 Submodule
+8. 涉及源码时，再读取根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、调用方、实现、数据模型和测试；只有核对旧行为或资产来源时，才读取归档记录或 ADR 0007 固定的上游提交
 
 只读取与当前任务有关的 specs、changes、ADR 和源码，不要无目的加载整个仓库。
 

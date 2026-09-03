@@ -5,8 +5,8 @@
 本文件专供 **WSL2 中运行的 Codex CLI** 使用，适用于工作区根目录及其所有子目录。
 
 - 外层仓库是唯一产品源码仓库；产品代码与构建入口固定在根级 `src/`、`tests/`、`agent/`、`assets/` 和 `Terraria_Wiki.Core.slnx`。
-- 工作区治理、架构、规范、计划和 ADR 必须放在外层仓库的对应目录中，不得写入参考 Submodule。
-- `terraria-wiki-offline/` 是固定到上游提交的只读 Git Submodule，只用于核对旧实现、历史行为和来源；不得成为产品 build/runtime 依赖，也不得在其中继续开发新产品。
+- 工作区治理、架构、规范、计划和 ADR 必须放在本仓库的对应目录中；不得在仓库内建立第二套产品源码或治理体系。
+- Phase 10 已移除本地旧 MAUI 参考仓库。旧实现、历史行为和资产来源优先通过归档计划、ADR 0007 与 `assets/windows/README.md` 核对；确需读取上游源码时使用其中记录的 URL 和固定提交，并且不得把临时 checkout 加入产品仓库或作为 build/runtime 依赖。
 - 用户要求检查、解释或诊断时，只做读取与报告；只有用户明确要求修改或实现时，才写入相应范围。
 - 不得把当前任务扩展成相邻重构、依赖升级、目录整理或后续 Phase 实施。
 
@@ -26,7 +26,6 @@ cd /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 codex
 ```
 
-- 不要先进入 `terraria-wiki-offline/` 再启动主 Codex 会话。该目录是参考 Submodule；从那里启动会把参考仓库误当作产品根，并漏掉外层源码、`AGENTS.md` 和治理文件。
 - Codex CLI 在会话开始时自动发现并加载 `AGENTS.md`。修改本文件后应结束并重新启动 Codex 会话，使新指令链生效。
 - 日常读取、搜索、编辑、脚本和平台无关检查使用 WSL/Linux 工具与 `/mnt/c/...` 路径。
 - Windows 负责新 .NET/Avalonia 客户端的构建、运行、调试、发布及其他必须在 Windows 执行的验证。不得把 WSL 中的 `dotnet` 结果等同于 Windows 客户端验证。
@@ -59,7 +58,7 @@ Codex CLI 已自动加载本文件；随后按 `INIT.md` 的顺序读取必要�
 
 1. 阅读根 `README.md`、Master Architecture 与 `openspec/project.md`。
 2. 查找当前任务相关的 specs、进行中 changes 和 ADR；不得只看摘要或文件名。
-3. 涉及源码时，先阅读根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、直接调用方、核心实现、数据模型和已有测试；只有需要核对旧行为或来源时才读取参考 Submodule。
+3. 涉及源码时，先阅读根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、直接调用方、核心实现、数据模型和已有测试；只有需要核对旧行为或来源时，才读取归档记录或 ADR 0007 固定的上游提交。
 4. 满足 `.agent/PLANS.md` 的触发条件时，先创建并持续维护 `openspec/changes/<change-id>/plan.md`。
 5. 如果任务属于 Roadmap Phase，确认前置 Phase 和阶段边界；只计划、实施用户指定的 Phase。
 
@@ -75,7 +74,7 @@ Codex CLI 已自动加载本文件；随后按 `INIT.md` 的顺序读取必要�
 ## 实施纪律
 
 - 只修改完成当前任务所需的文件，保持改动小、可审查、可回退。
-- 大规模改动文件或触碰核心文件前，先检查外层产品仓库状态并建立可恢复的 Git 保存点；涉及参考 Submodule 时同时核对 gitlink 与 Submodule 状态。每个 Roadmap Phase 完成且验证通过后，必须用 Git 提交保存该阶段结果。保存点和提交只包含已确认的当前范围，不得夹带用户既有改动；仓库未初始化或改动无法安全分离时，先向用户报告并取得处理决定。
+- 大规模改动文件或触碰核心文件前，先检查产品仓库状态并建立可恢复的 Git 保存点；涉及上游来源快照时同时核对固定提交、资产来源与 hash。每个 Roadmap Phase 完成且验证通过后，必须用 Git 提交保存该阶段结果。保存点和提交只包含已确认的当前范围，不得夹带用户既有改动；仓库未初始化或改动无法安全分离时，先向用户报告并取得处理决定。
 - 优先顺序固定为：`Reuse → Fix → Wrap → Extract when necessary → Rewrite last`。
 - 不得把架构概念自动翻译成一组新接口、新 project、新 Registry 或新框架。
 - 不复制现有数据库、搜索、同步、导入导出、资源或 Viewer backend 实现。
@@ -114,7 +113,7 @@ Master Architecture 中的 Existing Core Capabilities 是所有 Phase 的强制�
 - Windows 或 Android 专属行为，只有在对应目标环境实际验证后才能宣称通过；不为范围外平台建立验证承诺。
 - Codex CLI 运行在 WSL2，但工作区位于 Windows C 盘挂载路径。必须同时考虑 Linux 工具语义与 Windows 文件系统的路径、大小写、换行、文件锁和性能差异。
 - 无法执行的验证必须写明原因和影响，不能用“理论上可行”替代结果。
-- 完成前检查实际文件差异、生成物、临时文件、计划状态、外层产品仓库状态和参考 Submodule 指针/状态。
+- 完成前检查实际文件差异、生成物、临时文件、计划状态、产品仓库状态，以及任务涉及的上游来源/资产快照证据。
 - 不得未经证据宣称“已完成”“已修复”“构建通过”或“平台可用”。最终汇报列出实际变更、实际验证和仍未验证事项。
 
 ## 单模型工作规则

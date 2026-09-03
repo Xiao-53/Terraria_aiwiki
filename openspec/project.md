@@ -10,13 +10,13 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 
 本地 Wiki 数据是 Terraria 机制、物品、配方和进度问题的主要事实来源。远程 LLM 负责决定查询步骤、阅读相关页面、执行多步分析并组织回答；不能只依赖模型记忆回答事实问题。
 
-项目不以继续扩展旧 Presentation 为目标，但必须保留其背后的 P0 数据、资源和 Local Viewer 能力，直到新产品完成接管并通过独立决策允许改变。
+项目不以继续扩展旧 Presentation 为目标。Phase 09 已完成新产品接管，Phase 10 只退休旧宿主参考；其背后的 P0 数据、资源和 Local Viewer 能力继续由当前 Core/Application/Windows 产品保留。
 
 ## 源码基线
 
 外层仓库是唯一产品源码仓库。根级 `src/`、`tests/`、`agent/`、`assets/` 与 `Terraria_Wiki.Core.slnx` 以产品提交 `d67d904` 建立内容基线；namespace、公共 API、数据格式和产品行为未因物理迁移改变。
 
-`terraria-wiki-offline/` 来源为 BigBearKing/terraria-wiki-offline，作为只读 Git Submodule 固定到上游 `a1dd899`，只用于核对旧实现、P0 行为和资产来源。产品 project、tests、build、publish 与 runtime 不得读取该 Submodule。长期源码所有权决策见 ADR 0007。
+旧宿主来源为 BigBearKing/terraria-wiki-offline 上游 `a1dd899`。Phase 10 已从当前 checkout 移除其参考 gitlink；旧实现、P0 行为和资产来源继续通过固定 URL/提交、ADR 0007、归档计划与资产说明追溯。产品 project、tests、build、publish 与 runtime 不得读取任何外部参考 checkout。
 
 已核对的现有能力包括：
 
@@ -44,9 +44,9 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 - MediaWiki API
 - Python 3.12–3.14 Agent，PydanticAI 2.31 与可配置 OpenAI-compatible Responses / Chat provider 边界
 
-MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 Windows 目标技术承诺。现有 Razor Presentation 作为行为参考和过渡基线；Local Viewer 的 HTML/CSS/JS、页面与 WikiAsset 链路仍是需要保留的资产。
+MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 Windows 目标技术承诺。旧 Razor Presentation 曾作为行为参考和过渡基线，Phase 10 后不再保留本地 checkout；Local Viewer 的 HTML/CSS/JS、页面与 WikiAsset 链路继续作为受控产品资产保留。
 
-当前产品源码使用 .NET 10 portable Core、薄 Application、Avalonia Windows Host、独立 WikiTools 和 Python 3.12–3.14 Agent。Windows Viewer Web、bridge 与图标来自外层 `assets/windows/` 的受控字节快照；参考 Submodule 不参与构建。
+当前产品源码使用 .NET 10 portable Core、薄 Application、Avalonia Windows Host、独立 WikiTools 和 Python 3.12–3.14 Agent。Windows Viewer Web、bridge 与图标来自根级 `assets/windows/` 的受控字节快照；旧参考仓库不在当前 checkout，也不参与构建。
 
 ### 目标技术方向
 
@@ -71,7 +71,7 @@ Windows: C:\Users\Xiao\mypython\terraria_aiwiki
 WSL:     /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 ```
 
-Codex CLI 必须从外层 WSL 工作区根启动，使产品源码与根 `AGENTS.md` 被加载；不得从 `terraria-wiki-offline/` 参考 Submodule 启动主会话。日常读取、编辑、搜索和平台无关检查在 WSL 中完成；Windows 客户端的运行、调试、构建和发布必须由 Windows 环境实际验证。
+Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` 被加载。日常读取、编辑、搜索和平台无关检查在 WSL 中完成；Windows 客户端的运行、调试、构建和发布必须由 Windows 环境实际验证。
 
 项目当前保留在 C 盘并通过 `/mnt/c` 访问。即使该位置的 WSL I/O 性能可能较低，也不得未经用户决定复制或迁移到 WSL home。必须同时考虑 Linux 工具语义与 Windows 文件系统的路径、大小写、换行和文件锁差异。
 
@@ -84,15 +84,15 @@ Codex CLI 必须从外层 WSL 工作区根启动，使产品源码与根 `AGENTS
 - AI 通过稳定的 Wiki Search / Read 边界获取本地事实，不直接建立第二套 Wiki 数据体系。
 - 搜索继续使用现有 SQLite FTS5 能力并做局部修正，不重建搜索系统。
 - Python Agent 业务逻辑与 Windows / Android Runtime 分离。
-- Windows 新版本不使用 MAUI；旧 MAUI 项目只保留在只读参考 Submodule，直到 Phase 10 在 P0 接管证据基础上决定保留或移除该参考。
+- Windows 新版本不使用 MAUI；Phase 10 已在 P0 接管证据基础上移除旧 MAUI 参考 gitlink，不得把它重新引入产品 build/runtime。
 - Vector Search、Embedding Retrieval、Vector Database 和第二套 LLM Wiki 数据库不属于项目范围。
 - 变更必须小步、可验证、可回退；未验证设想不得写成已实现事实。
 
 ## 当前状态
 
-产品源码已以 `d67d904` 内容建立外层独立基线，固定上游 Submodule 不再参与 build/runtime；迁移后的 Windows Release build、260/260 .NET tests、两种 publish smoke 与冻结 Python 回归均已通过。
+产品源码已以 `d67d904` 内容建立独立基线，固定上游参考从未参与迁移后的 build/runtime；Phase 10 已移除其本地 gitlink。移除后的 Windows Release build 为 0 warning/0 error，275/275 .NET tests 与两种 publish smoke 均通过；冻结 Python 回归沿用此前无源码变化的证据。
 
-Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement。当前执行队列为 Phase 10、Phase 11，以及按真实需求决定是否实施的 Phase 12；Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。Windows Avalonia Shell 现有“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个真实入口：收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` Inspect/确认/Import 与安全导出、全部强类型设置和启动错误恢复都只经现有 Application/Core 能力运行。Presentation 不直接访问 SQLite；活动数据变化会刷新搜索、收藏和资料库，并按需让唯一共享 Reader 重新绑定动态 loopback Viewer。无页面数据时 Runtime 仍可进入管理和设置。Chat 继续保持独立单轮、安全原生 Markdown 与 Token 花费展示；设置页包含常规/AI 二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、Python、遮蔽 key 与思考强度，Windows 用户级 AI 配置仍为严格 v2，本机 key 只注入所属 Sidecar 环境。当前 Windows Release build 为 0 warning/0 error，.NET 测试 274/274 通过；Light/Dark、1280×820、900×600、管理确认和设置状态已在目标 Windows 实际窗口检查，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。公共 API、SQLite schema、包格式、AI 协议与 Viewer 内容协议未改变。多轮、内置 Python、Credential Manager、安装器与 Windows Productization 尚未实施。
+Phase 00–10 已完成，下一阶段为 Phase 11 Windows Productization；Phase 12 按真实需求决定是否实施。Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。Windows Avalonia Shell 现有“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个真实入口：收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` Inspect/确认/Import 与安全导出、全部强类型设置和启动错误恢复都只经现有 Application/Core 能力运行。Presentation 不直接访问 SQLite；活动数据变化会刷新搜索、收藏和资料库，并按需让唯一共享 Reader 重新绑定动态 loopback Viewer。无页面数据时 Runtime 仍可进入管理和设置。Chat 继续保持独立单轮、安全原生 Markdown 与 Token 花费展示；设置页包含常规/AI 二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、Python、遮蔽 key 与思考强度，Windows 用户级 AI 配置仍为严格 v2，本机 key 只注入所属 Sidecar 环境。Phase 10 在没有旧 MAUI checkout 的状态下完成 Windows Release 0-warning build、275/275 .NET tests 和 framework-dependent/self-contained `win-x64` smoke；Phase 09 的目标窗口验收与真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。公共 API、SQLite schema、包格式、AI 协议与 Viewer 内容协议未改变。多轮、内置 Python、Credential Manager、安装器与 Windows Productization 尚未实施。
 
 ## 治理关系
 

@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–09 已完成，下一阶段为 Phase 10 Legacy MAUI Retirement；Phase 13 Android 已暂缓，不在当前执行队列
+> **项目状态**：实施中；Phase 00–10 已完成，下一阶段为 Phase 11 Windows Productization；Phase 13 Android 已暂缓，不在当前执行队列
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -130,7 +130,7 @@ Windows / Android Adapters ─→ inward-facing application ports
 
 Portable Core 的物理边界以真实编译依赖为准：持久化模型和平台无关逻辑优先移动；仍读取宿主设置、UI 状态或平台 I/O 的服务必须先做小范围适配。不得把混合 UI 状态模型整体误认成 Core 数据模型。
 
-产品源码、测试、Agent、受控构建资产与 solution 由外层仓库统一拥有。`terraria-wiki-offline/` 只作为固定上游参考 Submodule，不是产品 build/runtime 依赖；该物理所有权决策不改变上述分层、数据根或 P0 能力边界。
+产品源码、测试、Agent、受控构建资产与 solution 由当前仓库统一拥有。Phase 10 已移除旧 MAUI 参考 gitlink；固定上游来源由 ADR 和资产说明追溯，不是产品 build/runtime 依赖。该物理所有权决策不改变上述分层、数据根或 P0 能力边界。
 
 ---
 
@@ -171,7 +171,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 4. Phase Roadmap
 
-默认按依赖顺序推进。当前执行队列为 Phase 10、Phase 11，以及按真实需求决定是否实施的 Phase 12。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
+默认按依赖顺序推进。当前执行队列为 Phase 11，以及按真实需求决定是否实施的 Phase 12。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
 
 | Phase | 目标与边界 | 前置 | 阶段出口 | 计划文件 |
 |---|---|---|---|---|
@@ -185,7 +185,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **07 — Windows Runtime Smoke Test** | 接通客户端、AI Runtime、流式交互、生命周期和最小发布产物 | 04、06 | 已完成：无外网跨语言、两种发布 smoke 与发布版真实 provider 验收通过 | `openspec/changes/archive/phase-07-windows-runtime-smoke-test/plan.md` |
 | **08 — Presentation Rebuild** | 建设新的产品信息架构和核心页面，通过 Application 使用后端 | 04、07 | 已完成：AI-first Chat、Wiki Search、安全 Markdown 和唯一共享 Reader 通过 Windows 验证 | `openspec/changes/archive/phase-08-presentation-rebuild/plan.md` |
 | **09 — P0 UI Takeover** | 新 UI 逐项接管 Wiki、数据管理、设置、导入导出、维护和错误流程 | 08 | 已完成：五入口 Avalonia UI 接管 P0，复用 Application/Core 与唯一 Reader，并通过 Windows build/tests/UI 验收 | `openspec/changes/archive/phase-09-p0-ui-takeover/plan.md` |
-| **10 — Legacy MAUI Retirement** | 只清理已被替代、确认无依赖且获准删除的旧 Presentation/宿主 | 09 | 新客户端无功能缺口，旧宿主可回退或归档 | `openspec/changes/phase-10-legacy-maui-retirement/plan.md` |
+| **10 — Legacy MAUI Retirement** | 只清理已被替代、确认无依赖且获准删除的旧 Presentation/宿主 | 09 | 已完成：参考 gitlink 已移除，外层产品通过独立 Windows build/tests/publish smoke | `openspec/changes/archive/phase-10-legacy-maui-retirement/plan.md` |
 | **11 — Windows Productization** | 完成错误恢复、安装打包、升级和发布准备 | 07、10 | Windows 成品达到发布门槛 | `openspec/changes/phase-11-windows-productization/plan.md` |
 | **12 — Extensions** | 按真实需求增加其他 Toolset；每项独立决策 | 11 | 扩展通过既有边界接入且可独立关闭 | `openspec/changes/phase-12-extensions/plan.md` |
 | **13 — Android（暂缓）** | 当前不实施；恢复后在目标环境验证客户端、数据、Viewer、平台行为和 AI Runtime | 11，且须用户重新明确授权 | 暂不设置当前阶段出口；恢复后以 Android 目标平台实测为准 | 恢复后建立 `openspec/changes/phase-13-android/plan.md` |
@@ -203,7 +203,7 @@ Windows 当前开发不安装 MAUI/Android 工具链。Phase 13 恢复并获用�
 | Windows 宿主 | 新 Windows 版本不使用 MAUI |
 | 产品形态 | 新 Presentation + AI + Application，复用 Existing Wiki Core |
 | 产品平台范围 | Windows 当前；Android 未来；除此之外全部为明确非目标 |
-| 源码所有权 | 外层仓库统一拥有产品源码/测试/Agent/构建资产；固定上游 Submodule 只作参考 |
+| 源码所有权 | 当前仓库统一拥有产品源码/测试/Agent/构建资产；旧 MAUI gitlink 已退休，上游固定来源由 ADR/资产记录追溯 |
 | Core | 外层产品仓库中的单一平台无关 .NET 10 Wiki Core；不复制第二套实现 |
 | 数据根 | Core 接收宿主显式绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db` |
 | 数据库与搜索 | 保留现有 SQLite/FTS5 并局部修正 |
@@ -212,7 +212,7 @@ Windows 当前开发不安装 MAUI/Android 工具链。Phase 13 恢复并获用�
 | Viewer | 内容与数据链路保留；Windows 使用受限动态 loopback，Android 后续独立验证 |
 | AI 事实来源 | 通过稳定 Search / Read 使用同一份本地 Wiki 数据 |
 | 首个 Wiki Tool transport | 官方 MCP 无状态动态 loopback + 临时 bearer；只属于 Adapter，Android 不继承 |
-| 旧 UI | 只读 Submodule 中的行为参考；完成 P0 接管后由 Phase 10 决定参考仓库去留 |
+| 旧 UI | Phase 09 已完成 P0 接管；Phase 10 已选择移除本地参考 gitlink，历史行为通过固定上游提交和归档记录追溯 |
 | 变更方式 | Reuse → Fix → Wrap → Extract → Rewrite |
 
 ### 仍然开放
