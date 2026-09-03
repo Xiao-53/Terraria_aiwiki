@@ -15,18 +15,29 @@ publish, and runtime paths must not read `terraria-wiki-offline/`.
   - `Terraria_Wiki/wwwroot/js/iframe-bridge.js` → `Viewer/_common/iframe-bridge.js`
   - `Terraria_Wiki/Resources/AppIcon/{logo.svg,appicon.ico}` → `AppIcon/`
 
-The 94 files copied into this directory are byte-identical to the product snapshot. Together
-with `src/Terraria_Wiki.Windows/Assets/viewer-host.html` and
-`src/Terraria_Wiki.Windows/app.manifest`, they form the 96-file Windows Viewer/icon/host support
-set verified during the migration. All external snapshot files match upstream `a1dd899` except
-`Viewer/Web/_common/wiki-app-common.js`, whose product copy comes from `d67d904` and includes the
-later bounded lifecycle behavior introduced by product commit `5d1d52f`.
+The initial 94 files copied into this directory were byte-identical to the product snapshot.
+On 2026-09-03, `AppIcon/appicon.ico` became a product-owned override generated from the image
+supplied by the project owner. The current 94-file runtime asset set therefore consists of 93
+retained snapshot files and the generated icon. `AppIcon/appicon-source.png` preserves the
+1254×1254 RGBA source for regeneration and is not embedded or published as a runtime asset.
 
-For the migration checkout, the SHA-256 of the sorted per-file SHA-256 manifest is
-`5ac242971b3781303b8ee52c6105da31ee6e8d4eb42382658c431c3ed32e443a` for the 94-file snapshot and
-`59a57f6e08a6ad0a9cb37d48cc7abf8d7eba1fbee01a8ebad2493e642fe35231` for the complete 96-file
-support set. Paths are relative to the repository root and participate in the manifest, so a
-rename or content change alters the recorded value.
+The icon contains 256, 64, 48, 32, and 16 pixel 32-bit RGBA PNG-compressed frames generated with
+System.Drawing high-quality bicubic resizing. Its source SHA-256 is
+`7892172063d661a2ee77b389b105bcf201df4f80682cf7e66b9dae9bbbcd16b8`; the generated ICO SHA-256 is
+`cfb581e78a1a1682c4e0593cf56d5f567f14e0c79f677ae56859c8dbb26e0518`.
+
+Together with `src/Terraria_Wiki.Windows/Assets/viewer-host.html` and
+`src/Terraria_Wiki.Windows/app.manifest`, the runtime assets form the 96-file Windows
+Viewer/icon/host support set. All retained external snapshot files match upstream `a1dd899`
+except `Viewer/Web/_common/wiki-app-common.js`, whose product copy comes from `d67d904` and
+includes the later bounded lifecycle behavior introduced by product commit `5d1d52f`.
+
+For the current checkout, the SHA-256 of the sorted per-file SHA-256 manifest is
+`7b7d0ece9f45bcfb33bd58974423a1f20ca8f98d3679ff917c721d0b65f17cde` for the 94-file runtime
+asset set and `7c6e3d05f29a39c99f3b81a52f36e716a1120f3a6438e37265a2d021b35d0dfd` for the complete 96-file
+support set. The original migration values remain recorded in ADR 0007 and the archived migration
+plans. Paths are relative to the repository root and participate in the manifest, so a rename or
+content change alters the recorded value.
 
 ## Copyright and licensing notes
 
@@ -42,4 +53,6 @@ copyright headers. `handy-scroll.js` and Viewer.js are attributed by the upstrea
 notices and embedded attributions must not be stripped when the snapshot is updated or packaged.
 
 Before any public or commercial distribution, the maintainer must independently confirm that the
-upstream non-commercial statement and every third-party/game asset permit the intended release.
+upstream non-commercial statement, every third-party/game asset, and the project-owner-supplied
+application icon permit the intended release. The upstream licensing statements do not grant
+rights to the replacement application icon.

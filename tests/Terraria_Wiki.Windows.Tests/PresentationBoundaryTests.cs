@@ -3,7 +3,7 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class PresentationBoundaryTests
 {
     [Fact]
-    public void PresentationPinsSafeMarkdownAndLinksExistingBrandAssets()
+    public void PresentationPinsSafeMarkdownAndLinksExistingBrandAssetsAndNativeIcon()
     {
         var root = FindSourceRoot();
         var project = File.ReadAllText(Path.Combine(root, "Terraria_Wiki.Windows.csproj"));
@@ -12,6 +12,7 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("Markdig\" Version=\"1.3.2", project, StringComparison.Ordinal);
         Assert.Contains("assets/windows/AppIcon/logo.svg", project, StringComparison.Ordinal);
         Assert.Contains("assets/windows/AppIcon/appicon.ico", project, StringComparison.Ordinal);
+        Assert.Contains("<ApplicationIcon>../../assets/windows/AppIcon/appicon.ico</ApplicationIcon>", project, StringComparison.Ordinal);
         Assert.Contains("DisableHtml()", parser, StringComparison.Ordinal);
         Assert.Contains("UseCjkFriendlyEmphasis()", parser, StringComparison.Ordinal);
         Assert.Contains("UsePipeTables()", parser, StringComparison.Ordinal);

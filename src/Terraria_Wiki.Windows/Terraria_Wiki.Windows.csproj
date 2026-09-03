@@ -9,6 +9,7 @@
     <AssemblyName>Terraria_Wiki.Windows</AssemblyName>
     <RootNamespace>Terraria_Wiki.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
+    <ApplicationIcon>../../assets/windows/AppIcon/appicon.ico</ApplicationIcon>
   </PropertyGroup>
 
   <ItemGroup>
