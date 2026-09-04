@@ -58,7 +58,7 @@ public sealed class AiSidecarProtocolTests
 
         Assert.Equal(configuration.PythonExecutable, start.FileName);
         Assert.Equal(
-            ["-I", "-u", "-X", "utf8", @"C:\app\AgentRuntime\sidecar_launcher.py"],
+            ["-I", "-B", "-u", "-X", "utf8", @"C:\app\AgentRuntime\sidecar_launcher.py"],
             start.ArgumentList);
         var arguments = string.Join(' ', start.ArgumentList);
         Assert.DoesNotContain(configuration.Provider.BaseUrl, arguments, StringComparison.Ordinal);

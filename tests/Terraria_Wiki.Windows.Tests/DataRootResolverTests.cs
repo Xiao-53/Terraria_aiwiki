@@ -107,6 +107,12 @@ public sealed class DataRootResolverTests
         Assert.Equal(
             @"C:\temp\smoke.json",
             MainWindow.ParseOption(["--smoke-log", @"C:\temp\smoke.json"], "--smoke-log"));
+        Assert.Equal(
+            @"C:\temp\favorites.json",
+            MainWindow.ParseOption(["--chat-favorites", @"C:\temp\favorites.json"], "--chat-favorites"));
+        Assert.Equal(
+            @"C:\temp\logs",
+            MainWindow.ParseOption(["--diagnostics-directory", @"C:\temp\logs"], "--diagnostics-directory"));
         Assert.Throws<WindowsClientStartupException>(() =>
             WindowsClientRuntime.ParseHostSettingsPath(["--host-settings", "relative.json"]));
         Assert.Throws<ArgumentException>(() =>

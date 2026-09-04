@@ -1,7 +1,7 @@
 # Terraria AI Wiki — Master Architecture / Roadmap v0.6
 
 > **文档类型**：项目级架构大纲 / 阶段路线母文件
-> **项目状态**：实施中；Phase 00–10 已完成，下一阶段为 Phase 11 Windows Productization；Phase 13 Android 已暂缓，不在当前执行队列
+> **项目状态**：实施中；Phase 00–10 已完成，Phase 11 Windows Productization 的本地实现与 Windows 11 验证已完成，公开发行输入和外部渠道矩阵待关闭；Phase 13 Android 已暂缓
 > **产品平台范围**：Windows（当前）/ Android（未来）
 > **明确非目标**：除 Windows / Android 外的所有产品平台
 > **替代版本**：本文件替代 `ARCHITECTURE-v0.5.md`
@@ -171,7 +171,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 4. Phase Roadmap
 
-默认按依赖顺序推进。当前执行队列为 Phase 11，以及按真实需求决定是否实施的 Phase 12。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
+默认按依赖顺序推进。Phase 11 当前处于实施收尾，公开发行输入和外部渠道矩阵关闭后才达到阶段出口；Phase 12 只按真实需求决定是否实施。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
 
 | Phase | 目标与边界 | 前置 | 阶段出口 | 计划文件 |
 |---|---|---|---|---|

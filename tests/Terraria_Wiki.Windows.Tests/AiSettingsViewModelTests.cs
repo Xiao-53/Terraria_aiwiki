@@ -21,7 +21,7 @@ public sealed class AiSettingsViewModelTests
     }
 
     [Fact]
-    public async Task DeepSeekPresetSavesOfficialResponsesProviderAndRestartsRuntime()
+    public async Task DeepSeekPresetSavesOfficialProviderWithoutEchoingStoredSecret()
     {
         using var directory = new TestDirectory();
         var python = Path.Combine(directory.Path, "python.exe");
@@ -30,9 +30,10 @@ public sealed class AiSettingsViewModelTests
         var initial = new AiRuntimeConfigurationDraft(
             python,
             new AiProviderConfiguration("https://custom.example/v1", "custom-model", "chat_completions", null),
-            "test-key",
+            string.Empty,
             path,
-            Exists: true);
+            Exists: true,
+            HasStoredCredential: true);
         AiRuntimeConfigurationDraft? requested = null;
         var restartCount = 0;
         using var viewModel = new AiSettingsViewModel(
@@ -42,9 +43,9 @@ public sealed class AiSettingsViewModelTests
                 requested = draft;
                 return Task.FromResult(AiRuntimeConfiguration.Create(
                     path,
-                    draft.PythonExecutable,
+                    python,
                     draft.Provider,
-                    draft.ApiKey));
+                    "stored-test-key"));
             },
             _ =>
             {
@@ -52,8 +53,7 @@ public sealed class AiSettingsViewModelTests
                 return Task.FromResult(new WindowsAiRuntimeStatus(
                     WindowsAiRuntimeState.Ready,
                     "AI Runtime 已就绪。"));
-            },
-            _ => Task.FromResult<string?>(null));
+            });
         viewModel.Attach();
         await viewModel.RefreshAsync();
 
@@ -67,13 +67,16 @@ public sealed class AiSettingsViewModelTests
         Assert.Equal("deepseek-v4-pro", requested.Provider.Model);
         Assert.Equal("responses", requested.Provider.Api);
         Assert.Equal("max", requested.Provider.ReasoningEffort);
+        Assert.Equal(string.Empty, requested.ApiKey);
+        Assert.Equal(string.Empty, viewModel.ApiKey);
+        Assert.True(viewModel.HasStoredCredential);
         Assert.Equal(1, restartCount);
         Assert.False(viewModel.IsDirty);
         Assert.Contains("已保存并应用", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task CustomProviderPreservesCompatibleApiAndMapsReasoningChoice()
+    public async Task CustomProviderAndReplacementCredentialAreForwarded()
     {
         using var directory = new TestDirectory();
         var python = Path.Combine(directory.Path, "python.exe");
@@ -82,9 +85,10 @@ public sealed class AiSettingsViewModelTests
         var initial = new AiRuntimeConfigurationDraft(
             python,
             new AiProviderConfiguration("https://api.deepseek.com", "deepseek-v4-flash", "responses", null),
-            "test-key",
+            string.Empty,
             path,
-            Exists: true);
+            Exists: true,
+            HasStoredCredential: true);
         AiRuntimeConfigurationDraft? requested = null;
         using var viewModel = new AiSettingsViewModel(
             _ => Task.FromResult(initial),
@@ -93,14 +97,13 @@ public sealed class AiSettingsViewModelTests
                 requested = draft;
                 return Task.FromResult(AiRuntimeConfiguration.Create(
                     path,
-                    draft.PythonExecutable,
+                    python,
                     draft.Provider,
                     draft.ApiKey));
             },
             _ => Task.FromResult(new WindowsAiRuntimeStatus(
                 WindowsAiRuntimeState.Disabled,
-                "自定义服务暂未通过运行时验证。")),
-            _ => Task.FromResult<string?>(null));
+                "自定义服务暂未通过运行时验证。")));
         viewModel.Attach();
         await viewModel.RefreshAsync();
 
@@ -110,6 +113,7 @@ public sealed class AiSettingsViewModelTests
         viewModel.CustomModel = "compatible-model";
         viewModel.CustomApiIndex = 1;
         viewModel.ReasoningEffortIndex = 2;
+        viewModel.ApiKey = "replacement-test-key";
         await viewModel.SaveAsync();
 
         Assert.NotNull(requested);
@@ -117,41 +121,68 @@ public sealed class AiSettingsViewModelTests
         Assert.Equal("compatible-model", requested.Provider.Model);
         Assert.Equal("chat_completions", requested.Provider.Api);
         Assert.Equal("low", requested.Provider.ReasoningEffort);
+        Assert.Equal("replacement-test-key", requested.ApiKey);
         Assert.Contains("已保存", viewModel.StatusMessage, StringComparison.Ordinal);
         Assert.Contains("暂未通过", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]
-    public async Task PythonPickerMarksDraftDirtyWithoutSaving()
+    public async Task BundledPythonIsReadOnlyAndCredentialStatusDoesNotExposeSecret()
     {
-        using var directory = new TestDirectory();
-        var selected = Path.Combine(directory.Path, "python.exe");
-        var path = Path.Combine(directory.Path, "ai-runtime.json");
+        const string bundledPython = @"C:\app\AgentRuntime\python\python.exe";
         using var viewModel = new AiSettingsViewModel(
             _ => Task.FromResult(new AiRuntimeConfigurationDraft(
-                string.Empty,
+                bundledPython,
                 new AiProviderConfiguration("https://api.deepseek.com", "deepseek-v4-flash", "responses", null),
                 string.Empty,
-                path,
-                Exists: false)),
+                @"C:\config\ai-runtime.json",
+                Exists: true,
+                HasStoredCredential: true)),
+            (_, _) => throw new InvalidOperationException(),
+            _ => throw new InvalidOperationException());
+        viewModel.Attach();
+
+        await viewModel.RefreshAsync();
+
+        Assert.Equal(bundledPython, viewModel.PythonExecutable);
+        Assert.True(viewModel.HasStoredCredential);
+        Assert.Equal(string.Empty, viewModel.ApiKey);
+        Assert.Contains("Windows Credential Manager", viewModel.CredentialStatus, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task ClearingStoredCredentialDoesNotChangeProviderConfiguration()
+    {
+        const string bundledPython = @"C:\app\AgentRuntime\python\python.exe";
+        var clearCount = 0;
+        using var viewModel = new AiSettingsViewModel(
+            _ => Task.FromResult(new AiRuntimeConfigurationDraft(
+                bundledPython,
+                new AiProviderConfiguration("https://api.deepseek.com", "deepseek-v4-flash", "responses", null),
+                string.Empty,
+                @"C:\config\ai-runtime.json",
+                Exists: true,
+                HasStoredCredential: true)),
             (_, _) => throw new InvalidOperationException(),
             _ => throw new InvalidOperationException(),
-            _ => Task.FromResult<string?>(selected));
+            _ =>
+            {
+                clearCount++;
+                return Task.FromResult(new WindowsAiRuntimeStatus(
+                    WindowsAiRuntimeState.Disabled,
+                    "AI 已停用。",
+                    "model_authentication"));
+            });
         viewModel.Attach();
         await viewModel.RefreshAsync();
 
-        viewModel.BrowsePythonCommand.Execute(null);
-        await WaitUntilAsync(() => !viewModel.IsBusy && viewModel.PythonExecutable == selected);
+        await viewModel.ClearCredentialAsync();
 
-        Assert.True(viewModel.IsDirty);
-        Assert.True(viewModel.CanSave);
-    }
-
-    private static async Task WaitUntilAsync(Func<bool> condition)
-    {
-        var deadline = DateTime.UtcNow + TimeSpan.FromSeconds(2);
-        while (!condition() && DateTime.UtcNow < deadline)
-            await Task.Delay(10);
-        Assert.True(condition());
+        Assert.Equal(1, clearCount);
+        Assert.False(viewModel.HasStoredCredential);
+        Assert.False(viewModel.CanClearCredential);
+        Assert.True(viewModel.IsDeepSeek);
+        Assert.Equal(0, viewModel.DeepSeekModelIndex);
+        Assert.Contains("已停用", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 }

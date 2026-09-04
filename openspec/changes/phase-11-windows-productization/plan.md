@@ -6,7 +6,7 @@
 - 创建日期：2026-09-03
 - 最后更新：2026-09-04
 - 范围：Windows 错误恢复、内置 Python Runtime、Credential Manager、Evergreen WebView2 前置处理、版本化 self-contained 发布、普通 Windows 安装程序、portable zip、GitHub Releases 更新与发布准备、发布诊断和许可告知
-- 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`assets/windows/README.md`
+- 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0008-use-github-releases-windows-distribution.md`、`assets/windows/README.md`
 
 ## 背景与当前证据
 
@@ -83,9 +83,9 @@
 - [ ] 用户提供并确认公开 GitHub 仓库的 `owner/repo` 和 remote；公开仓库是无内置 token 更新的必要条件。当前本地仓库没有 remote。
 - [ ] 用户确认首个版本号及 tag 规则，默认候选为 SemVer 2.0 与 `v<version>`；现有发布资产不得被重写为不同内容。
 - [ ] 用户确认软件源码许可证的精确文本和适用范围。若坚持把项目自有代码置于 CC BY-NC-SA 4.0，须明确接受 CC 不建议用于软件、非 OSI 开源及与第三方软件许可证分离的后果；本计划不代替权利人作不可撤销授权。
-- [ ] 逐项核对 Viewer/Wiki/游戏素材、Calamity 内容、项目图标和第三方生产依赖的实际许可/署名；用户的非商业意图不能替代来源方授权。
-- [ ] Windows 构建机具备 .NET 10 SDK 和经版本/hash 固定的 Velopack、CPython、Python wheels 与 WebView2 bootstrap 输入。安装终端不得需要开发工具。
-- [ ] 实施开始前重新检查 tracked/untracked 状态；触碰核心 Runtime/配置前建立只包含已批准范围的可恢复 Git 保存点。
+- [ ] 逐项核对 Viewer/Wiki/游戏素材、Calamity 内容、项目图标和第三方生产依赖的实际许可/署名；已生成依赖清单并保留现有来源/许可提示，但用户的非商业意图不能替代缺失的逐文件权利证据。
+- [x] Windows 构建机已具备 .NET 10 SDK；Velopack 1.2.0、CPython 3.14.7 x64 embeddable、uv 0.12.9 和 Python wheels 已按版本/hash 固定。安装与 portable smoke 均未使用外部 .NET/Python/uv/pip。
+- [x] 实施前已确认 tracked 工作树干净并建立计划保存点 `67b138f`；既有未跟踪治理归档、实验、历史架构和 `.codex/` 始终排除在 Phase 11 范围外。
 - [ ] 任何真实 provider 请求和 GitHub draft/prerelease/stable 上传均在执行前取得对应明确授权；GitHub token 只由受控本机环境或 Actions `GITHUB_TOKEN` 提供，不写入仓库、参数日志或客户端。
 
 ## 范围与非目标
@@ -186,20 +186,20 @@
 
 ## 执行步骤
 
-- [ ] **关闭剩余输入并建立恢复点**：记录 GitHub `owner/repo`、首发版本/tag、软件许可证范围和 provider 验收选择；重新检查 Git 状态，建立只含已批准范围的 Git 保存点；计划转 `approved`，实施开始时转 `in-progress`。
-- [ ] **制作可删除的 Velopack PoC**：用当前 self-contained publish 生成不同 installer ID 的 unsigned `Setup.exe`、portable 和两版本 local feed；验证普通用户安装、hook 首行执行、Viewer/WikiTools loopback、Python child process、文件选择器、外链、single-instance、配置目录隔离、portable 和卸载。PoC 不进入产品 Runtime；硬阻断先更新计划。
-- [ ] **证明修复与更新语义**：损坏安装目录中的受控 DLL/Viewer/Python 文件后重跑同版本 `Setup.exe`，确认 payload 恢复且外部 settings/favorites/data root/credential canary 不变；完成 N→N+1、本地中断和回退测试，确认 child process 全部关闭且无混合版本。
-- [ ] **固定 release inputs 与版本**：建立唯一 `win-x64` product publish/profile、SemVer/tag/assembly 映射、installer ID、`win-x64-stable` channel、制品命名、官方 input URL/hash 和 payload allowlist；明确不 trim/AOT/single-file。
-- [ ] **构建封闭式 Python payload**：从精确官方 embeddable ZIP 与 `uv.lock` 生成生产 `site-packages`，移除 pip/uv/tests/cache，记录文件/hash/license；Host 从安装目录定位并完成 fake provider、TLS/CA/native wheel 与安装目录零写入 smoke。
-- [ ] **迁移 Credential Manager 与 v3**：实现最小 adapter、byte limit/redaction、v2 可重试迁移、v3 原子保存、replace/preserve/clear 语义及故障注入 tests；确认 key 不在 JSON、命令参数、协议、日志、crash、制品或 Git。
-- [ ] **接入 GitHub stable 更新**：实现 public GithubSource、显式检查、下载/取消/确认重启、portable/installed 分支和安全错误；draft/prerelease 默认忽略，不内置 token，不在应用启动时静默下载。
-- [ ] **收口 WebView2、恢复与诊断**：为安装器配置官方 Evergreen bootstrap；portable 和 Host probe 提供官方获取/修复动作；增加有界脱敏诊断、版本/Runtime/update 状态，只局部调整 Settings/Shell。
-- [ ] **生成 release 制品和自动化**：固定 Velopack tool/library 版本，在 Windows 生成 Setup、portable、full package/index、checksums、manifest 与 notices；GitHub repo 确认后加入最小权限 workflow，默认先产生 draft，不自动公开 stable。
-- [ ] **扩充自动化与静态边界**：运行全部既有测试和新增 productization tests；扫描 P0/API/schema/protocol 未变化、安装目录无写入、payload allowlist、secret/license/provenance、版本/channel 和恢复不变量。
+- [ ] **关闭剩余输入并建立恢复点**：恢复点已完成；公开 GitHub `owner/repo`、正式版本/tag 和项目软件许可证仍等待用户确认。真实 provider 与任何 GitHub 外部写入仍未授权。
+- [x] **制作可删除的 Velopack PoC**：Setup、portable、hooks、Viewer/WikiTools、内置 Python、配置目录隔离和卸载已通过真实 Windows 11 验证；最终 portable/installed smoke 均报告正确的 Velopack update context，既有 single-instance、文件选择和外链自动化继续通过。
+- [x] **证明修复与更新语义**：同版本 Setup 已恢复被破坏的 Viewer/Python 文件且保留外部 settings/favorites/data canary；N→N+1 delta 已正确重建成目标 full package并校验 hash 后应用，升级后无混合版本、P0 smoke 通过。直接把 delta 当 full apply 的错误操作已记录并用可信 Setup 修复。
+- [x] **固定 release inputs 与版本**：已建立唯一 self-contained `win-x64` profile、SemVer/tag/assembly 映射、`TerrariaAIWiki.Windows` installer ID、`win-x64-stable` channel、制品命名、官方 input URL/hash、NuGet lock 和 payload allowlist；明确禁用 trim/AOT/single-file。正式版本值仍是发布时输入。
+- [x] **构建封闭式 Python payload**：已从 Python 3.14.7 官方 embeddable ZIP与 `uv.lock` 构建 107 MiB 生产 Runtime，移除 pip/uv/tests/cache/bytecode，并通过真实 Windows Application + WikiTools + Sidecar fake provider、TLS/OpenSSL、native wheel 与退出清理回归。
+- [x] **迁移 Credential Manager 与 v3**：已实现 current-user generic credential、2560-byte UTF-8 上限、严格 v3、v2 可重试迁移、durable replace、preserve/replace/clear/rollback，并用 fake 和随机专属 native target 覆盖读写删除；key 不进入 v3、参数、协议或诊断。
+- [x] **接入 GitHub stable 更新**：已实现 public `GithubSource`、固定 stable channel、显式检查/下载/取消/应用重启和安全页内状态；无 token、无启动静默下载、无 downgrade，local build 缺少合法仓库元数据时禁用。真实 GitHub Releases 行为留给获授权后的渠道矩阵。
+- [x] **收口 WebView2、恢复与诊断**：Setup 使用 Evergreen `webview2` bootstrap，portable/Host probe 只提供 Microsoft 官方入口；WebView2 user-data 显式放入外部 LocalAppData 配置根，不污染可替换的 `current`/portable payload；Shell 按数据/WebView2错误显示对应动作；诊断采用 allowlist、稳定 code、512 KiB 双文件轮换且不保存任意 payload。
+- [x] **生成本地 release 制品和自动化**：Windows 脚本已生成 Setup、portable、full/delta/index、checksums、payload/dependency/release manifests 和 notices，并默认拒绝 dirty source/缺少软件许可证；最终本地候选 `0.11.0-local.22` 已重建且保持 `publicationReady: false`。仓库坐标未确认，因此按 ADR 0008 不创建会猜测外部目标的上传 workflow。
+- [x] **扩充自动化与静态边界**：全部既有测试和新增 productization tests 通过；P0/API/schema/protocol、Core/Application 平台依赖、安装目录写入、payload allowlist、secret/license/provenance、版本/channel 和恢复不变量均已扫描。
 - [ ] **执行干净 Windows 11 安装矩阵**：在无 .NET/Python/uv/pip/开发工具的干净 Windows 11 x64 完成安装→首次启动→数据根选择/恢复→Viewer/Search→内置 AI fake→退出；覆盖 WebView2 已有/缺失、AI key 缺失、credential failure、Runtime 损坏、repair、卸载与重装。
 - [ ] **执行 GitHub Releases 升级矩阵**：获得外部发布授权后，用目标 GitHub repo 的独立 RC channel/prerelease 验证 N→N+1、release index/full package/hash、断网/限流/取消/损坏下载、restart 和 portable update；不得拿 local feed 代替最终渠道证据。
 - [ ] **执行 Windows 10 低成本门槛**：仅在不新增依赖/代码路径的前提下，用 Windows 10 22H2 x64 干净环境运行同一 Setup/portable/upgrade/repair/P0 矩阵。全部通过才写“best-effort compatible”；任一平台差异或维护成本即保持 Windows 11 only。
-- [ ] **执行 P0 与 UI 验收**：Windows Release build/tests、目录 publish、安装/portable smoke、代表性旧数据副本启动、Viewer assets/bridge、Wiki 数据管理和 AI 故障隔离；UI 检查 Light/Dark、1280×820、900×600、宽/窄 Reader、键盘/焦点和新增异步状态。
+- [x] **执行 P0 与 UI 验收**：最终 Windows Release build/tests、安装/portable smoke、合成数据 Search/Viewer assets/bridge、内置 AI fake provider、退出清理和 AI 故障隔离通过；实际检查 Light/Dark、1280×820、900×600、宽/窄 Reader overlay、Tab/Shift+Tab、关闭动作和新增更新/诊断状态，Escape/1100 DIP 精确边界由 Presentation 自动化覆盖。
 - [ ] **执行候选发布审计**：验证 unsigned 状态、SmartScreen/Smart App Control 告知、制品 SHA-256、许可/署名/notices、隐私/support、安装/更新/修复/卸载说明；如获付费请求授权，再执行一次有限真实 provider 验收。
 - [ ] **同步持续文档并完成 Phase**：把实际决策写入 ADR/spec，把可复现命令写入 runbook，只更新 README/项目基线/架构状态；检查 diff、生成物、包、日志、进程和未跟踪范围，Windows 证据齐全后标记 completed、归档并创建只含 Phase 11 的 Git 提交，不自行 push 或发布。
 
@@ -278,6 +278,12 @@
 - 2026-09-04：用户明确取消 Store、Store identity/publisher 和 Store 更新工作，改为 GitHub Releases only、普通 self-contained `win-x64` installer + portable、Windows 11 x64、暂不商业签名，并确认继续 Evergreen WebView2、内置 Python、Credential Manager 与完整产品化回归。
 - 2026-09-04：重新核对项目上下文、`terraria-ui` Skill、Velopack/GitHub/Microsoft/Python/Creative Commons/OSI 官方资料，重写计划为单一 Velopack + GitHub Releases 路线；未进入实施。
 - 2026-09-04：用户明确授权开始实施 Phase 11；计划转为 `in-progress`。首步为只使用本地 feed 的 Velopack 安装/portable/修复/更新 PoC，外部 GitHub 发布仍等待单独授权与仓库地址。
+- 2026-09-04：接入 Velopack 1.2.0 最早入口 hook、self-contained `win-x64` publish profile、普通 Setup/portable/full+delta 制品、GitHub stable 更新状态、Evergreen WebView2 bootstrap/恢复入口与有界本地诊断。
+- 2026-09-04：AI 配置升级为严格 v3；API key 迁入 Windows Credential Manager，Runtime 固定为内置 CPython 3.14.7 x64，Sidecar 使用 `-I -B -u -X utf8`。完成 v2 迁移、preserve/replace/clear、原生 credential 和跨语言 fake-provider 测试。
+- 2026-09-04：在实际 Windows 11 Enterprise build 26200 / WebView2 152.0.4191.53 上完成隔离安装、Search/Viewer/JS/CSS/image/audio/bridge/内置 Python/退出清理、同版本 repair、N→N+1、portable 和卸载验证；外部 host settings/favorites/data canary 均保留。
+- 2026-09-04：最终本地候选 `0.11.0-local.22` 生成 119,647,140-byte Setup、114,926,892-byte portable zip 与 115,056,548-byte full package；7/7 checksums 通过，portable 解包后 6,404 个 manifest 文件在运行前后均无 hash/数量差异，候选因占位发布参数和待定许可证保持 `publicationReady: false`。
+- 2026-09-04：最终 portable 与 installed smoke 均通过并报告正确版本、GitHub releases URI 和 portable/installed update context；卸载删除安装根、快捷方式和注册项并保留外部设置/收藏/Wiki 数据。WebView2 profile 位于 `%LocalAppData%\Terraria AI Wiki\WebView2`，安装/portable payload 未产生 WebView cache、`.pyc` 或残留进程。
+- 2026-09-04：完成 Light 1280×820、Dark 900×600 的宽屏 Reader、窄屏 Reader overlay、AI 设置和 About/更新/诊断视觉检查；Tab/Shift+Tab 与 overlay 关闭动作通过，Escape 与 1100 DIP 分界由自动化回归覆盖。
 
 ## 发现、偏差与决策
 
@@ -292,17 +298,20 @@
 - **发现**：当前 `apiKey` 允许最多 4096 字符，而 generic credential blob 上限为 2560 bytes；v3 必须按编码后的 byte length 验证并更新持续 spec。
 - **许可冲突**：用户的“免费、开源、非商用”意图不能同时精确对应 OSI 开源定义；CC 官方也不建议把 CC 许可证用于软件。本计划采用“免费、公开源码、非商业”作为尚未选定软件许可证前的准确措辞，并保持 Wiki/第三方许可分层。
 - **治理偏差**：`.agents/skills/terraria-ui/SKILL.md` 的必读源码路径仍指向已退休的 `terraria-wiki-offline/src/...`，与根 `AGENTS.md`、`INIT.md` 和 Phase 10 的根级 `src/...` 事实冲突。本计划遵循更高层当前治理；修正 Skill 不属于本次产品化规划授权。
+- **实现发现**：Velopack delta 是重建目标 full package 的 patch 输入，不能直接传给 updater 当作完整包。错误的直接 apply 会留下不完整 `current`；runbook 已明确要求先 patch、校验目标 full hash，再 apply，并保留可信 Setup 作为 repair 路径。
+- **实现发现**：Velopack portable 不包含 `createdump.exe`，若在 pack 前把它计入 payload manifest 会产生伪完整性差异。发布脚本现于 manifest 前显式移除该诊断辅助文件，最终候选将重新验证零差异。
+- **实现发现**：NativeWebView2 默认 user-data 位置可能落入可执行文件附近，违反安装/portable payload 只读与完整替换边界。Windows `EnvironmentRequested` 现于 adapter 创建前把 `UserDataFolder` 固定到外部 LocalAppData 配置根，并有边界测试和实际 payload 零写入证据。
+- **范围决定**：当前无 Git remote 和目标公开仓库。自动上传 workflow 会固化未知外部目标且不具备可执行渠道证据，因此 Phase 11 只提供可复现的本地发行脚本与 runbook；确认 `owner/repo` 后再添加最小权限 draft workflow。
 
 ## 验证结果
 
-当前只完成规划期读取与静态核对：
-
-- 已确认 Phase 00–10 状态、Phase 11 架构边界、持续契约、ADR、Windows project、Runtime/config、Settings/Shell 和资产许可事实。
-- 已确认当前仓库没有 remote/release automation，tracked 工作树没有用户已有修改，既有未跟踪范围保持不变。
-- 已核对 .NET self-contained、Velopack Setup/portable/GitHub source/WebView2 bootstrap、GitHub Releases、CPython embeddable、Credential Manager、Windows unsigned 风险、Windows 10 生命周期与 CC/OSI 许可边界的权威资料。
-- 已对计划执行 `git diff --check` 和 Store/MSIX 残留扫描；结果记录在本次规划交付中。
-- 未执行 build/test/publish、Python/Velopack 下载、installer PoC、GitHub upload、安装/升级/repair/uninstall、真实 provider 或 UI 验收；这些都属于计划获批后的实施门槛。
+- 最终 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 292/292 通过（Core 92、Application 54、WikiTools 28、Windows 118）。
+- Python frozen 回归通过：ruff check/format、strict mypy、pytest 77 passed / 4 explicit opt-in skipped；内置 CPython 3.14.7 x64、OpenSSL 3.5.7、pydantic-ai 2.31.0 的真实跨语言 fake-provider 测试通过，未生成 `.pyc`，退出后无 Python 子进程。
+- 最终本地候选生成 119,647,140-byte Setup、114,926,892-byte portable zip、115,056,548-byte full package；7/7 SHA-256 一致，单制品低于 2 GiB，应用与 Setup PE 均确认无 certificate table，portable 解包与 payload manifest 精确一致。
+- 实际 Windows 11 安装 smoke：Search 1、JS 1、CSS 1、image 1、audio 3、Viewer messages 9/9、cleanup true；repair 恢复故意损坏的 Viewer/Python，升级后 payload 无混合版本，portable smoke 和卸载注册/快捷方式/安装根清理通过。
+- Light/Dark、1280×820、900×600、宽/窄 Reader、设置/更新/诊断与键盘焦点已完成实际 UI 检查；精确 Reader threshold/Escape 另有自动化证据。
+- 公开 GitHub upload、真实 GitHub update source、WebView2 缺失干净机、Windows 10、真实付费 provider、软件许可证确认与逐项素材权利审计尚未执行；不能由本地 feed、已有 WebView2 或 fake provider 代替。
 
 ## 完成摘要
 
-Phase 11 尚未实施。本 draft 已按用户决定收敛为：从唯一 self-contained `win-x64` payload 生成普通每用户 `Setup.exe` 与 portable zip，以公开 GitHub Releases 作为唯一应用发布和更新来源，继续使用 Evergreen WebView2、内置 CPython 与 Windows Credential Manager，并完整验证安装、更新、修复、卸载、错误恢复和 P0。Windows 11 x64 是正式首发支持，Windows 10 22H2 x64 只作低成本 best-effort 门槛，首发制品明确 unsigned。开始实施前仍需确认公开 GitHub `owner/repo`、首发版本和软件源码许可证范围；计划批准不等于授权外部发布或付费请求。
+Phase 11 的本地实现、最终候选、本机 Windows 11 产品化回归和 UI 验收已经完成，可作为实施检查点保存。阶段仍保持 `in-progress`：公开发行就绪被目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证与素材权利核对阻断，真实 GitHub 渠道、WebView2 缺失干净机和 Windows 10 条件矩阵也尚无证据。未获相应输入与授权前不会上传 Release、发送真实 provider 请求、归档本计划或把本地候选标为 `publicationReady`。

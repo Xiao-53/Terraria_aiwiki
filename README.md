@@ -42,6 +42,10 @@ codex
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
 - Windows AI Runtime 决策：[`docs/adr/0006-use-stdio-python-sidecar.md`](./docs/adr/0006-use-stdio-python-sidecar.md)
 - 产品源码与参考仓库分离决策：[`docs/adr/0007-separate-product-source-from-reference.md`](./docs/adr/0007-separate-product-source-from-reference.md)
+- Windows GitHub Releases 分发决策：[`docs/adr/0008-use-github-releases-windows-distribution.md`](./docs/adr/0008-use-github-releases-windows-distribution.md)
+- 正在实施的 Phase 11 记录：[`openspec/changes/phase-11-windows-productization/plan.md`](./openspec/changes/phase-11-windows-productization/plan.md)
+- Windows 产品化能力契约：[`openspec/specs/windows-productization/spec.md`](./openspec/specs/windows-productization/spec.md)
+- Windows 发布与本地验收手册：[`docs/release/windows.md`](./docs/release/windows.md)
 - 已完成产品源码分离记录：[`openspec/changes/archive/separate-product-from-reference/plan.md`](./openspec/changes/archive/separate-product-from-reference/plan.md)
 - AI Backend 能力契约：[`openspec/specs/ai-backend/spec.md`](./openspec/specs/ai-backend/spec.md)
 - Windows AI Runtime 能力契约：[`openspec/specs/windows-ai-runtime/spec.md`](./openspec/specs/windows-ai-runtime/spec.md)
@@ -98,7 +102,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 当前路线与状态
 
-产品源码已迁到当前仓库根级目录，Windows build/publish/runtime 不读取旧 MAUI checkout；Phase 10 已移除参考 gitlink 并通过独立 Windows 回归，下一阶段是 Phase 11 Windows Productization。
+产品源码已迁到当前仓库根级目录，Windows build/publish/runtime 不读取旧 MAUI checkout；Phase 10 已移除参考 gitlink。Phase 11 Windows Productization 正在实施，本地产品化实现与 Windows 11 验证已完成，公开 GitHub Release 所需输入和外部渠道矩阵仍待关闭。
 
 ```text
 Migration Baseline & Host Spike
@@ -118,7 +122,7 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–10 已完成。** Windows Avalonia Client 默认进入 AI-first Presentation，并由五个真实入口接管问答、收藏、Wiki 资料库、数据管理和设置。收藏/Reader、全部页面与历史、Wiki 切换与统计、下载更新、失败处理、数据库维护、`.pkg` 两阶段导入与安全导出、强类型设置和启动错误恢复均复用现有 Application/Core 与唯一共享 Reader；Presentation 不直接访问 SQLite。设置页现含常规与 AI 配置二级菜单，可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider、选择思考强度并在保存后重启当前 AI Runtime；配置继续使用严格 v2。活动数据变化会刷新依赖页面并按需重绑同一个动态 loopback Viewer；无页面数据时仍可进入管理和设置。Phase 10 在不保留旧 MAUI checkout 的状态下完成 Windows Release 0-warning build、275/275 .NET tests 和两种 `win-x64` 发布 smoke；Light/Dark、1280×820、900×600、数据源确认和设置状态的 Phase 09 目标窗口证据继续有效，真实 3.4 GB 旧 Wiki 数据启动恢复证据继续有效。当前执行队列为 Phase 11，以及按真实需求决定是否实施的 Phase 12；Phase 13 Android 已暂缓，须用户重新明确授权后才能恢复。多轮、内置 Python、Credential Manager、安装器和发布渠道尚未完成。
+**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。最终 Windows Release 构建为 0 warning/0 error，292/292 .NET tests 通过。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
 
 ## 工作区结构
 
@@ -145,7 +149,8 @@ terraria_aiwiki/
 │     ├─ 0004-use-loopback-mcp-wiki-tool-transport.md # Wiki Tool transport
 │     ├─ 0005-use-pydantic-ai-openai-backend.md # AI Backend
 │     ├─ 0006-use-stdio-python-sidecar.md # Windows AI Runtime
-│     └─ 0007-separate-product-source-from-reference.md # 源码所有权
+│     ├─ 0007-separate-product-source-from-reference.md # 源码所有权
+│     └─ 0008-use-github-releases-windows-distribution.md # Windows 分发
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约
@@ -156,7 +161,7 @@ terraria_aiwiki/
 
 产品源码位于仓库根级目录；BigBearKing 上游 .NET MAUI/Blazor Hybrid 旧宿主只通过 ADR 0007 记录的 URL 与固定提交追溯，不保留在当前 checkout。MAUI/Blazor 是旧宿主事实，不参与当前 Windows 产品构建。
 
-新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04 已把动态 loopback Viewer、Windows data-root/设置/锁 adapters 和最小搜索阅读壳接入生产项目；Phase 05 已把无状态 loopback MCP Wiki Tools 隔离为只依赖 Application 的 Adapter；Phase 07 已实现并实测 Windows stdio Python Sidecar 与发布复制，当前 Windows 用户级配置为严格 v2；Phase 08 已用 XAML、内部状态模型、安全原生 Markdown 和唯一共享 Reader 重建 AI/Wiki 核心 Presentation；Phase 09 已完成收藏、资料库、数据管理、设置、导入导出、维护和错误流程的 P0 UI 接管；Phase 10 已退休旧 MAUI 参考 checkout。设置页随后增补了 DeepSeek 官方 API / 自定义 OpenAI-compatible provider 与思考强度配置入口，仍复用同一 v2 和显式 Runtime 重试。内置 Python、Credential Manager、安装器、WebView2 bootstrap 与发布渠道仍须在对应阶段完成。
+新目标客户端保留 .NET 10、SQLite/FTS5、HtmlAgilityPack、MediaWiki API 和现有 Local Viewer 资产，使用 Avalonia + NativeWebView。Phase 04–10 已完成 Windows Foundation、Wiki Tools、AI Runtime、Presentation、P0 UI 接管和旧 MAUI 参考退休。Phase 11 将 stdio Sidecar 固定到只读内置 CPython Runtime，用户级配置升级为严格 v3，API key 存入 Windows Credential Manager；同一 self-contained payload 经 Velopack 生成普通 Setup、portable 和完整/增量更新制品，应用只从公开 GitHub Releases 的 stable channel 显式检查更新。WebView2 继续使用 Evergreen Runtime，其用户数据固定在应用安装目录之外。公开发布参数和外部渠道验证仍按当前 Phase 11 计划关闭。
 
 | 环境 | 职责 |
 |---|---|

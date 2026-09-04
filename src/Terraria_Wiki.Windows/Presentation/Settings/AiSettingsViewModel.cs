@@ -9,7 +9,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     private readonly Func<CancellationToken, Task<AiRuntimeConfigurationDraft>> _load;
     private readonly Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>> _save;
     private readonly Func<CancellationToken, Task<WindowsAiRuntimeStatus>> _restart;
-    private readonly Func<CancellationToken, Task<string?>> _pickPythonExecutable;
+    private readonly Func<CancellationToken, Task<WindowsAiRuntimeStatus>> _clearCredential;
     private CancellationTokenSource? _operationCancellation;
     private AiRuntimeConfigurationDraft? _savedDraft;
     private string _statusMessage = "打开此页后载入 AI 配置。";
@@ -20,6 +20,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     private int _providerIndex;
     private string _pythonExecutable = string.Empty;
     private string _apiKey = string.Empty;
+    private bool _hasStoredCredential;
     private int _deepSeekModelIndex;
     private string _customBaseUrl = string.Empty;
     private string _customModel = string.Empty;
@@ -31,15 +32,16 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         Func<CancellationToken, Task<AiRuntimeConfigurationDraft>> load,
         Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>> save,
         Func<CancellationToken, Task<WindowsAiRuntimeStatus>> restart,
-        Func<CancellationToken, Task<string?>> pickPythonExecutable)
+        Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? clearCredential = null)
     {
         _load = load ?? throw new ArgumentNullException(nameof(load));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _restart = restart ?? throw new ArgumentNullException(nameof(restart));
-        _pickPythonExecutable = pickPythonExecutable ?? throw new ArgumentNullException(nameof(pickPythonExecutable));
+        _clearCredential = clearCredential
+            ?? (_ => throw new InvalidOperationException("AI credential removal is unavailable."));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => IsAvailable && !IsBusy);
         SaveCommand = new AsyncCommand(_ => SaveAsync(), _ => CanSave);
-        BrowsePythonCommand = new AsyncCommand(_ => BrowsePythonAsync(), _ => IsAvailable && !IsBusy);
+        ClearCredentialCommand = new AsyncCommand(_ => ClearCredentialAsync(), _ => CanClearCredential);
     }
 
     public string StatusMessage
@@ -95,7 +97,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     public string PythonExecutable
     {
         get => _pythonExecutable;
-        set { if (SetProperty(ref _pythonExecutable, value ?? string.Empty)) MarkDirty(); }
     }
 
     public string ApiKey
@@ -103,6 +104,11 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         get => _apiKey;
         set { if (SetProperty(ref _apiKey, value ?? string.Empty)) MarkDirty(); }
     }
+
+    public bool HasStoredCredential => _hasStoredCredential;
+    public string CredentialStatus => HasStoredCredential
+        ? "已安全保存在 Windows Credential Manager；留空可继续使用，输入新值可替换。"
+        : "尚未保存密钥；输入后将写入 Windows Credential Manager，不写入配置文件。";
 
     public int DeepSeekModelIndex
     {
@@ -140,10 +146,11 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         ? "使用 DeepSeek 官方 OpenAI-compatible Responses API。"
         : "连接其他兼容 OpenAI Responses 或 Chat Completions 的服务。";
     public bool CanSave => IsAvailable && !IsBusy && IsDirty;
+    public bool CanClearCredential => IsAvailable && !IsBusy && HasStoredCredential;
 
     public AsyncCommand RefreshCommand { get; }
     public AsyncCommand SaveCommand { get; }
-    public AsyncCommand BrowsePythonCommand { get; }
+    public AsyncCommand ClearCredentialCommand { get; }
 
     public void Attach()
     {
@@ -178,7 +185,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             _hasLoaded = true;
             StatusMessage = draft.Exists
                 ? "AI 配置已载入。保存后会重启当前 AI Runtime。"
-                : "尚无 AI 配置；已准备 DeepSeek 官方 API 默认项，请补全 Python 与 API Key。";
+                : "尚无 AI 配置；已准备内置 Python 与 DeepSeek 默认项，请输入 API Key。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
@@ -210,9 +217,10 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             Apply(new AiRuntimeConfigurationDraft(
                 saved.PythonExecutable,
                 saved.Provider,
-                saved.ApiKey,
+                string.Empty,
                 saved.ConfigurationPath,
-                Exists: true));
+                Exists: true,
+                HasStoredCredential: true));
             try
             {
                 var status = await _restart(current.Token);
@@ -254,41 +262,46 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         }
     }
 
+    internal async Task ClearCredentialAsync()
+    {
+        if (!CanClearCredential)
+            return;
+        var current = BeginOperation();
+        try
+        {
+            var status = await _clearCredential(current.Token);
+            current.Token.ThrowIfCancellationRequested();
+            _apiKey = string.Empty;
+            _hasStoredCredential = false;
+            OnPropertyChanged(nameof(ApiKey));
+            OnPropertyChanged(nameof(HasStoredCredential));
+            OnPropertyChanged(nameof(CredentialStatus));
+            _savedDraft = BuildDraft(_savedDraft?.ConfigurationPath, _savedDraft?.Exists ?? true);
+            IsDirty = false;
+            StatusMessage = status.State == WindowsAiRuntimeState.Disabled
+                ? "已从 Windows Credential Manager 清除 API Key；AI 已停用，离线功能不受影响。"
+                : "已清除 API Key；AI Runtime 状态将在下次启动时刷新。";
+        }
+        catch (OperationCanceledException) when (current.IsCancellationRequested)
+        {
+            StatusMessage = "清除 API Key 已取消；现有凭据未确认改变。";
+        }
+        catch
+        {
+            StatusMessage = "无法清除 Windows 凭据；AI 配置文件未被修改。";
+        }
+        finally
+        {
+            EndOperation(current);
+        }
+    }
+
     public void Dispose()
     {
         if (_disposed)
             return;
         _disposed = true;
         Detach();
-    }
-
-    private async Task BrowsePythonAsync()
-    {
-        if (!IsAvailable || IsBusy)
-            return;
-        var current = BeginOperation();
-        try
-        {
-            var path = await _pickPythonExecutable(current.Token);
-            current.Token.ThrowIfCancellationRequested();
-            if (!string.IsNullOrWhiteSpace(path))
-            {
-                PythonExecutable = path;
-                StatusMessage = "已选择 Python；保存时会检查路径和运行环境。";
-            }
-        }
-        catch (OperationCanceledException) when (current.IsCancellationRequested)
-        {
-            StatusMessage = "Python 选择已取消。";
-        }
-        catch
-        {
-            StatusMessage = "无法选择 Python；现有配置未被修改。";
-        }
-        finally
-        {
-            EndOperation(current);
-        }
     }
 
     private CancellationTokenSource BeginOperation()
@@ -314,6 +327,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         _providerIndex = isDeepSeek ? 0 : 1;
         _pythonExecutable = draft.PythonExecutable;
         _apiKey = draft.ApiKey;
+        _hasStoredCredential = draft.HasStoredCredential;
         _deepSeekModelIndex = string.Equals(
             draft.Provider.Model,
             AiRuntimeConfigurationStore.DeepSeekProModel,
@@ -335,6 +349,8 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(ProviderDescription));
         OnPropertyChanged(nameof(PythonExecutable));
         OnPropertyChanged(nameof(ApiKey));
+        OnPropertyChanged(nameof(HasStoredCredential));
+        OnPropertyChanged(nameof(CredentialStatus));
         OnPropertyChanged(nameof(DeepSeekModelIndex));
         OnPropertyChanged(nameof(CustomBaseUrl));
         OnPropertyChanged(nameof(CustomModel));
@@ -366,7 +382,8 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             provider,
             ApiKey,
             configurationPath ?? _savedDraft?.ConfigurationPath ?? string.Empty,
-            exists);
+            exists,
+            _hasStoredCredential);
     }
 
     private string? MapReasoningEffort() => ReasoningEffortIndex switch
@@ -398,6 +415,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanSave));
         RefreshCommand.NotifyCanExecuteChanged();
         SaveCommand.NotifyCanExecuteChanged();
-        BrowsePythonCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanClearCredential));
+        ClearCredentialCommand.NotifyCanExecuteChanged();
     }
 }

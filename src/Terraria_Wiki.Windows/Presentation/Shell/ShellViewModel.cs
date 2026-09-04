@@ -11,6 +11,7 @@ using Terraria_Wiki.Windows.Presentation.Markdown;
 using Terraria_Wiki.Windows.Presentation.Reader;
 using Terraria_Wiki.Windows.Presentation.Settings;
 using Terraria_Wiki.Windows.Presentation.Wiki;
+using Terraria_Wiki.Windows.Updates;
 
 namespace Terraria_Wiki.Windows.Presentation.Shell;
 
@@ -24,6 +25,14 @@ internal enum ShellSection
     Wiki,
 }
 
+internal enum StartupRecoveryKind
+{
+    None,
+    Retry,
+    SelectDataRoot,
+    InstallWebView2,
+}
+
 internal sealed class ShellViewModel : ObservableObject, IDisposable
 {
     public const double WideReaderThreshold = 1100;
@@ -33,6 +42,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _isWideLayout = true;
     private string _startupStatus = "正在启动…";
     private bool _hasStartupError;
+    private StartupRecoveryKind _startupRecovery;
     private bool _disposed;
 
     public ShellViewModel(
@@ -43,7 +53,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Func<CancellationToken, Task<AiRuntimeConfigurationDraft>>? loadAiConfiguration = null,
         Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
         Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? restartAi = null,
-        Func<CancellationToken, Task<string?>>? pickPythonExecutable = null)
+        Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? clearAiCredential = null,
+        IProductUpdateService? productUpdateService = null,
+        Func<Task>? applyUpdateAndRestart = null,
+        Func<Uri, Task>? openExternalUri = null,
+        ProductDiagnostics? productDiagnostics = null)
     {
         Reader = new ReaderPaneViewModel();
         Chat = new ChatViewModel(
@@ -63,7 +77,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             loadAiConfiguration,
             saveAiConfiguration,
             restartAi,
-            pickPythonExecutable);
+            clearAiCredential,
+            productUpdateService,
+            applyUpdateAndRestart,
+            openExternalUri,
+            productDiagnostics);
         Favorites.ChatFavoriteRemoved += Chat.MarkFavoriteRemoved;
         NavigateChatCommand = new RelayCommand(_ => NavigateChat());
         NavigateFavoritesCommand = new RelayCommand(_ => NavigateFavorites());
@@ -75,11 +93,15 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         RetryStartupCommand = new RelayCommand(_ => RetryStartupRequested?.Invoke(this, EventArgs.Empty), _ => HasStartupError);
         SelectDataRootCommand = new RelayCommand(
             _ => SelectDataRootRequested?.Invoke(this, EventArgs.Empty),
-            _ => HasStartupError);
+            _ => CanSelectDataRoot);
+        GetWebView2Command = new RelayCommand(
+            _ => GetWebView2Requested?.Invoke(this, EventArgs.Empty),
+            _ => CanGetWebView2);
     }
 
     public event EventHandler? RetryStartupRequested;
     public event EventHandler? SelectDataRootRequested;
+    public event EventHandler? GetWebView2Requested;
 
     public ChatViewModel Chat { get; }
     public WikiViewModel Wiki { get; }
@@ -147,9 +169,29 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             {
                 RetryStartupCommand.NotifyCanExecuteChanged();
                 SelectDataRootCommand.NotifyCanExecuteChanged();
+                GetWebView2Command.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(CanSelectDataRoot));
+                OnPropertyChanged(nameof(CanGetWebView2));
             }
         }
     }
+
+    public StartupRecoveryKind StartupRecovery
+    {
+        get => _startupRecovery;
+        private set
+        {
+            if (!SetProperty(ref _startupRecovery, value))
+                return;
+            OnPropertyChanged(nameof(CanSelectDataRoot));
+            OnPropertyChanged(nameof(CanGetWebView2));
+            SelectDataRootCommand.NotifyCanExecuteChanged();
+            GetWebView2Command.NotifyCanExecuteChanged();
+        }
+    }
+
+    public bool CanSelectDataRoot => HasStartupError && StartupRecovery == StartupRecoveryKind.SelectDataRoot;
+    public bool CanGetWebView2 => HasStartupError && StartupRecovery == StartupRecoveryKind.InstallWebView2;
 
     public bool IsChatSelected => CurrentSection == ShellSection.Chat;
     public bool IsFavoritesSelected => CurrentSection == ShellSection.Favorites;
@@ -182,8 +224,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public RelayCommand CloseReaderCommand { get; }
     public RelayCommand RetryStartupCommand { get; }
     public RelayCommand SelectDataRootCommand { get; }
+    public RelayCommand GetWebView2Command { get; }
 
     public void SetViewportWidth(double width) => IsWideLayout = width >= WideReaderThreshold;
+
+    public void SetWebView2Status(WebView2RuntimeStatus status) => Settings.Diagnostics.SetWebView2Status(status);
 
     public void AttachRuntime(WindowsClientRuntime runtime)
     {
@@ -219,9 +264,13 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Reader.Detach();
     }
 
-    public void SetStartupStatus(string message, bool isError = false)
+    public void SetStartupStatus(
+        string message,
+        bool isError = false,
+        StartupRecoveryKind recovery = StartupRecoveryKind.Retry)
     {
         StartupStatus = message;
+        StartupRecovery = isError ? recovery : StartupRecoveryKind.None;
         HasStartupError = isError;
     }
 

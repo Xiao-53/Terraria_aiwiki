@@ -1,8 +1,8 @@
 # Windows AI Runtime 能力契约
 
-- 状态：implemented baseline；无外网、两种发布 smoke 与发布版 DeepSeek 真实验收通过
-- 适用范围：Avalonia Windows Host、Wiki Tool lifecycle、Python Sidecar、AI 配置与 Presentation Runtime 边界；不外推 Android
-- 来源：Master Architecture v0.6、Phase 07、ADR 0003–0006、AI Backend 与 Wiki Tools 能力契约
+- 状态：implemented；Phase 11 内置 Runtime、Credential Manager 与 v3 迁移已通过 Windows 回归
+- 适用范围：Avalonia Windows Host、Wiki Tool lifecycle、内置 Python Sidecar、AI 配置与 Presentation Runtime 边界；不外推 Android
+- 来源：Master Architecture v0.6、Phase 07/11、ADR 0003–0006、AI Backend 与 Wiki Tools 能力契约
 
 ## 目的
 
@@ -10,21 +10,19 @@
 
 ## 配置与依赖
 
-- Windows 本机配置固定为 `ai-runtime.json` v2。默认路径是 `%LOCALAPPDATA%\Terraria AI Wiki\ai-runtime.json`；命令行可用唯一 `--ai-config <absolute-path>` 覆盖。
-- 文档字段固定为 `version`、`pythonExecutable`、`apiKey` 和 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本、空白密钥、相对路径和非法 provider 值必须拒绝。
-- Windows 设置页可以读取并显式保存同一 v2 文件。当前 UI 只提供 `DeepSeek 官方 API` 与 `自定义 OpenAI-compatible` 两种选择：DeepSeek 预设固定 `https://api.deepseek.com` 与 Responses API，并提供 `deepseek-v4-flash` / `deepseek-v4-pro`；自定义项要求用户显式填写 endpoint、model 与 Responses / Chat Completions。provider 类型是 UI 预设，不写入 schema；不能严格识别为该官方组合的既有配置一律作为自定义项显示。
+- Windows 本机配置固定为严格 `ai-runtime.json` v3。默认路径是 `%LOCALAPPDATA%\Terraria AI Wiki\ai-runtime.json`；命令行可用唯一 `--ai-config <absolute-path>` 覆盖。
+- v3 文档字段固定为 `version` 与 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本和非法 provider 值必须拒绝。Python 路径和 API key 不进入 v3。
+- Windows 设置页可以读取并显式保存同一 v3 文件。当前 UI 只提供 `DeepSeek 官方 API` 与 `自定义 OpenAI-compatible` 两种选择：DeepSeek 预设固定 `https://api.deepseek.com` 与 Responses API，并提供 `deepseek-v4-flash` / `deepseek-v4-pro`；自定义项要求用户显式填写 endpoint、model 与 Responses / Chat Completions。provider 类型是 UI 预设，不写入 schema；不能严格识别为该官方组合的既有配置一律作为自定义项显示。
 - 思考强度 UI 固定为服务默认、关闭、低、高、最大，分别保存为 `null`、`none`、`low`、`high`、`max`。自定义兼容服务可以忽略或拒绝该参数，必须按 endpoint 分别验证，不能因 UI 可选择而宣称通用支持。
-- `pythonExecutable` 必须是存在的绝对 `python.exe`。首个 Runtime 支持 Python 3.12–3.14，并在 Sidecar 握手中固定验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。
-- 应用不下载、安装、升级或修复 Python 与依赖。发布物只携带 launcher、Agent 包源码、`pyproject.toml` 和 `uv.lock`；Python 本体与虚拟环境由用户在 Phase 11 之前外部准备。
-- API key 按用户明确选择保存在 Windows 用户级配置中。设置页使用遮蔽输入，但不会改变 v2 明文持久化决策。Host 读取后只写入自己启动的 Sidecar `TERRARIA_AI_API_KEY` 进程环境；不得进入命令参数、协议 JSON、公开错误、日志、Git 或 smoke 结果。配置文件继承用户目录访问控制，Windows Credential Manager 等产品化凭据存储留 Phase 11。
+- Host 只从安装目录 `AgentRuntime\python\python.exe` 定位内置 CPython。Phase 11 固定 Python 3.14.7 x64 embeddable、官方 URL/SHA-256、uv 0.12.9 与 `uv.lock` 生产依赖，并在 Sidecar 握手中继续验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。运行期不下载、不调用 pip/uv，也不允许用户改用外部 Python。
+- API key 只保存为当前 Windows 用户 generic Credential，固定 target 为 `TerrariaAIWiki.Windows/AI/APIKey`，UTF-8 blob 不超过 Credential Manager 的 2560-byte 上限。设置页不回显已有值：空输入保留、新输入替换，显式清除会删除凭据并停用 AI，但保留 provider 配置。
+- v2 首次读取执行可重试迁移：先严格验证 provider/key，再写 Credential Manager，最后 durable 写入并原子替换 v3；任一步失败都保留旧文件并恢复先前凭据。Host 只把读取到的 key 写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入参数、NDJSON、UI、诊断、Git 或 smoke 结果。
 
 配置形状：
 
 ```json
 {
-  "version": 2,
-  "pythonExecutable": "C:\\path\\to\\.venv\\Scripts\\python.exe",
-  "apiKey": "<local-api-key>",
+  "version": 3,
   "provider": {
     "baseUrl": "https://api.example.com",
     "model": "provider-model",
@@ -36,7 +34,7 @@
 
 ## stdio NDJSON v1
 
-- Windows 以 `python.exe -I -u -X utf8 <published-launcher>` 启动唯一所属 Sidecar；不使用 shell，不在参数中传 provider、MCP connection 或 secret。
+- Windows 以内置 `python.exe -I -B -u -X utf8 <published-launcher>` 启动唯一所属 Sidecar；`-B` 禁止安装目录产生 bytecode，不使用 shell，不在参数中传 provider、MCP connection 或 secret。
 - Windows 命令固定为 `initialize`、`answer`、`cancel`、`shutdown`；Python 事件固定为 `ready`、`run_started`、`tool_started`、`tool_finished`、`answer_delta`、`completed`、`cancelled`、`failed`、`fatal`。
 - 每条消息固定含 `version: 1`、`type` 与 `requestId`。字段集合、类型、枚举、顺序与 request ID 必须严格验证；UTF-8 NDJSON 单行连换行不得超过 256 KiB。
 - initialize 是第一条且唯一初始化命令；MCP endpoint 与 bearer 只在该 stdin 消息传入。重复 ID、未知消息/字段、非法顺序、未换行 EOF、超长行、非法 UTF-8 或非协议 stdout 都使当前 Sidecar fatal。
@@ -51,7 +49,7 @@
 - 正常退出先统一取消 Host 生命周期；AI 分支执行“取消活动回答并排空 → Sidecar shutdown → 超时后仅终止所属进程树 → WikiToolServer”，同时 Viewer 分支停止 WebView/transport，两个消费者都结束后才释放 Application。
 - Sidecar 的活动回答、shutdown 与进程退出共享 1.5 秒优雅期限；期限耗尽后只终止所属进程树，并以 500 ms 期限收尾进程等待和连接释放。后台启动、显式重试和退出由同一内部同步门协调，退出后不得挂接晚到的 Runtime。
 - Sidecar fatal、协议错误或意外退出后，停止其关联 WikiToolServer；不无限自动重启。用户显式“重试 AI”时先释放旧 Runtime，再创建新的 MCP server，因此必须轮换端口与 bearer。
-- 设置页保存先统一验证并在同目录 durable 临时文件完成后原子替换 v2 配置，再调用同一个显式重试入口。验证或写入失败保留旧文件与当前 Runtime；写入成功但重启失败时保留新配置并如实显示 AI 尚未就绪，不把持久化成功误报为失败。
+- 设置页保存先统一验证 Credential Manager 与 v3 durable 临时文件，再原子替换配置并调用同一个显式重试入口。验证或写入失败保留旧文件/凭据与当前 Runtime；写入成功但重启失败时保留新配置并如实显示 AI 尚未就绪，不把持久化成功误报为失败。
 - 只有宿主启动并保存句柄的 Python `Process` 可以在 shutdown 超时后使用 `Kill(entireProcessTree: true)`；不得按进程名扫描或终止其他 Python。
 
 ## Presentation Runtime 边界与故障隔离
@@ -63,16 +61,16 @@
 
 ## 验收场景
 
-1. 严格配置测试覆盖默认/覆盖路径、未知字段、非法 Python/provider/key，并确认 key 不进入参数或配置对象字符串表示。
+1. 严格配置测试覆盖默认/覆盖路径、v2→v3、未知字段、非法 provider/key、凭据 preserve/replace/clear/rollback，并确认 key 不进入参数、v3 或对象字符串表示。
 2. fake Sidecar 覆盖 ready 握手、事件顺序、typed completion、调用方取消、完成/取消竞态、复用、fatal、协议污染与所属进程终止策略。
 3. 真实 Windows Application + WikiToolServer + Windows Python 测试 Sidecar，以临时数据完成无外网 Search → Read → 至少两个 delta → sources/trace/usage completion。
 4. AI 配置缺失时正式 Avalonia WinExe 仍通过 Search/Viewer/assets/返回/退出 smoke。
-5. framework-dependent 与 self-contained `win-x64` 发布目录都包含同一 AgentRuntime 文件，并用同一配置 Python 环境通过取消、再次提问、工具进度、流式完成和退出清理。
-6. 有有效本机配置 key 时，对明确 provider/model 进行一次不自动重试的发布验收；记录首段、总耗时与 usage，不在日志保存问题、正文或 secret。没有 key 时阶段保持未完成，不把离线 fixture 当作真实 provider 结果。
+5. Setup 与 portable 的同一 self-contained `win-x64` payload 都包含固定 Agent 源码和内置 Python；无系统 Python/uv/pip 时通过取消、再次提问、工具进度、流式完成和退出清理，运行后安装目录清单不变。
+6. 只有用户另行授权真实 provider 请求并提供有效本机 key 时，才对明确 provider/model 做一次不自动重试的发行候选补充验收；记录首段、总耗时与 usage，不在日志保存问题、正文或 secret。没有授权或 key 时以真实内置 Python + fake provider 完成可重复的产品化门槛，并明确不宣称该候选已重新实测在线模型。
 7. 设置页覆盖缺失配置的 DeepSeek 默认草稿、既有自定义配置载入、两种 provider 切换、思考强度映射、key 遮蔽、非法值不覆盖旧文件，以及保存后显式重启的成功/失败状态。
 
 ## 非目标与变更规则
 
-本能力不包含多轮、Windows Credential Manager、内置 Python、自动安装、Provider/模型在线发现、API key 联网校验、Reader/HTML 精简、安装器、签名、WebView2 bootstrap、Android、Vector/Embedding 或数据格式变化。
+本能力不包含多轮、运行期 Python/依赖安装、Provider/模型在线发现、API key 联网校验、Reader/HTML 精简、商业签名、Android、Vector/Embedding 或 Wiki 数据格式变化。
 
 协议版本、消息字段/顺序、配置 schema、Python/依赖范围、secret 边界、进程终止策略或启动退出顺序变化时必须更新本 spec 与 ADR 0006。Android Runtime 必须另行决定，不能继承 Windows stdio、路径、loopback 或打包假设。

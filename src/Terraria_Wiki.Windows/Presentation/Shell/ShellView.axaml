@@ -128,10 +128,16 @@
                      AutomationProperties.Name="应用状态" />
           <Button Content="选择数据" Command="{Binding SelectDataRootCommand}"
                   Classes="secondary-action"
-                  IsVisible="{Binding HasStartupError}"
+                  IsVisible="{Binding CanSelectDataRoot}"
                   ToolTip.Tip="重新选择包含 Manager.db 的 Wiki 数据文件夹"
                   AutomationProperties.AutomationId="SelectDataRoot"
                   AutomationProperties.Name="重新选择 Wiki 数据文件夹" />
+          <Button Content="获取 WebView2" Command="{Binding GetWebView2Command}"
+                  Classes="secondary-action"
+                  IsVisible="{Binding CanGetWebView2}"
+                  ToolTip.Tip="打开 Microsoft 官方 WebView2 下载页面"
+                  AutomationProperties.AutomationId="GetWebView2"
+                  AutomationProperties.Name="获取 Microsoft Edge WebView2 Runtime" />
           <Button Content="重试" Command="{Binding RetryStartupCommand}"
                   Classes="secondary-action"
                   IsVisible="{Binding HasStartupError}"

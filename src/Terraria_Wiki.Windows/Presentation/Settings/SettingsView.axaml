@@ -166,6 +166,76 @@
               </Grid>
             </StackPanel>
           </Border>
+
+          <Border Classes="section-surface">
+            <StackPanel Margin="0,20,0,0" Spacing="12">
+              <TextBlock Text="关于与更新" Classes="section-title" />
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="当前版本" FontWeight="SemiBold" />
+                  <TextBlock Text="Windows 11 x64；更新仅来自公开 GitHub Releases。"
+                             Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                  <SelectableTextBlock Text="{Binding Updates.CurrentVersion}"
+                                       AutomationProperties.Name="当前应用版本" />
+                  <TextBlock Text="{Binding Updates.DistributionKind}" Classes="muted" />
+                </StackPanel>
+              </Grid>
+              <Border Classes="management-status">
+                <StackPanel Spacing="8">
+                  <TextBlock Text="{Binding Updates.StatusMessage}" TextWrapping="Wrap"
+                             AutomationProperties.Name="应用更新状态" />
+                  <ProgressBar Minimum="0" Maximum="100" Value="{Binding Updates.DownloadProgress}"
+                               IsVisible="{Binding Updates.IsProgressVisible}"
+                               AutomationProperties.Name="应用更新下载进度" />
+                  <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Button Content="检查更新" Classes="secondary-action"
+                            Command="{Binding Updates.CheckCommand}"
+                            AutomationProperties.Name="检查 GitHub Releases 更新" />
+                    <Button Content="下载更新" Classes="secondary-action"
+                            Command="{Binding Updates.DownloadCommand}"
+                            AutomationProperties.Name="下载并校验应用更新" />
+                    <Button Content="取消" Classes="toolbar-action"
+                            Command="{Binding Updates.CancelCommand}"
+                            AutomationProperties.Name="取消应用更新操作" />
+                    <Button Content="重启并更新" Classes="primary-action"
+                            Command="{Binding Updates.RestartCommand}"
+                            AutomationProperties.Name="安全关闭并应用更新" />
+                    <Button Content="打开 Releases" Classes="toolbar-action"
+                            Command="{Binding Updates.OpenReleasesCommand}"
+                            AutomationProperties.Name="在浏览器打开 GitHub Releases" />
+                  </StackPanel>
+                </StackPanel>
+              </Border>
+              <TextBlock Text="首发安装器暂不使用商业代码签名；Windows 可能显示发布者未知或信誉警告。请只核对本项目 Release 页和 SHA-256 后运行。"
+                         Classes="muted" TextWrapping="Wrap" />
+
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+                <StackPanel Spacing="3" VerticalAlignment="Center">
+                  <TextBlock Text="运行环境" FontWeight="SemiBold" />
+                  <TextBlock Text="用于核对 Windows 与 Evergreen WebView2 状态。"
+                             Classes="muted" TextWrapping="Wrap" />
+                </StackPanel>
+                <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
+                  <SelectableTextBlock Text="{Binding Diagnostics.WindowsStatus}"
+                                       AutomationProperties.Name="Windows 运行环境" />
+                  <SelectableTextBlock Text="{Binding Diagnostics.WebView2Status}"
+                                       AutomationProperties.Name="WebView2 Runtime 状态" />
+                </StackPanel>
+              </Grid>
+              <Border Classes="management-status">
+                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                  <TextBlock Text="{Binding Diagnostics.StatusMessage}" TextWrapping="Wrap"
+                             VerticalAlignment="Center" AutomationProperties.Name="诊断日志状态" />
+                  <Button Grid.Column="1" Content="打开日志文件夹" Classes="toolbar-action"
+                          Command="{Binding Diagnostics.OpenLogFolderCommand}"
+                          IsVisible="{Binding Diagnostics.CanOpenLogFolder}"
+                          AutomationProperties.Name="打开本机诊断日志文件夹" />
+                </Grid>
+              </Border>
+            </StackPanel>
+          </Border>
         </StackPanel>
 
         <StackPanel Spacing="20" IsVisible="{Binding IsAiSelected}">
@@ -252,28 +322,31 @@
               <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="Python" FontWeight="SemiBold" />
-                  <TextBlock Text="选择已准备依赖的 Python 3.12–3.14 python.exe。" Classes="muted" TextWrapping="Wrap" />
+                  <TextBlock Text="随应用安装并更新，不再依赖系统 Python。" Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
-                <Grid Grid.Column="1" ColumnDefinitions="*,Auto" ColumnSpacing="8">
-                  <TextBox Text="{Binding Ai.PythonExecutable, Mode=TwoWay}"
-                           PlaceholderText="C:\path\to\.venv\Scripts\python.exe"
-                           IsEnabled="{Binding Ai.IsAvailable}" AutomationProperties.Name="AI Python 路径" />
-                  <Button Grid.Column="1" Content="选择…" Classes="secondary-action"
-                          Command="{Binding Ai.BrowsePythonCommand}"
-                          AutomationProperties.Name="选择 AI Python 可执行文件" />
-                </Grid>
+                <SelectableTextBlock Grid.Column="1" Text="{Binding Ai.PythonExecutable}"
+                                     VerticalAlignment="Center" TextWrapping="Wrap"
+                                     AutomationProperties.Name="内置 AI Python 路径" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="API Key" FontWeight="SemiBold" />
-                  <TextBlock Text="保存在当前 Windows 用户配置中，界面始终遮蔽显示。" Classes="muted" TextWrapping="Wrap" />
+                  <TextBlock Text="{Binding Ai.CredentialStatus}" Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
-                <settings:SecretTextBox Grid.Column="1" Text="{Binding Ai.ApiKey, Mode=TwoWay}"
-                                        PasswordChar="●" PlaceholderText="输入 API Key"
-                                        IsEnabled="{Binding Ai.IsAvailable}"
-                                        AutomationProperties.AutomationId="AiApiKeyInput"
-                                        AutomationProperties.Name="AI API Key"
-                                        AutomationProperties.HelpText="受保护的密钥输入，内容始终遮蔽。" />
+                <StackPanel Grid.Column="1" Spacing="8">
+                  <settings:SecretTextBox Text="{Binding Ai.ApiKey, Mode=TwoWay}"
+                                          PasswordChar="●" PlaceholderText="输入或替换 API Key"
+                                          IsEnabled="{Binding Ai.IsAvailable}"
+                                          AutomationProperties.AutomationId="AiApiKeyInput"
+                                          AutomationProperties.Name="AI API Key"
+                                          AutomationProperties.HelpText="密钥保存到 Windows Credential Manager；已有值不会回显。" />
+                  <Button Content="清除已保存的 API Key" Classes="toolbar-action"
+                          HorizontalAlignment="Right"
+                          Command="{Binding Ai.ClearCredentialCommand}"
+                          IsVisible="{Binding Ai.HasStoredCredential}"
+                          ToolTip.Tip="立即从 Windows Credential Manager 删除密钥并停用 AI"
+                          AutomationProperties.Name="清除 Windows Credential Manager 中的 AI API Key" />
+                </StackPanel>
               </Grid>
             </StackPanel>
           </Border>

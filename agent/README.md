@@ -44,9 +44,9 @@ answer = await TerrariaWikiAgent(settings).answer(
 也不负责启动、停止或打包 Wiki Tool server / Python Runtime。兼容配置只表示可接线；
 每个具体服务仍须用工具调用、typed completion、用量和错误场景实测。
 
-Windows Phase 07 通过发布目录中的 `sidecar_launcher.py` 以 `-I -u -X utf8` 启动
-长驻 Runtime。stdio 只承载严格 NDJSON v1；API key 仍只来自子进程环境，MCP
-endpoint/bearer 只在 initialize stdin 中传递。Sidecar、Windows lifecycle 和
-`ai-runtime.json` v2 属于 Windows Adapter；Windows Host 可从该用户级文件读取 key，再只向
-所属 Sidecar 注入 `TERRARIA_AI_API_KEY`，不改变本包的平台无关业务边界。应用不会下载
-Python 或安装依赖；配置的环境必须已按本目录 `uv.lock` 准备完毕。
+Windows Phase 11 通过发布目录中的 `sidecar_launcher.py`，以内置 CPython
+`-I -B -u -X utf8` 启动长驻 Runtime。stdio 只承载严格 NDJSON v1；API key 仍只来自
+所属子进程环境，MCP endpoint/bearer 只在 initialize stdin 中传递。Sidecar、Windows
+lifecycle、Credential Manager 与严格 `ai-runtime.json` v3 属于 Windows Adapter，
+不改变本包的平台无关业务边界。生产 payload 从精确版本/hash 的 CPython embeddable ZIP
+与本目录 `uv.lock` 在构建期展开；用户启动时不会下载 Python、调用 pip/uv 或安装依赖。

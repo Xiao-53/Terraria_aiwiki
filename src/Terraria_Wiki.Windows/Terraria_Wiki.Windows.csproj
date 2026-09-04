@@ -10,7 +10,14 @@
     <RootNamespace>Terraria_Wiki.Windows</RootNamespace>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <ApplicationIcon>../../assets/windows/AppIcon/appicon.ico</ApplicationIcon>
+    <Product>Terraria AI Wiki</Product>
+    <Description>Free, source-available, non-commercial offline Terraria wiki client for Windows.</Description>
+    <RepositoryType>git</RepositoryType>
   </PropertyGroup>
+
+  <ItemGroup Condition="'$(RepositoryUrl)' != ''">
+    <AssemblyMetadata Include="RepositoryUrl" Value="$(RepositoryUrl)" />
+  </ItemGroup>
 
   <ItemGroup>
     <FrameworkReference Include="Microsoft.AspNetCore.App" />
@@ -19,6 +26,7 @@
     <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
     <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
     <PackageReference Include="Markdig" Version="1.3.2" />
+    <PackageReference Include="Velopack" Version="1.2.0" />
   </ItemGroup>
 
   <ItemGroup>

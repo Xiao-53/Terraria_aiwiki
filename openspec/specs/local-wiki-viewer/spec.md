@@ -40,7 +40,7 @@
 - outer host 与 C# 分别校验精确 origin/source、`req/res`、request ID 和方法；HTTP(S) 外链交给系统浏览器，未知或未支持方法返回可观察错误。
 - pause lease 停止 listener；释放后仅在宿主仍存活时按当前活动 Wiki 重启。退出后不得遗留 listener 或继续访问已释放 Application。
 - Avalonia 站点首屏通过内部 `ViewerReady` 方法报告 DOM 已写入；该方法不扩展公共 Viewer 业务能力。WebView stop 最多等待 500 ms，listener 主动关闭活动连接并最多排空 1 秒。
-- Windows 默认依赖系统 Evergreen WebView2；framework-dependent/self-contained .NET 均不等于捆绑 WebView2。安装器、bootstrap 和签名仍属于 Phase 11。
+- Windows 默认依赖系统 Evergreen WebView2；self-contained .NET 不等于捆绑 WebView2。Velopack Setup 声明官方 `webview2` bootstrap 前置；portable/Host probe 缺失时只提供 Microsoft 官方下载/修复入口，不捆绑 Fixed Version Chromium 或从未知 URL 下载。WebView2 profile/cache 固定在 `%LocalAppData%\Terraria AI Wiki\WebView2`，不得写入安装或 portable `current` payload。
 - 以上行为由 Windows 11 x64 验证支持；Android transport 仍保持开放，不能从 Windows 结论外推。
 
 ### 接管与回退
@@ -55,7 +55,7 @@
 3. C# 调用 JS、JS 向宿主发消息，来源和错误路径可观察。
 4. transport 端口冲突或初始化失败时，应用报告明确错误且可以恢复或回退。
 5. 多次打开/关闭、前后台切换和应用退出后，不留下不可控的 listener 或错误活动数据源。
-6. Windows 精确拒绝错误 Host、非 GET/HEAD、路径穿越、非法消息来源/ID 和未知方法；缺失 WebView2、数据源不可用与 transport 失败均可观察。
+6. Windows 精确拒绝错误 Host、非 GET/HEAD、路径穿越、非法消息来源/ID 和未知方法；缺失 WebView2、数据源不可用与 transport 失败均可观察；WebView2 错误不会泄漏探测路径或底层异常消息。
 
 ## 变更规则
 

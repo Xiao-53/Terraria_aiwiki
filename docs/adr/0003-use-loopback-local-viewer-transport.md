@@ -46,7 +46,7 @@ Phase 04 在 Windows 11 x64 实际完成：
 负面后果与约束：
 
 - Windows Host 运行期间存在一个仅 loopback 可达的 HTTP listener，必须持续维护 Host、方法、路径和消息校验回归。
-- self-contained .NET 不包含 WebView2；缺失 Runtime 时 Host 只报告可操作错误，由 Phase 11 决定安装/bootstrap。
+- self-contained .NET 不包含 WebView2；Phase 11 的 Velopack Setup 声明 Evergreen `webview2` bootstrap，portable/Host 缺失时提供 Microsoft 官方获取/修复入口并保留重试。
 - 本决策只由 Windows 11 x64 验证支持。Android Viewer transport 必须在 Phase 13 目标环境独立决定和验证，不能直接复制 Windows listener 假设。
 
 ## 被否决方案

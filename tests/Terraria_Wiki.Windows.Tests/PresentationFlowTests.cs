@@ -16,6 +16,41 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class PresentationFlowTests
 {
     [Fact]
+    public void StartupRecoveryOnlyExposesTheActionForTheCurrentFailure()
+    {
+        using var shell = new ShellViewModel();
+        var selectRequested = false;
+        var webViewRequested = false;
+        shell.SelectDataRootRequested += (_, _) => selectRequested = true;
+        shell.GetWebView2Requested += (_, _) => webViewRequested = true;
+
+        shell.SetStartupStatus(
+            "数据目录不可用。",
+            isError: true,
+            StartupRecoveryKind.SelectDataRoot);
+        Assert.True(shell.CanSelectDataRoot);
+        Assert.False(shell.CanGetWebView2);
+        Assert.False(shell.GetWebView2Command.CanExecute(null));
+        shell.SelectDataRootCommand.Execute(null);
+        Assert.True(selectRequested);
+        Assert.False(webViewRequested);
+
+        shell.SetStartupStatus(
+            "WebView2 不可用。",
+            isError: true,
+            StartupRecoveryKind.InstallWebView2);
+        Assert.False(shell.CanSelectDataRoot);
+        Assert.True(shell.CanGetWebView2);
+        shell.GetWebView2Command.Execute(null);
+        Assert.True(webViewRequested);
+
+        shell.SetStartupStatus("应用已就绪。");
+        Assert.False(shell.HasStartupError);
+        Assert.False(shell.CanSelectDataRoot);
+        Assert.False(shell.CanGetWebView2);
+    }
+
+    [Fact]
     public void WikiPreviewOpensReaderWithoutReplacingTheSelectedMainPage()
     {
         using var shell = new ShellViewModel();

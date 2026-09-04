@@ -77,6 +77,7 @@ internal sealed class ProcessAiSidecarConnectionFactory : IAiSidecarConnectionFa
             StandardErrorEncoding = new UTF8Encoding(false, true),
         };
         startInfo.ArgumentList.Add("-I");
+        startInfo.ArgumentList.Add("-B");
         startInfo.ArgumentList.Add("-u");
         startInfo.ArgumentList.Add("-X");
         startInfo.ArgumentList.Add("utf8");

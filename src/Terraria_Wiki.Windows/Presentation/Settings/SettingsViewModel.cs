@@ -2,6 +2,7 @@ using Terraria_Wiki.Application;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
+using Terraria_Wiki.Windows.Updates;
 
 namespace Terraria_Wiki.Windows.Presentation.Settings;
 
@@ -32,14 +33,25 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         Func<CancellationToken, Task<AiRuntimeConfigurationDraft>>? loadAiConfiguration = null,
         Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
         Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? restartAi = null,
-        Func<CancellationToken, Task<string?>>? pickPythonExecutable = null)
+        Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? clearAiCredential = null,
+        IProductUpdateService? productUpdateService = null,
+        Func<Task>? applyUpdateAndRestart = null,
+        Func<Uri, Task>? openExternalUri = null,
+        ProductDiagnostics? productDiagnostics = null)
     {
         _applyPreferences = applyPreferences ?? (_ => Task.CompletedTask);
         Ai = new AiSettingsViewModel(
             loadAiConfiguration ?? (_ => throw new InvalidOperationException("AI configuration is unavailable.")),
             saveAiConfiguration ?? ((_, _) => throw new InvalidOperationException("AI configuration is unavailable.")),
             restartAi ?? (_ => throw new InvalidOperationException("AI Runtime is unavailable.")),
-            pickPythonExecutable ?? (_ => Task.FromResult<string?>(null)));
+            clearAiCredential ?? (_ => throw new InvalidOperationException("AI credential removal is unavailable.")));
+        Updates = new ProductUpdateViewModel(
+            productUpdateService ?? new VelopackProductUpdateService(),
+            applyUpdateAndRestart ?? (() => Task.CompletedTask),
+            openExternalUri ?? (_ => Task.CompletedTask));
+        Diagnostics = new ProductDiagnosticsViewModel(
+            productDiagnostics ?? ProductDiagnostics.CreateDefault(),
+            openExternalUri ?? (_ => Task.CompletedTask));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => IsAvailable && !IsBusy);
         SaveCommand = new AsyncCommand(_ => SaveAsync(), _ => CanSave);
         SelectGeneralCommand = new RelayCommand(_ => SelectedPageIndex = 0);
@@ -47,6 +59,8 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     }
 
     public AiSettingsViewModel Ai { get; }
+    public ProductUpdateViewModel Updates { get; }
+    public ProductDiagnosticsViewModel Diagnostics { get; }
 
     public int SelectedPageIndex
     {
@@ -274,6 +288,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         _disposed = true;
         Detach();
         Ai.Dispose();
+        Updates.Dispose();
     }
 
     private CancellationTokenSource BeginOperation()

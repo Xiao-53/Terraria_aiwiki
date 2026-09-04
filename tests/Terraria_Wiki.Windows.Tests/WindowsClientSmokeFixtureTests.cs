@@ -43,6 +43,13 @@ public sealed class WindowsClientSmokeFixtureTests
             await content.SaveItemAsync(new WikiRedirect { FromName = "Smoke Alias", ToTarget = "Smoke Target#Section" });
             await content.SaveItemAsync(new WikiAsset { FileName = "smoke.png", Data = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), MimeType = "image/png" });
             await content.SaveItemAsync(new WikiAsset { FileName = "smoke.ogg", Data = "OggS\0TerrariaSmoke"u8.ToArray(), MimeType = "audio/ogg" });
+            book.IsPageDownloaded = true;
+            book.IsResourceDownloaded = true;
+            book.PageCount = 2;
+            book.RedirectCount = 1;
+            book.ResourceCount = 2;
+            book.UpdateTime = DateTime.UtcNow;
+            await manager.SaveItemAsync(book);
         }
         finally
         {

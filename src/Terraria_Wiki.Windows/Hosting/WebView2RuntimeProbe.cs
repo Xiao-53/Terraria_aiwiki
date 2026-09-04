@@ -66,7 +66,7 @@ internal static class WebView2RuntimeProbe
                 false,
                 null,
                 null,
-                $"WebView2 Runtime detection failed ({exception.GetType().Name}): {exception.Message}");
+                $"WebView2 Runtime detection failed ({exception.GetType().Name}).");
         }
     }
 

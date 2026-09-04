@@ -23,7 +23,10 @@ internal sealed record AiRuntimeConfiguration(
         CancellationToken cancellationToken = default)
     {
         var path = ParseConfigurationPath(arguments) ?? DefaultConfigurationPath();
-        return await new AiRuntimeConfigurationStore(path)
+        return await new AiRuntimeConfigurationStore(
+                path,
+                new WindowsAiCredentialStore(),
+                AiRuntimePaths.BundledPythonExecutable)
             .LoadRequiredAsync(cancellationToken)
             .ConfigureAwait(false);
     }
@@ -93,7 +96,7 @@ internal sealed record AiRuntimeConfiguration(
         return fullPath;
     }
 
-    private static AiProviderConfiguration ValidateProvider(AiProviderConfiguration provider)
+    internal static AiProviderConfiguration ValidateProvider(AiProviderConfiguration provider)
     {
         if (string.IsNullOrWhiteSpace(provider.BaseUrl)
             || provider.BaseUrl != provider.BaseUrl.Trim()
@@ -127,7 +130,7 @@ internal sealed record AiRuntimeConfiguration(
             provider.ReasoningEffort);
     }
 
-    private static string ValidateApiKey(string? value)
+    internal static string ValidateApiKey(string? value)
     {
         if (string.IsNullOrWhiteSpace(value)
             || value != value.Trim()

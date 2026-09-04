@@ -12,16 +12,23 @@ using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Management;
 using Terraria_Wiki.Windows.Presentation.Shell;
+using Terraria_Wiki.Windows.Updates;
 using Terraria_Wiki.Windows.Viewer;
 
 namespace Terraria_Wiki.Windows;
 
 internal sealed partial class MainWindow : Window
 {
+    private static readonly Uri WebView2DownloadUri = new(
+        "https://developer.microsoft.com/microsoft-edge/webview2/",
+        UriKind.Absolute);
+
     private readonly string[] _arguments;
     private string[] _runtimeArguments;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly string? _smokeLogPath;
+    private readonly string? _chatFavoritesPath;
+    private readonly string? _diagnosticsDirectory;
     private readonly string? _aiSmokeQuestion;
     private readonly bool _aiSmokeCancelFirst;
     private readonly Stopwatch _lifecycle = Stopwatch.StartNew();
@@ -29,6 +36,8 @@ internal sealed partial class MainWindow : Window
     private readonly long _processStartOffsetMilliseconds;
     private readonly ShellViewModel _shellViewModel;
     private readonly ShellView _shellView;
+    private readonly IProductUpdateService _productUpdateService;
+    private readonly ProductDiagnostics _diagnostics;
     private WindowsClientRuntime? _runtime;
     private ViewerWebViewSession? _viewerSession;
     private bool _cleanupComplete;
@@ -42,24 +51,36 @@ internal sealed partial class MainWindow : Window
         _arguments = arguments ?? [];
         _runtimeArguments = _arguments.ToArray();
         _smokeLogPath = ParseOption(_arguments, "--smoke-log");
+        _chatFavoritesPath = ParseOption(_arguments, "--chat-favorites");
+        _diagnosticsDirectory = ParseOption(_arguments, "--diagnostics-directory");
         _aiSmokeQuestion = ParseTextOption(_arguments, "--ai-smoke-question");
         _aiSmokeCancelFirst = HasFlag(_arguments, "--ai-smoke-cancel-first");
         _processStartOffsetMilliseconds = GetProcessStartOffsetMilliseconds();
 
         AvaloniaXamlLoader.Load(this);
         _shellView = this.FindControl<ShellView>("ShellHost")!;
+        _productUpdateService = new VelopackProductUpdateService();
+        _diagnostics = _diagnosticsDirectory is null
+            ? ProductDiagnostics.CreateDefault()
+            : new ProductDiagnostics(_diagnosticsDirectory);
+        _diagnostics.Write(ProductDiagnosticEvent.ApplicationStarted);
         _shellViewModel = new ShellViewModel(
-            CreateChatFavoriteStore(),
+            CreateChatFavoriteStore(_chatFavoritesPath),
             PickImportPackageAsync,
             ExportPackageAsync,
             ApplyPreferencesAsync,
             LoadAiConfigurationDraftAsync,
             SaveAiConfigurationAsync,
             RestartAiAsync,
-            PickPythonExecutableAsync);
+            ClearAiCredentialAsync,
+            _productUpdateService,
+            ApplyUpdateAndRestartAsync,
+            OpenExternalUriAsync,
+            _diagnostics);
         _shellView.DataContext = _shellViewModel;
         _shellViewModel.RetryStartupRequested += OnRetryStartupRequested;
         _shellViewModel.SelectDataRootRequested += OnSelectDataRootRequested;
+        _shellViewModel.GetWebView2Requested += OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged += OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted += OnViewerNavigationCompleted;
 
@@ -67,11 +88,13 @@ internal sealed partial class MainWindow : Window
         Closing += OnClosing;
     }
 
-    private static IChatFavoriteStore CreateChatFavoriteStore()
+    private static IChatFavoriteStore CreateChatFavoriteStore(string? filePath)
     {
         try
         {
-            return ChatFavoriteStore.CreateDefault();
+            return filePath is null
+                ? ChatFavoriteStore.CreateDefault()
+                : new ChatFavoriteStore(filePath);
         }
         catch
         {
@@ -84,6 +107,15 @@ internal sealed partial class MainWindow : Window
     private async void OnRetryStartupRequested(object? sender, EventArgs args) => await RetryStartupAsync();
 
     private async void OnSelectDataRootRequested(object? sender, EventArgs args) => await SelectDataRootAsync();
+
+    private async void OnGetWebView2Requested(object? sender, EventArgs args) =>
+        await OpenWebView2DownloadAsync();
+
+    private async Task OpenWebView2DownloadAsync()
+    {
+        _diagnostics.Write(ProductDiagnosticEvent.WebView2RecoveryOpened);
+        await OpenExternalUriAsync(WebView2DownloadUri);
+    }
 
     private async void OnWikiDataChanged(object? sender, WikiDataChangedEventArgs args)
     {
@@ -116,6 +148,8 @@ internal sealed partial class MainWindow : Window
                 IsDarkTheme,
                 _lifetime.Token);
             _runtime = runtime;
+            _shellViewModel.SetWebView2Status(runtime.WebView2);
+            _diagnostics.Write(ProductDiagnosticEvent.RuntimeReady, runtime.WebView2.Version);
             _timings.RuntimeReadyMilliseconds = ElapsedFromProcessStart();
             runtime.Viewer.StatusChanged += OnViewerStatusChanged;
             RequestedThemeVariant = runtime.Preferences.AppTheme switch
@@ -176,7 +210,7 @@ internal sealed partial class MainWindow : Window
             ShowStartupError(exception);
             if (_smokeLogPath is not null)
             {
-                _smokeResult = WindowsSmokeResult.Failure(exception.Message, _timings);
+                _smokeResult = WindowsSmokeResult.Failure(GetSafeErrorCode(exception), _timings);
                 Close();
             }
         }
@@ -269,17 +303,39 @@ internal sealed partial class MainWindow : Window
 
     private void ShowStartupError(Exception exception)
     {
+        var recovery = exception switch
+        {
+            WindowsClientStartupException { Code: "webview2-missing" } => StartupRecoveryKind.InstallWebView2,
+            DataRootResolutionException => StartupRecoveryKind.SelectDataRoot,
+            _ => StartupRecoveryKind.Retry,
+        };
         var message = exception switch
         {
             HostMountException mount => mount.Message,
             DataRootResolutionException dataRoot => dataRoot.Message,
             HostSettingsException settings => settings.Message,
+            WindowsClientStartupException { Code: "webview2-missing" } =>
+                "未检测到 Microsoft Edge WebView2 Runtime；请从 Microsoft 官方页面安装或修复 Evergreen Runtime。",
             WindowsClientStartupException startup => startup.Message,
             ApplicationUseCaseException application => application.Message,
             _ => "应用启动失败。",
         };
-        _shellViewModel.SetStartupStatus(message + " 处理后点击“重试”。", isError: true);
+        _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
+        _shellViewModel.SetStartupStatus(
+            message + " 处理后点击“重试”。",
+            isError: true,
+            recovery);
     }
+
+    private static string GetSafeErrorCode(Exception exception) => exception switch
+    {
+        WindowsClientStartupException startup => startup.Code,
+        DataRootResolutionException dataRoot => dataRoot.Code,
+        HostSettingsException settings => settings.Code,
+        HostMountException mount => mount.Code,
+        ApplicationUseCaseException application => application.Code,
+        _ => exception.GetType().Name,
+    };
 
     private async Task RunSmokeAsync()
     {
@@ -323,7 +379,12 @@ internal sealed partial class MainWindow : Window
                 runtime.Bridge.History.Count,
                 false,
                 null,
-                aiSmoke);
+                aiSmoke,
+                new WindowsUpdateSmokeResult(
+                    _productUpdateService.Capabilities.CanUpdate,
+                    _productUpdateService.Capabilities.IsPortable,
+                    _productUpdateService.Capabilities.CurrentVersion,
+                    _productUpdateService.Capabilities.ReleasesUri is not null));
             if (result.ScriptRequests == 0
                 || result.StyleRequests == 0
                 || result.ImageRequests == 0
@@ -336,7 +397,7 @@ internal sealed partial class MainWindow : Window
         }
         catch (Exception exception)
         {
-            _smokeResult = WindowsSmokeResult.Failure(exception.Message);
+            _smokeResult = WindowsSmokeResult.Failure(GetSafeErrorCode(exception));
             _shellViewModel.SetStartupStatus("Smoke 失败。", isError: true);
         }
         finally
@@ -432,6 +493,25 @@ internal sealed partial class MainWindow : Window
         if (_closing)
             return;
         _closing = true;
+        await CleanupAsync();
+        Close();
+    }
+
+    private async Task ApplyUpdateAndRestartAsync()
+    {
+        if (_closing)
+            return;
+        _closing = true;
+        await CleanupAsync();
+        _productUpdateService.ApplyAndRestart();
+        Close();
+    }
+
+    private static Task OpenExternalUriAsync(Uri uri) =>
+        new WindowsExternalUriLauncher().OpenAsync(uri);
+
+    private async Task CleanupAsync()
+    {
         var closeTimer = Stopwatch.StartNew();
         _timings.CloseRequestedMilliseconds = ElapsedFromProcessStart();
         _lifetime.Cancel();
@@ -440,14 +520,15 @@ internal sealed partial class MainWindow : Window
         _shellViewModel.Dispose();
         _shellViewModel.RetryStartupRequested -= OnRetryStartupRequested;
         _shellViewModel.SelectDataRootRequested -= OnSelectDataRootRequested;
+        _shellViewModel.GetWebView2Requested -= OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged -= OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted -= OnViewerNavigationCompleted;
         _lifetime.Dispose();
+        _diagnostics.Write(ProductDiagnosticEvent.ApplicationStopped);
         _cleanupComplete = true;
         closeTimer.Stop();
         _timings.CloseTotalMilliseconds = closeTimer.ElapsedMilliseconds;
         await WriteSmokeLogAsync();
-        Close();
     }
 
     private async Task DisposeRuntimeAsync()
@@ -543,21 +624,11 @@ internal sealed partial class MainWindow : Window
         return runtime.AiStatus;
     }
 
-    private async Task<string?> PickPythonExecutableAsync(CancellationToken cancellationToken)
+    private async Task<WindowsAiRuntimeStatus> ClearAiCredentialAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
-        {
-            Title = "选择 AI Runtime 使用的 python.exe",
-            AllowMultiple = false,
-            FileTypeFilter =
-            [
-                new FilePickerFileType("Python 可执行文件") { Patterns = ["python.exe", "*.exe"] },
-            ],
-        });
-        cancellationToken.ThrowIfCancellationRequested();
-        var file = files.SingleOrDefault();
-        return file?.Path is { IsFile: true } path ? path.LocalPath : null;
+        CreateAiConfigurationStore().DeleteCredential();
+        return await RestartAiAsync(cancellationToken);
     }
 
     private AiRuntimeConfigurationStore CreateAiConfigurationStore()
@@ -698,7 +769,7 @@ internal sealed partial class MainWindow : Window
     {
         if (_smokeLogPath is null)
             return;
-        var result = (_smokeResult ?? WindowsSmokeResult.Failure("The client closed before smoke completed."))
+        var result = (_smokeResult ?? WindowsSmokeResult.Failure("smoke-incomplete"))
             with { ExitCleanupCompleted = _cleanupComplete, Lifecycle = _timings };
         var fullPath = Path.GetFullPath(_smokeLogPath);
         Directory.CreateDirectory(Path.GetDirectoryName(fullPath)!);
@@ -808,6 +879,7 @@ internal sealed record WindowsSmokeResult(
     bool ExitCleanupCompleted,
     string? Error,
     WindowsAiSmokeResult? Ai,
+    WindowsUpdateSmokeResult? Update,
     WindowsLifecycleTimings? Lifecycle = null)
 {
     public static WindowsSmokeResult Failure(
@@ -824,8 +896,15 @@ internal sealed record WindowsSmokeResult(
         false,
         error,
         null,
+        null,
         lifecycle);
 }
+
+internal sealed record WindowsUpdateSmokeResult(
+    bool CanUpdate,
+    bool IsPortable,
+    string CurrentVersion,
+    bool HasReleasesUri);
 
 internal sealed class WindowsLifecycleTimings
 {

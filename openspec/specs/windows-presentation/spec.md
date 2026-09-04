@@ -1,6 +1,6 @@
 # Windows Presentation 能力契约
 
-- 状态：implemented；Phase 09 P0 UI Takeover 已通过 Windows 11 x64 Release build、全量 tests 与目标窗口验收
+- 状态：implemented；Phase 11 产品更新、凭据与恢复状态已接入既有 Settings/Shell
 - 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、数据管理、设置、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
 - 来源：Master Architecture v0.6、Phase 08、已归档 Phase 09 计划、ADR 0001、Application/Viewer/Windows AI Runtime 能力契约
 
@@ -58,9 +58,11 @@
 - 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键返回、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。
 - 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
 - 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
-- 设置页使用“常规设置 / AI 配置”二级菜单，不增加第六个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v2。
-- DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。Python 使用原生文件选择器选择已有 `python.exe`，API key 始终遮蔽显示，思考强度提供服务默认、关闭、低、高、最大五档。
+- 设置页使用“常规设置 / AI 配置”二级菜单，不增加第六个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
+- DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。Python 只读显示安装目录中的内置 Runtime；API key 不回显并保存到 Windows Credential Manager，提供保留、替换和显式清除；思考强度提供服务默认、关闭、低、高、最大五档。
 - AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
+- 常规页同级“关于与更新”区域显示应用版本、安装/portable 形态、Windows/WebView2 状态、unsigned 告知和有界诊断。只有用户点击后才检查公开 GitHub stable Releases；检查、可用、下载、取消、待重启、失败与禁用均为页内状态，失败不影响离线功能。
+- 启动错误只显示当前适用的恢复动作：数据根失败提供“选择数据”，WebView2 缺失提供 Microsoft 官方获取入口，其他失败保留重试；不得让无关按钮暗示错误恢复方式。
 
 ## 安全 Markdown
 
@@ -80,6 +82,6 @@
 
 Application/Core 公共 API、Python Agent、NDJSON v1、`ai-runtime.json`、SQLite schema、Wiki 数据包和 Viewer 内容协议不因 Presentation 改变。新增状态模型保持在 Windows assembly 内部；不得把 UI 状态升级为公共持久模型或 Application port。
 
-启动失败时必须同时提供“重试”和“重新选择 Wiki 数据文件夹”，后者验证并替换已保存路径后重新组合 Runtime。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
+数据根启动失败时提供“重试”和“重新选择 Wiki 数据文件夹”，后者验证并替换已保存路径后重新组合 Runtime；WebView2 缺失时提供“重试”和 Microsoft 官方获取入口；其他启动失败只保留适用的安全恢复动作。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
 若增加多轮、自动会话历史或同步、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化、Windows 产品化或 Android UI，必须建立独立变更并更新相应能力契约。
