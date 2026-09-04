@@ -205,6 +205,8 @@ public sealed class Phase09TakeoverTests
         Assert.Equal(1, Count(shell, "Settings.RefreshAsync()"));
         Assert.Matches("Content=\"检查并更新\"[\\s\\S]*?IsVisible=\"\\{Binding HasPageData\\}\"", managementXaml);
         Assert.Matches("Content=\"下载缺失资源\"[\\s\\S]*?IsVisible=\"\\{Binding NeedsResources\\}\"", managementXaml);
+        Assert.Contains("Command=\"{Binding SelectDataRootCommand}\"", managementXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"SelectDataRoot\"", managementXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("using SQLite", presentation, StringComparison.Ordinal);
         Assert.DoesNotContain("DatabaseService", presentation, StringComparison.Ordinal);
         Assert.Equal(1, Count(allXaml, "<NativeWebView"));

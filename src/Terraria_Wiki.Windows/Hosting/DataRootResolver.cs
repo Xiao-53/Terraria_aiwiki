@@ -28,6 +28,15 @@ internal sealed class DataRootResolver
     public async Task<DataRootResolution> ResolveAsync(
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken = default)
+        => await ResolveAsync(
+            arguments,
+            allowFolderPicker: true,
+            cancellationToken).ConfigureAwait(false);
+
+    internal async Task<DataRootResolution> ResolveAsync(
+        IReadOnlyList<string> arguments,
+        bool allowFolderPicker,
+        CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         var explicitPath = ParseExplicitPath(arguments);
@@ -41,6 +50,13 @@ internal sealed class DataRootResolver
         var saved = await _settings.LoadDataRootAsync(cancellationToken).ConfigureAwait(false);
         if (!string.IsNullOrWhiteSpace(saved) && TryValidate(saved, out var savedPath, out _))
             return new DataRootResolution(savedPath!, DataRootSource.SavedSettings);
+
+        if (!allowFolderPicker)
+        {
+            throw new DataRootResolutionException(
+                "data-root-required",
+                "尚未选择有效的 Wiki 数据文件夹。请在数据管理页面选择包含 Manager.db 的文件夹。");
+        }
 
         var selected = await _picker.PickAsync(cancellationToken).ConfigureAwait(false);
         if (string.IsNullOrWhiteSpace(selected))

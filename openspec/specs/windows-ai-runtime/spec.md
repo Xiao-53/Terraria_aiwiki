@@ -50,6 +50,7 @@
 - Sidecar 的活动回答、shutdown 与进程退出共享 1.5 秒优雅期限；期限耗尽后只终止所属进程树，并以 500 ms 期限收尾进程等待和连接释放。后台启动、显式重试和退出由同一内部同步门协调，退出后不得挂接晚到的 Runtime。
 - Sidecar fatal、协议错误或意外退出后，停止其关联 WikiToolServer；不无限自动重启。用户显式“重试 AI”时先释放旧 Runtime，再创建新的 MCP server，因此必须轮换端口与 bearer。
 - 设置页保存先统一验证 Credential Manager 与 v3 durable 临时文件，再原子替换配置并调用同一个显式重试入口。验证或写入失败保留旧文件/凭据与当前 Runtime；写入成功但重启失败时保留新配置并如实显示 AI 尚未就绪，不把持久化成功误报为失败。
+- AI 配置页面和 Credential Manager 操作采用窗口生命周期，不依赖 Wiki 数据根已经连接；无有效数据根时仍可输入、替换或清除 key 并保存 provider。此时不启动 Sidecar，只显示选择有效数据根后再启动的安全状态。
 - 只有宿主启动并保存句柄的 Python `Process` 可以在 shutdown 超时后使用 `Kill(entireProcessTree: true)`；不得按进程名扫描或终止其他 Python。
 
 ## Presentation Runtime 边界与故障隔离

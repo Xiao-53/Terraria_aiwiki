@@ -124,6 +124,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 {
     private readonly Func<CancellationToken, Task<string?>> _pickImportPackage;
     private readonly Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> _exportPackage;
+    private readonly Action _requestDataRootSelection;
     private WikiManagementActions? _actions;
     private CancellationTokenSource? _operationCancellation;
     private WikiBookSnapshot? _activeWiki;
@@ -137,14 +138,21 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     private double _progressValue;
     private double _progressMaximum = 1;
     private bool _isProgressIndeterminate = true;
+    private string _dataRootPath = "尚未选择";
+    private bool _isSelectingDataRoot;
     private bool _disposed;
 
     public WikiManagementViewModel(
         Func<CancellationToken, Task<string?>>? pickImportPackage = null,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null)
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
+        Action? requestDataRootSelection = null)
     {
         _pickImportPackage = pickImportPackage ?? (_ => Task.FromResult<string?>(null));
         _exportPackage = exportPackage ?? ((_, _) => Task.FromResult<WikiPackageExportResponse?>(null));
+        _requestDataRootSelection = requestDataRootSelection ?? (() => { });
+        SelectDataRootCommand = new RelayCommand(
+            _ => _requestDataRootSelection(),
+            _ => CanSelectDataRoot);
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => CanOperate);
         DownloadAllCommand = new AsyncCommand(_ => DownloadAsync(includeResources: true), _ => CanOperate && !HasPageData);
         DownloadPagesCommand = new AsyncCommand(_ => DownloadAsync(includeResources: false), _ => CanOperate && !HasPageData);
@@ -226,6 +234,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _isBusy, value))
                 return;
             OnPropertyChanged(nameof(CanOperate));
+            OnPropertyChanged(nameof(CanSelectDataRoot));
+            SelectDataRootCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(IsIdle));
             CancelOperationCommand.NotifyCanExecuteChanged();
             RefreshCommands();
@@ -260,13 +270,41 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isProgressIndeterminate, value);
     }
 
+    public string DataRootPath
+    {
+        get => _dataRootPath;
+        private set
+        {
+            if (!SetProperty(ref _dataRootPath, value))
+                return;
+            OnPropertyChanged(nameof(DataRootActionText));
+        }
+    }
+
+    public bool IsSelectingDataRoot
+    {
+        get => _isSelectingDataRoot;
+        private set
+        {
+            if (!SetProperty(ref _isSelectingDataRoot, value))
+                return;
+            OnPropertyChanged(nameof(CanSelectDataRoot));
+            OnPropertyChanged(nameof(DataRootActionText));
+            SelectDataRootCommand.NotifyCanExecuteChanged();
+        }
+    }
+
     public bool HasActiveWiki => ActiveWiki is not null;
     public bool HasPageData => ActiveWiki?.IsPageDownloaded == true;
     public bool HasResources => ActiveWiki?.IsResourceDownloaded == true;
     public bool NeedsPageData => HasActiveWiki && !HasPageData;
     public bool NeedsResources => HasPageData && !HasResources;
     public bool CanOperate => IsAvailable && !IsBusy && HasActiveWiki;
+    public bool CanSelectDataRoot => !IsBusy && !IsSelectingDataRoot;
     public bool IsIdle => !IsBusy;
+    public string DataRootActionText => IsSelectingDataRoot
+        ? "正在选择…"
+        : DataRootPath == "尚未选择" ? "选择数据文件夹" : "重新选择数据文件夹";
     public string ActiveWikiTitle => ActiveWiki?.Title ?? "未选择 Wiki";
     public string ActiveWikiDescription => ActiveWiki?.Description ?? "本地 Wiki 数据源不可用。";
     public string PageCountText => (ActiveWiki?.PageCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
@@ -327,6 +365,24 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public RelayCommand CancelOperationCommand { get; }
     public RelayCommand CancelConfirmationCommand { get; }
     public AsyncCommand ConfirmCommand { get; }
+    public RelayCommand SelectDataRootCommand { get; }
+
+    internal void SetDataRoot(string? dataRoot)
+    {
+        DataRootPath = string.IsNullOrWhiteSpace(dataRoot)
+            ? "尚未选择"
+            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataRoot));
+    }
+
+    internal void BeginDataRootSelection()
+    {
+        IsSelectingDataRoot = true;
+        StatusMessage = "请选择包含有效 Manager.db 的 Wiki 数据文件夹。";
+    }
+
+    internal void ReportDataRootSelection(string message) => StatusMessage = message;
+
+    internal void EndDataRootSelection() => IsSelectingDataRoot = false;
 
     public void Attach(WikiApplication application)
     {
@@ -350,7 +406,9 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ActiveWiki = null;
         Wikis.Clear();
         CancelConfirmation();
-        StatusMessage = "本地 Wiki 数据管理不可用。";
+        StatusMessage = DataRootPath == "尚未选择"
+            ? "尚未选择 Wiki 数据文件夹；请先选择包含 Manager.db 的文件夹。"
+            : "当前 Wiki 数据库未连接；可以重新选择数据文件夹。";
     }
 
     internal async Task RefreshAsync()
@@ -809,6 +867,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ImportCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
         ConfirmCommand.NotifyCanExecuteChanged();
+        SelectDataRootCommand.NotifyCanExecuteChanged();
     }
 
     private static bool RequiresLegacyConfirmation(string? version) =>

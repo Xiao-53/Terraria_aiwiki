@@ -93,7 +93,7 @@ Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` �
 
 产品源码已以 `d67d904` 内容建立独立基线，固定上游参考从未参与迁移后的 build/runtime；Phase 10 已移除其本地 gitlink。移除后的 Windows Release build 为 0 warning/0 error，275/275 .NET tests 与两种 publish smoke 均通过；冻结 Python 回归沿用此前无源码变化的证据。
 
-Phase 00–10 已完成，Phase 11 Windows Productization 正在实施；Phase 12 按真实需求决定是否实施，Phase 13 Android 已暂缓。Windows Avalonia Shell 的五个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite，唯一共享 Reader 和动态 loopback Viewer 边界不变。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收；最终 Release build 为 0 warning/0 error，292/292 .NET tests 通过。公共 API、SQLite schema、数据包、AI NDJSON/Wiki Tool/Viewer 内容协议未改变。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利确认；GitHub 渠道、WebView2 缺失干净机与 Windows 10 条件矩阵未完成，当前候选不是公开发行就绪状态。
+Phase 00–10 已完成，Phase 11 Windows Productization 正在实施；Phase 12 按真实需求决定是否实施，Phase 13 Android 已暂缓。Windows Avalonia Shell 的五个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite，唯一共享 Reader 和动态 loopback Viewer 边界不变。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收；最新未打包源代码的 Release build 为 0 warning/0 error，295/295 .NET tests 通过。此前的 `0.11.0-local.22` 安装与 portable 候选不含最新试用修复，并按用户要求未重建。公共 API、SQLite schema、数据包、AI NDJSON/Wiki Tool/Viewer 内容协议未改变。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利确认；GitHub 渠道、WebView2 缺失干净机与 Windows 10 条件矩阵未完成，当前候选不是公开发行就绪状态。
 
 ## 治理关系
 

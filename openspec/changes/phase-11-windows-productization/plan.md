@@ -284,6 +284,8 @@
 - 2026-09-04：最终本地候选 `0.11.0-local.22` 生成 119,647,140-byte Setup、114,926,892-byte portable zip 与 115,056,548-byte full package；7/7 checksums 通过，portable 解包后 6,404 个 manifest 文件在运行前后均无 hash/数量差异，候选因占位发布参数和待定许可证保持 `publicationReady: false`。
 - 2026-09-04：最终 portable 与 installed smoke 均通过并报告正确版本、GitHub releases URI 和 portable/installed update context；卸载删除安装根、快捷方式和注册项并保留外部设置/收藏/Wiki 数据。WebView2 profile 位于 `%LocalAppData%\Terraria AI Wiki\WebView2`，安装/portable payload 未产生 WebView cache、`.pyc` 或残留进程。
 - 2026-09-04：完成 Light 1280×820、Dark 900×600 的宽屏 Reader、窄屏 Reader overlay、AI 设置和 About/更新/诊断视觉检查；Tab/Shift+Tab 与 overlay 关闭动作通过，Escape 与 1100 DIP 分界由自动化回归覆盖。
+- 2026-09-04：试用反馈发现无有效数据根时启动立即弹出文件夹选择器，错误选择后恢复入口不在数据管理页；同一启动失败还使 AI 配置错误绑定到数据库 Runtime，从而禁用 API Key 输入。按用户要求进入局部修复，不重建安装包。
+- 2026-09-04：完成试用修复：启动不再主动打开文件夹选择器，数据管理页可反复选择数据库文件夹，AI 配置与 Credential Manager 操作不再依赖数据库 Runtime。最新 Windows Release build 为 0 warning / 0 error，全量 .NET tests 295/295 通过；真实 Windows UI 验证确认启动选择器已延后、数据管理入口可用且 API Key 可输入。仅把已验证的内置 Python Runtime 复制到忽略的开发输出供即时试用，未调用发布或打包脚本。
 
 ## 发现、偏差与决策
 
@@ -305,7 +307,7 @@
 
 ## 验证结果
 
-- 最终 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 292/292 通过（Core 92、Application 54、WikiTools 28、Windows 118）。
+- 最新未打包 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 295/295 通过（Core 92、Application 54、WikiTools 28、Windows 121）。`0.11.0-local.22` 仍是修复前候选，按用户要求未重建。
 - Python frozen 回归通过：ruff check/format、strict mypy、pytest 77 passed / 4 explicit opt-in skipped；内置 CPython 3.14.7 x64、OpenSSL 3.5.7、pydantic-ai 2.31.0 的真实跨语言 fake-provider 测试通过，未生成 `.pyc`，退出后无 Python 子进程。
 - 最终本地候选生成 119,647,140-byte Setup、114,926,892-byte portable zip、115,056,548-byte full package；7/7 SHA-256 一致，单制品低于 2 GiB，应用与 Setup PE 均确认无 certificate table，portable 解包与 payload manifest 精确一致。
 - 实际 Windows 11 安装 smoke：Search 1、JS 1、CSS 1、image 1、audio 3、Viewer messages 9/9、cleanup true；repair 恢复故意损坏的 Viewer/Python，升级后 payload 无混合版本，portable smoke 和卸载注册/快捷方式/安装根清理通过。

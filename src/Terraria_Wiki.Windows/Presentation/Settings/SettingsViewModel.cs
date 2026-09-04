@@ -45,6 +45,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
             saveAiConfiguration ?? ((_, _) => throw new InvalidOperationException("AI configuration is unavailable.")),
             restartAi ?? (_ => throw new InvalidOperationException("AI Runtime is unavailable.")),
             clearAiCredential ?? (_ => throw new InvalidOperationException("AI credential removal is unavailable.")));
+        Ai.Attach();
         Updates = new ProductUpdateViewModel(
             productUpdateService ?? new VelopackProductUpdateService(),
             applyUpdateAndRestart ?? (() => Task.CompletedTask),
@@ -190,7 +191,6 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         _load = load ?? throw new ArgumentNullException(nameof(load));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         IsAvailable = true;
-        Ai.Attach();
         StatusMessage = "调整后点击“保存设置”统一验证并写入本机配置。";
     }
 
@@ -205,7 +205,6 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         IsAvailable = false;
         IsBusy = false;
         IsDirty = false;
-        Ai.Detach();
         StatusMessage = "应用设置不可用。";
     }
 

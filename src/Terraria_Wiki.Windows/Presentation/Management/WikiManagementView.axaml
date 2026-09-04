@@ -10,7 +10,8 @@
         <TextBlock Text="切换、下载、迁移并维护本地 Wiki 数据" Classes="page-subtitle" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
-              VerticalAlignment="Center" AutomationProperties.Name="刷新 Wiki 数据状态">
+              VerticalAlignment="Center" IsVisible="{Binding IsAvailable}"
+              AutomationProperties.Name="刷新 Wiki 数据状态">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Path Width="16" Height="16" Stretch="Uniform"
                 Data="M 20,11 C 20,16 16,20 11,20 C 6,20 2,16 2,11 C 2,6 6,2 11,2 C 14.2,2 17.1,3.7 18.7,6.4 M 18.7,2 L 18.7,6.4 L 14.3,6.4"
@@ -42,6 +43,24 @@
                   HorizontalScrollBarVisibility="Disabled">
       <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="20"
                   Margin="0,0,0,24">
+        <Border Classes="section-surface">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+            <StackPanel Spacing="4">
+              <TextBlock Text="数据库文件夹" Classes="section-title" />
+              <TextBlock Text="应用启动时不会自动弹出选择器。请选择包含 Manager.db 的 Wiki 数据文件夹；选错、取消或连接失败后都可以重新选择。"
+                         Classes="page-subtitle" TextWrapping="Wrap" />
+              <SelectableTextBlock Text="{Binding DataRootPath}" Margin="0,6,0,0"
+                                   TextWrapping="Wrap"
+                                   AutomationProperties.Name="当前 Wiki 数据文件夹" />
+            </StackPanel>
+            <Button Grid.Column="1" Content="{Binding DataRootActionText}"
+                    Classes="primary-action" VerticalAlignment="Center"
+                    Command="{Binding SelectDataRootCommand}"
+                    AutomationProperties.AutomationId="SelectDataRoot"
+                    AutomationProperties.Name="选择或重新选择 Wiki 数据文件夹" />
+          </Grid>
+        </Border>
+
         <Border Classes="confirmation-card" IsVisible="{Binding IsConfirmationVisible}"
                 AutomationProperties.Name="数据操作确认">
           <Grid RowDefinitions="Auto,Auto,Auto" Margin="20">
@@ -65,7 +84,7 @@
           </Grid>
         </Border>
 
-        <StackPanel Spacing="10">
+        <StackPanel Spacing="10" IsVisible="{Binding IsAvailable}">
           <TextBlock Text="Wiki 数据源" Classes="section-title" />
           <TextBlock Text="选择其他 Wiki 前会先确认；Viewer、搜索和资料库会共同切换。"
                      Classes="page-subtitle" TextWrapping="Wrap" />
@@ -95,7 +114,7 @@
           </ItemsControl>
         </StackPanel>
 
-        <Border Classes="section-surface">
+        <Border Classes="section-surface" IsVisible="{Binding IsAvailable}">
           <StackPanel Margin="0,20,0,0" Spacing="12">
             <StackPanel Spacing="4">
               <TextBlock Text="{Binding ActiveWikiTitle}" Classes="section-title" />
@@ -127,7 +146,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="section-surface">
+        <Border Classes="section-surface" IsVisible="{Binding IsAvailable}">
           <StackPanel Margin="0,20,0,0" Spacing="12">
             <StackPanel Spacing="4">
               <TextBlock Text="下载与更新" Classes="section-title" />
@@ -155,7 +174,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="section-surface">
+        <Border Classes="section-surface" IsVisible="{Binding IsAvailable}">
           <StackPanel Margin="0,20,0,0" Spacing="12">
             <StackPanel Spacing="4">
               <TextBlock Text="导入与导出" Classes="section-title" />
@@ -171,7 +190,7 @@
           </StackPanel>
         </Border>
 
-        <Border Classes="section-surface">
+        <Border Classes="section-surface" IsVisible="{Binding IsAvailable}">
           <StackPanel Margin="0,20,0,0" Spacing="12">
             <StackPanel Spacing="4">
               <TextBlock Text="维护与恢复" Classes="section-title" />

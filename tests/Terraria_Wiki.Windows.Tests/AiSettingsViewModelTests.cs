@@ -185,4 +185,50 @@ public sealed class AiSettingsViewModelTests
         Assert.Equal(0, viewModel.DeepSeekModelIndex);
         Assert.Contains("已停用", viewModel.StatusMessage, StringComparison.Ordinal);
     }
+
+    [Fact]
+    public async Task AiCredentialCanBeEnteredAndSavedWithoutDatabaseRuntime()
+    {
+        using var directory = new TestDirectory();
+        var python = Path.Combine(directory.Path, "python.exe");
+        await File.WriteAllBytesAsync(python, [0]);
+        var path = Path.Combine(directory.Path, "ai-runtime.json");
+        var initial = new AiRuntimeConfigurationDraft(
+            python,
+            new AiProviderConfiguration("https://api.deepseek.com", "deepseek-v4-flash", "responses", null),
+            string.Empty,
+            path,
+            Exists: false,
+            HasStoredCredential: false);
+        AiRuntimeConfigurationDraft? requested = null;
+        using var settings = new SettingsViewModel(
+            loadAiConfiguration: _ => Task.FromResult(initial),
+            saveAiConfiguration: (draft, _) =>
+            {
+                requested = draft;
+                return Task.FromResult(AiRuntimeConfiguration.Create(
+                    path,
+                    python,
+                    draft.Provider,
+                    draft.ApiKey));
+            },
+            restartAi: _ => Task.FromResult(new WindowsAiRuntimeStatus(
+                WindowsAiRuntimeState.Disabled,
+                "选择有效的 Wiki 数据文件夹后即可启动 AI。",
+                "data-root-required")));
+
+        Assert.False(settings.IsAvailable);
+        Assert.True(settings.Ai.IsAvailable);
+        await settings.Ai.RefreshAsync();
+        settings.Ai.ApiKey = "new-test-key";
+        Assert.True(settings.Ai.CanSave);
+
+        await settings.Ai.SaveAsync();
+        settings.Detach();
+
+        Assert.Equal("new-test-key", requested?.ApiKey);
+        Assert.True(settings.Ai.IsAvailable);
+        Assert.True(settings.Ai.HasStoredCredential);
+        Assert.Contains("选择有效", settings.Ai.StatusMessage, StringComparison.Ordinal);
+    }
 }

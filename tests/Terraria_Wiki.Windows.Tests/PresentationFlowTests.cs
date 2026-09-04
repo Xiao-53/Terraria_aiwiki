@@ -28,10 +28,10 @@ public sealed class PresentationFlowTests
             "数据目录不可用。",
             isError: true,
             StartupRecoveryKind.SelectDataRoot);
-        Assert.True(shell.CanSelectDataRoot);
+        Assert.False(shell.CanRetryStartup);
         Assert.False(shell.CanGetWebView2);
         Assert.False(shell.GetWebView2Command.CanExecute(null));
-        shell.SelectDataRootCommand.Execute(null);
+        shell.Management.SelectDataRootCommand.Execute(null);
         Assert.True(selectRequested);
         Assert.False(webViewRequested);
 
@@ -39,15 +39,36 @@ public sealed class PresentationFlowTests
             "WebView2 不可用。",
             isError: true,
             StartupRecoveryKind.InstallWebView2);
-        Assert.False(shell.CanSelectDataRoot);
+        Assert.True(shell.CanRetryStartup);
         Assert.True(shell.CanGetWebView2);
         shell.GetWebView2Command.Execute(null);
         Assert.True(webViewRequested);
 
         shell.SetStartupStatus("应用已就绪。");
         Assert.False(shell.HasStartupError);
-        Assert.False(shell.CanSelectDataRoot);
+        Assert.False(shell.CanRetryStartup);
         Assert.False(shell.CanGetWebView2);
+    }
+
+    [Fact]
+    public void DataRootRecoveryOpensManagementAndSelectionCanBeRetried()
+    {
+        using var shell = new ShellViewModel();
+
+        shell.ShowDataRootRecovery("请选择有效的数据文件夹。");
+
+        Assert.Equal(ShellSection.Management, shell.CurrentSection);
+        Assert.True(shell.IsManagementVisible);
+        Assert.Contains("请选择", shell.Management.StatusMessage, StringComparison.Ordinal);
+        Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
+
+        shell.Management.BeginDataRootSelection();
+        Assert.False(shell.Management.SelectDataRootCommand.CanExecute(null));
+        shell.Management.ReportDataRootSelection("所选文件夹不可用；可以重新选择。");
+        shell.Management.EndDataRootSelection();
+
+        Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
+        Assert.Contains("重新选择", shell.Management.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]

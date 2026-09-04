@@ -57,6 +57,23 @@ public sealed class DataRootResolverTests
     }
 
     [Fact]
+    public async Task StartupResolutionDoesNotOpenFolderPickerWhenNoValidRootExists()
+    {
+        using var temp = new TestDirectory();
+        var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
+        var invalidSavedRoot = System.IO.Path.Combine(temp.Path, "missing");
+        await store.SaveDataRootAsync(invalidSavedRoot);
+        var picker = new TestDataRootPicker { Result = temp.CreateDataRoot("would-have-been-picked") };
+
+        var error = await Assert.ThrowsAsync<DataRootResolutionException>(() =>
+            new DataRootResolver(store, picker).ResolveAsync([], allowFolderPicker: false));
+
+        Assert.Equal("data-root-required", error.Code);
+        Assert.Equal(0, picker.Calls);
+        Assert.Equal(invalidSavedRoot, await store.LoadDataRootAsync());
+    }
+
+    [Fact]
     public async Task ExplicitInvalidRootDoesNotSilentlyFallBack()
     {
         using var temp = new TestDirectory();

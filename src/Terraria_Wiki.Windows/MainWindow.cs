@@ -237,23 +237,26 @@ internal sealed partial class MainWindow : Window
         if (_closing || _isRestarting)
             return;
         _isRestarting = true;
+        _shellViewModel.Management.BeginDataRootSelection();
         try
         {
             var selected = await new AvaloniaDataRootPicker(this).PickAsync(_lifetime.Token);
             if (string.IsNullOrWhiteSpace(selected))
             {
-                _shellViewModel.SetStartupStatus("未更改 Wiki 数据文件夹。", isError: true);
+                _shellViewModel.Management.ReportDataRootSelection(
+                    "已取消选择；当前数据文件夹没有改变，可以随时重新选择。");
                 return;
             }
             if (!DataRootResolver.TryValidate(selected, out var normalized, out _))
             {
-                _shellViewModel.SetStartupStatus(
-                    "所选文件夹不可用；请选择包含有效 Manager.db 的 Wiki 数据目录。",
-                    isError: true);
+                _shellViewModel.Management.ReportDataRootSelection(
+                    "所选文件夹不可用；请选择包含有效 Manager.db 的 Wiki 数据文件夹。你可以立即重新选择。");
                 return;
             }
 
             _runtimeArguments = WithDataRoot(_arguments, normalized!);
+            _shellViewModel.Management.SetDataRoot(normalized);
+            _shellViewModel.Management.ReportDataRootSelection("正在切换 Wiki 数据文件夹…");
             _shellViewModel.SetStartupStatus("正在切换 Wiki 数据文件夹…");
             await DisposeRuntimeAsync();
             await StartAsync();
@@ -263,10 +266,12 @@ internal sealed partial class MainWindow : Window
         }
         catch
         {
-            _shellViewModel.SetStartupStatus("无法选择 Wiki 数据文件夹。", isError: true);
+            _shellViewModel.Management.ReportDataRootSelection(
+                "无法打开或读取所选文件夹；当前数据没有改变，可以重新选择。");
         }
         finally
         {
+            _shellViewModel.Management.EndDataRootSelection();
             _isRestarting = false;
         }
     }
@@ -321,6 +326,14 @@ internal sealed partial class MainWindow : Window
             _ => "应用启动失败。",
         };
         _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
+        if (recovery == StartupRecoveryKind.SelectDataRoot)
+        {
+            var dataRootMessage = exception is DataRootResolutionException { Code: "data-root-required" }
+                ? "尚未选择有效的 Wiki 数据文件夹。请在数据管理页面选择包含 Manager.db 的文件夹。"
+                : "Wiki 数据文件夹不可用。请在数据管理页面重新选择包含有效 Manager.db 的文件夹。";
+            _shellViewModel.ShowDataRootRecovery(dataRootMessage);
+            return;
+        }
         _shellViewModel.SetStartupStatus(
             message + " 处理后点击“重试”。",
             isError: true,
@@ -619,7 +632,14 @@ internal sealed partial class MainWindow : Window
 
     private async Task<WindowsAiRuntimeStatus> RestartAiAsync(CancellationToken cancellationToken)
     {
-        var runtime = _runtime ?? throw new InvalidOperationException("AI Runtime is unavailable.");
+        var runtime = _runtime;
+        if (runtime is null)
+        {
+            return new WindowsAiRuntimeStatus(
+                WindowsAiRuntimeState.Disabled,
+                "AI 配置已保存；选择有效的 Wiki 数据文件夹后即可启动 AI。",
+                "data-root-required");
+        }
         await runtime.RetryAiAsync(cancellationToken);
         return runtime.AiStatus;
     }

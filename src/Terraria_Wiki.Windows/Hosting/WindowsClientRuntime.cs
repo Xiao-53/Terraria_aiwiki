@@ -82,7 +82,10 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             var settingsPath = ParseHostSettingsPath(arguments);
             var settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
             var resolution = await new DataRootResolver(settings, picker)
-                .ResolveAsync(arguments, cancellationToken)
+                .ResolveAsync(
+                    arguments,
+                    allowFolderPicker: false,
+                    cancellationToken: cancellationToken)
                 .ConfigureAwait(false);
             guard.AcquireDataRoot(resolution.Path);
 

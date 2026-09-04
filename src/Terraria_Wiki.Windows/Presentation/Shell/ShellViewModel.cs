@@ -71,7 +71,10 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OpenChatFavoriteAsync,
             OpenFavoriteWikiAsync);
         Library = new WikiLibraryViewModel(OpenLibraryWikiAsync);
-        Management = new WikiManagementViewModel(pickImportPackage, exportPackage);
+        Management = new WikiManagementViewModel(
+            pickImportPackage,
+            exportPackage,
+            () => SelectDataRootRequested?.Invoke(this, EventArgs.Empty));
         Settings = new SettingsViewModel(
             applyPreferences,
             loadAiConfiguration,
@@ -90,10 +93,9 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         NavigateSettingsCommand = new RelayCommand(_ => NavigateSettings());
         OpenWikiReaderCommand = new RelayCommand(_ => OpenWikiReader());
         CloseReaderCommand = new RelayCommand(_ => CloseReader(), _ => IsReaderVisible);
-        RetryStartupCommand = new RelayCommand(_ => RetryStartupRequested?.Invoke(this, EventArgs.Empty), _ => HasStartupError);
-        SelectDataRootCommand = new RelayCommand(
-            _ => SelectDataRootRequested?.Invoke(this, EventArgs.Empty),
-            _ => CanSelectDataRoot);
+        RetryStartupCommand = new RelayCommand(
+            _ => RetryStartupRequested?.Invoke(this, EventArgs.Empty),
+            _ => CanRetryStartup);
         GetWebView2Command = new RelayCommand(
             _ => GetWebView2Requested?.Invoke(this, EventArgs.Empty),
             _ => CanGetWebView2);
@@ -168,9 +170,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _hasStartupError, value))
             {
                 RetryStartupCommand.NotifyCanExecuteChanged();
-                SelectDataRootCommand.NotifyCanExecuteChanged();
                 GetWebView2Command.NotifyCanExecuteChanged();
-                OnPropertyChanged(nameof(CanSelectDataRoot));
+                OnPropertyChanged(nameof(CanRetryStartup));
                 OnPropertyChanged(nameof(CanGetWebView2));
             }
         }
@@ -183,14 +184,14 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _startupRecovery, value))
                 return;
-            OnPropertyChanged(nameof(CanSelectDataRoot));
+            OnPropertyChanged(nameof(CanRetryStartup));
             OnPropertyChanged(nameof(CanGetWebView2));
-            SelectDataRootCommand.NotifyCanExecuteChanged();
+            RetryStartupCommand.NotifyCanExecuteChanged();
             GetWebView2Command.NotifyCanExecuteChanged();
         }
     }
 
-    public bool CanSelectDataRoot => HasStartupError && StartupRecovery == StartupRecoveryKind.SelectDataRoot;
+    public bool CanRetryStartup => HasStartupError && StartupRecovery != StartupRecoveryKind.SelectDataRoot;
     public bool CanGetWebView2 => HasStartupError && StartupRecovery == StartupRecoveryKind.InstallWebView2;
 
     public bool IsChatSelected => CurrentSection == ShellSection.Chat;
@@ -223,7 +224,6 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public RelayCommand OpenWikiReaderCommand { get; }
     public RelayCommand CloseReaderCommand { get; }
     public RelayCommand RetryStartupCommand { get; }
-    public RelayCommand SelectDataRootCommand { get; }
     public RelayCommand GetWebView2Command { get; }
 
     public void SetViewportWidth(double width) => IsWideLayout = width >= WideReaderThreshold;
@@ -237,6 +237,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Wiki.Attach((query, token) => runtime.Application.Query.SearchAsync(query, cancellationToken: token));
         Favorites.AttachWikiLibrary(runtime.Application.Library);
         Library.Attach(runtime.Application.Library);
+        Management.SetDataRoot(runtime.DataRoot);
         Management.Attach(runtime.Application);
         Settings.Attach(runtime.Application.Settings);
         Reader.AttachFavorites(Favorites.IsWikiFavoriteAsync, Favorites.SetWikiFavoriteAsync);
@@ -272,6 +273,16 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         StartupStatus = message;
         StartupRecovery = isError ? recovery : StartupRecoveryKind.None;
         HasStartupError = isError;
+    }
+
+    public void ShowDataRootRecovery(string message)
+    {
+        Management.ReportDataRootSelection(message);
+        SetStartupStatus(
+            message,
+            isError: true,
+            recovery: StartupRecoveryKind.SelectDataRoot);
+        NavigateManagement();
     }
 
     public bool TryCloseOverlay()
