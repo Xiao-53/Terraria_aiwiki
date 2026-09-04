@@ -36,19 +36,6 @@ internal sealed class TestDirectory : IDisposable
     }
 }
 
-internal sealed class TestDataRootPicker : IDataRootPicker
-{
-    public string? Result { get; set; }
-    public int Calls { get; private set; }
-
-    public Task<string?> PickAsync(CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        Calls++;
-        return Task.FromResult(Result);
-    }
-}
-
 internal sealed class TestLegacyProcessProbe : ILegacyProcessProbe
 {
     public bool Running { get; set; }

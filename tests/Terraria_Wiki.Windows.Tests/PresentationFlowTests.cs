@@ -69,6 +69,8 @@ public sealed class PresentationFlowTests
 
         Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
         Assert.Contains("重新选择", shell.Management.StatusMessage, StringComparison.Ordinal);
+        shell.Management.SetDataRoot(@"C:\WikiData");
+        Assert.Equal("更改文件夹", shell.Management.DataRootActionText);
     }
 
     [Fact]

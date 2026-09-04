@@ -46,7 +46,8 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("打开 Wiki 预览", shell, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding OpenWikiReaderCommand}\"", shell, StringComparison.Ordinal);
         Assert.DoesNotContain("SelectDataRoot", shell, StringComparison.Ordinal);
-        Assert.Contains("选择或重新选择 Wiki 数据文件夹", management, StringComparison.Ordinal);
+        Assert.Contains("更改 Wiki 数据文件夹", management, StringComparison.Ordinal);
+        Assert.Contains("首次运行会自动创建默认数据库文件夹", management, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"SelectDataRoot\"", management, StringComparison.Ordinal);
         Assert.Contains("查看全部页面", library, StringComparison.Ordinal);
         Assert.Contains("查看历史记录", library, StringComparison.Ordinal);

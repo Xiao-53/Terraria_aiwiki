@@ -1,3 +1,4 @@
+using Terraria_Wiki.Application;
 using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.Tests;
@@ -12,15 +13,13 @@ public sealed class DataRootResolverTests
         var savedRoot = temp.CreateDataRoot("saved");
         var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
         await store.SaveDataRootAsync(savedRoot);
-        var picker = new TestDataRootPicker { Result = temp.CreateDataRoot("picked") };
-        var resolver = new DataRootResolver(store, picker);
+        var resolver = new DataRootResolver(store);
 
         var result = await resolver.ResolveAsync(["--data-root", explicitRoot]);
 
         Assert.Equal(DataRootSource.CommandLine, result.Source);
         Assert.Equal(explicitRoot, result.Path);
         Assert.Equal(explicitRoot, await store.LoadDataRootAsync());
-        Assert.Equal(0, picker.Calls);
     }
 
     [Fact]
@@ -30,47 +29,91 @@ public sealed class DataRootResolverTests
         var savedRoot = temp.CreateDataRoot();
         var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
         await store.SaveDataRootAsync(savedRoot);
-        var picker = new TestDataRootPicker();
 
-        var result = await new DataRootResolver(store, picker).ResolveAsync([]);
+        var result = await new DataRootResolver(store).ResolveAsync([]);
 
         Assert.Equal(DataRootSource.SavedSettings, result.Source);
         Assert.Equal(savedRoot, result.Path);
-        Assert.Equal(0, picker.Calls);
     }
 
     [Fact]
-    public async Task InvalidSavedRootFallsBackToPickerAndPersistsSelection()
-    {
-        using var temp = new TestDirectory();
-        var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
-        await store.SaveDataRootAsync(System.IO.Path.Combine(temp.Path, "missing"));
-        var selected = temp.CreateDataRoot("selected");
-        var picker = new TestDataRootPicker { Result = selected };
-
-        var result = await new DataRootResolver(store, picker).ResolveAsync([]);
-
-        Assert.Equal(DataRootSource.FolderPicker, result.Source);
-        Assert.Equal(selected, result.Path);
-        Assert.Equal(selected, await store.LoadDataRootAsync());
-        Assert.Equal(1, picker.Calls);
-    }
-
-    [Fact]
-    public async Task StartupResolutionDoesNotOpenFolderPickerWhenNoValidRootExists()
+    public async Task InvalidSavedRootRequiresExplicitRecoveryAndIsNotOverwritten()
     {
         using var temp = new TestDirectory();
         var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
         var invalidSavedRoot = System.IO.Path.Combine(temp.Path, "missing");
         await store.SaveDataRootAsync(invalidSavedRoot);
-        var picker = new TestDataRootPicker { Result = temp.CreateDataRoot("would-have-been-picked") };
 
         var error = await Assert.ThrowsAsync<DataRootResolutionException>(() =>
-            new DataRootResolver(store, picker).ResolveAsync([], allowFolderPicker: false));
+            new DataRootResolver(store).ResolveAsync([]));
 
         Assert.Equal("data-root-required", error.Code);
-        Assert.Equal(0, picker.Calls);
         Assert.Equal(invalidSavedRoot, await store.LoadDataRootAsync());
+    }
+
+    [Fact]
+    public async Task FirstStartupCreatesAndPersistsManagedDefaultDataRoot()
+    {
+        using var temp = new TestDirectory();
+        var settingsDirectory = System.IO.Path.Combine(temp.Path, "settings");
+        var store = new HostSettingsStore(System.IO.Path.Combine(settingsDirectory, "host-settings.json"));
+
+        var result = await new DataRootResolver(store).ResolveAsync([]);
+
+        var expected = System.IO.Path.Combine(settingsDirectory, "WikiData");
+        Assert.Equal(DataRootSource.ManagedDefault, result.Source);
+        Assert.Equal(expected, result.Path);
+        Assert.True(Directory.Exists(expected));
+        Assert.Equal(expected, await store.LoadDataRootAsync());
+    }
+
+    [Fact]
+    public async Task ManagedDefaultIsInitializedByExistingApplicationCore()
+    {
+        using var temp = new TestDirectory();
+        var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "settings", "host-settings.json"));
+        var resolution = await new DataRootResolver(store).ResolveAsync([]);
+
+        await using var application = new WikiApplication(
+            resolution.Path,
+            store,
+            new NoopConsumerCoordinator(),
+            new RejectingWikiTransport());
+        var active = await application.ActiveWiki.InitializeAsync();
+
+        Assert.Equal(1, active.Id);
+        Assert.True(File.Exists(System.IO.Path.Combine(resolution.Path, "Manager.db")));
+        Assert.True(File.Exists(System.IO.Path.Combine(resolution.Path, "Terraria_Wiki_zh", "data.db")));
+    }
+
+    [Fact]
+    public async Task ExplicitEmptyFolderIsAcceptedAsANewDataRoot()
+    {
+        using var temp = new TestDirectory();
+        var emptyRoot = System.IO.Path.Combine(temp.Path, "new-data");
+        Directory.CreateDirectory(emptyRoot);
+        var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "settings", "host-settings.json"));
+
+        var result = await new DataRootResolver(store).ResolveAsync(["--data-root", emptyRoot]);
+
+        Assert.Equal(DataRootSource.CommandLine, result.Source);
+        Assert.Equal(emptyRoot, result.Path);
+        Assert.Equal(emptyRoot, await store.LoadDataRootAsync());
+    }
+
+    [Fact]
+    public void NonEmptyFolderWithoutManagerDatabaseIsRejectedForInitialization()
+    {
+        using var temp = new TestDirectory();
+        var root = System.IO.Path.Combine(temp.Path, "not-wiki-data");
+        Directory.CreateDirectory(root);
+        File.WriteAllText(System.IO.Path.Combine(root, "unrelated.txt"), "keep");
+
+        var valid = DataRootResolver.TryPrepareForInitialization(root, out _, out var error);
+
+        Assert.False(valid);
+        Assert.Contains("Manager.db", error, StringComparison.Ordinal);
+        Assert.True(File.Exists(System.IO.Path.Combine(root, "unrelated.txt")));
     }
 
     [Fact]
@@ -78,30 +121,11 @@ public sealed class DataRootResolverTests
     {
         using var temp = new TestDirectory();
         var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
-        var picker = new TestDataRootPicker { Result = temp.CreateDataRoot() };
 
         var error = await Assert.ThrowsAsync<DataRootResolutionException>(() =>
-            new DataRootResolver(store, picker).ResolveAsync(["--data-root=relative"]));
+            new DataRootResolver(store).ResolveAsync(["--data-root=relative"]));
 
         Assert.Equal("invalid-explicit-data-root", error.Code);
-        Assert.Equal(0, picker.Calls);
-    }
-
-    [Fact]
-    public async Task MissingManagerAndCancelledPickerAreObservable()
-    {
-        using var temp = new TestDirectory();
-        var store = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "host-settings.json"));
-        var empty = System.IO.Path.Combine(temp.Path, "empty");
-        Directory.CreateDirectory(empty);
-
-        var invalid = await Assert.ThrowsAsync<DataRootResolutionException>(() =>
-            new DataRootResolver(store, new TestDataRootPicker { Result = empty }).ResolveAsync([]));
-        var cancelled = await Assert.ThrowsAsync<DataRootResolutionException>(() =>
-            new DataRootResolver(store, new TestDataRootPicker()).ResolveAsync([]));
-
-        Assert.Equal("invalid-selected-data-root", invalid.Code);
-        Assert.Equal("data-root-selection-cancelled", cancelled.Code);
     }
 
     [Fact]

@@ -304,7 +304,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public bool IsIdle => !IsBusy;
     public string DataRootActionText => IsSelectingDataRoot
         ? "正在选择…"
-        : DataRootPath == "尚未选择" ? "选择数据文件夹" : "重新选择数据文件夹";
+        : DataRootPath == "尚未选择" ? "选择文件夹" : "更改文件夹";
     public string ActiveWikiTitle => ActiveWiki?.Title ?? "未选择 Wiki";
     public string ActiveWikiDescription => ActiveWiki?.Description ?? "本地 Wiki 数据源不可用。";
     public string PageCountText => (ActiveWiki?.PageCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);

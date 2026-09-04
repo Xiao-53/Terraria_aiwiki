@@ -62,7 +62,6 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
 
     public static async Task<WindowsClientRuntime> CreateAsync(
         IReadOnlyList<string> arguments,
-        IDataRootPicker picker,
         Func<bool> isDarkTheme,
         CancellationToken cancellationToken = default)
     {
@@ -81,11 +80,8 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             guard.AcquireSingleInstance();
             var settingsPath = ParseHostSettingsPath(arguments);
             var settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
-            var resolution = await new DataRootResolver(settings, picker)
-                .ResolveAsync(
-                    arguments,
-                    allowFolderPicker: false,
-                    cancellationToken: cancellationToken)
+            var resolution = await new DataRootResolver(settings)
+                .ResolveAsync(arguments, cancellationToken)
                 .ConfigureAwait(false);
             guard.AcquireDataRoot(resolution.Path);
 

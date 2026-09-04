@@ -205,7 +205,7 @@ Windows 当前开发不安装 MAUI/Android 工具链。Phase 13 恢复并获用�
 | 产品平台范围 | Windows 当前；Android 未来；除此之外全部为明确非目标 |
 | 源码所有权 | 当前仓库统一拥有产品源码/测试/Agent/构建资产；旧 MAUI gitlink 已退休，上游固定来源由 ADR/资产记录追溯 |
 | Core | 外层产品仓库中的单一平台无关 .NET 10 Wiki Core；不复制第二套实现 |
-| 数据根 | Core 接收宿主显式绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db` |
+| 数据根 | Core 只接收宿主提供的绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`；Windows 无已保存地址时由宿主创建 LocalAppData 默认根，数据管理页可更改到已有有效根或新的空目录 |
 | 数据库与搜索 | 保留现有 SQLite/FTS5 并局部修正 |
 | 客户端首选 | Avalonia + NativeWebView；Phase 00 Windows 11 x64 门槛已通过 |
 | Application | 保持薄，只表达真实用例和必要 ports |

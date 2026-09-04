@@ -1,9 +1,9 @@
 # ADR 0002：单一 Portable Core 与旧数据根原位复用
 
-- 状态：accepted；“生产 Core 位于内层仓库”的物理位置部分已由 ADR 0007 替代，数据根与 Core 边界决策继续有效
+- 状态：accepted；“生产 Core 位于内层仓库”的物理位置部分已由 ADR 0007 替代，Windows 无保存根时的首次运行策略已由 ADR 0009 替代，其余数据根与 Core 边界决策继续有效
 - 日期：2026-08-24
 - 决策范围：Phase 01 的生产代码物理边界、宿主依赖方式与 Windows 旧数据根策略
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`、`docs/adr/0007-separate-product-source-from-reference.md`
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`、`docs/adr/0007-separate-product-source-from-reference.md`、`docs/adr/0009-use-managed-default-windows-data-root.md`
 
 ## 背景
 
@@ -32,7 +32,7 @@ Phase 01 必须决定正式 Core 放置位置、最小物理拆分和旧数据�
 
 负面后果与约束：
 
-- 新 Windows 宿主在后续 Phase 必须可靠定位旧 MAUI 数据根；定位失败时应明确要求用户恢复/选择，而不能静默创建看似空白的第二根。
+- Phase 01 迁移期要求新 Windows 宿主优先恢复/选择旧 MAUI 数据根，不静默创建第二根。Phase 10 退休旧 MAUI 参考后，用户在 Phase 11 明确改为新装自动创建宿主管理的默认数据根；具体优先级与数据安全边界见 ADR 0009，既有数据仍不得被复制、覆盖或删除。
 - 迁移期旧、新客户端不得并发写同一数据根；宿主需要单实例或数据根写锁，具体实现属于 Windows Client/Runtime Phase。
 - 暂时保留旧 namespace，不代表长期 API 命名已经完成；只有出现实际收益时才通过独立兼容变更调整。
 - Core-only 构建不能证明旧 MAUI 宿主已在当前无 workload 环境编译，相关限制必须如实记录。

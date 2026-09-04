@@ -19,7 +19,7 @@
 - AI Runtime 当前使用用户指定的外部 `python.exe`。发布物只复制 launcher、Agent 源码、`pyproject.toml` 与 `uv.lock`；设置页仍要求用户选择已安装依赖的 Python 3.12–3.14。
 - `ai-runtime.json` v2 当前明文保存 `pythonExecutable`、`apiKey` 与 provider。Host 只把 key 注入所属 Sidecar 环境且不会写入协议/日志，但磁盘 secret 尚未进入 Windows Credential Manager。
 - stdio NDJSON v1、单活动问题、取消/完成竞态、故障隔离、WikiTools 动态 loopback 与唯一 Viewer 生命周期已有自动化和真实 Windows 证据。本阶段替换 Runtime 部署、secret 来源与外层发布机制，不重写 Agent、协议或 Wiki Tool transport。
-- host settings、Chat 收藏和 Wiki 数据都位于产品二进制之外；Wiki data root 仍是用户选择的 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。安装、升级、修复和卸载不得迁移或删除这些数据。
+- host settings、Chat 收藏和 Wiki 数据都位于产品二进制之外；Wiki data root 使用宿主管理的默认地址或用户更改的绝对地址，布局仍是 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。安装、升级、修复和卸载不得迁移或删除这些数据。
 - 当前应用自己的默认配置目录是 `%LocalAppData%\Terraria AI Wiki`。若普通安装器也使用同一目录作为安装根，修复或卸载可能删除配置，因此安装器内部 ID/安装根必须采用不同且稳定的名称。
 - `assets/windows/README.md` 记录了受控资产来源和许可风险：上游没有独立 `LICENSE`；官方 Terraria Wiki 可许可的文本为 CC BY-NC-SA 4.0，图像和音频应按各文件页面判断；现有快照还含 Calamity Wiki CC BY-NC-SA 3.0 提示和 Viewer.js MIT 标头。
 - 当前 tracked 工作树没有用户已有修改；现存未跟踪治理归档、`.codex/`、历史架构和 `experiments/` 不属于本阶段，不得删除、暂存或夹带。
@@ -196,7 +196,7 @@
 - [x] **收口 WebView2、恢复与诊断**：Setup 使用 Evergreen `webview2` bootstrap，portable/Host probe 只提供 Microsoft 官方入口；WebView2 user-data 显式放入外部 LocalAppData 配置根，不污染可替换的 `current`/portable payload；Shell 按数据/WebView2错误显示对应动作；诊断采用 allowlist、稳定 code、512 KiB 双文件轮换且不保存任意 payload。
 - [x] **生成本地 release 制品和自动化**：Windows 脚本已生成 Setup、portable、full/delta/index、checksums、payload/dependency/release manifests 和 notices，并默认拒绝 dirty source/缺少软件许可证；最终本地候选 `0.11.0-local.22` 已重建且保持 `publicationReady: false`。仓库坐标未确认，因此按 ADR 0008 不创建会猜测外部目标的上传 workflow。
 - [x] **扩充自动化与静态边界**：全部既有测试和新增 productization tests 通过；P0/API/schema/protocol、Core/Application 平台依赖、安装目录写入、payload allowlist、secret/license/provenance、版本/channel 和恢复不变量均已扫描。
-- [ ] **执行干净 Windows 11 安装矩阵**：在无 .NET/Python/uv/pip/开发工具的干净 Windows 11 x64 完成安装→首次启动→数据根选择/恢复→Viewer/Search→内置 AI fake→退出；覆盖 WebView2 已有/缺失、AI key 缺失、credential failure、Runtime 损坏、repair、卸载与重装。
+- [ ] **执行干净 Windows 11 安装矩阵**：在无 .NET/Python/uv/pip/开发工具的干净 Windows 11 x64 完成安装→首次启动默认数据根创建→页面内更改/恢复→Viewer/Search→内置 AI fake→退出；覆盖 WebView2 已有/缺失、AI key 缺失、credential failure、Runtime 损坏、repair、卸载与重装。
 - [ ] **执行 GitHub Releases 升级矩阵**：获得外部发布授权后，用目标 GitHub repo 的独立 RC channel/prerelease 验证 N→N+1、release index/full package/hash、断网/限流/取消/损坏下载、restart 和 portable update；不得拿 local feed 代替最终渠道证据。
 - [ ] **执行 Windows 10 低成本门槛**：仅在不新增依赖/代码路径的前提下，用 Windows 10 22H2 x64 干净环境运行同一 Setup/portable/upgrade/repair/P0 矩阵。全部通过才写“best-effort compatible”；任一平台差异或维护成本即保持 Windows 11 only。
 - [x] **执行 P0 与 UI 验收**：最终 Windows Release build/tests、安装/portable smoke、合成数据 Search/Viewer assets/bridge、内置 AI fake provider、退出清理和 AI 故障隔离通过；实际检查 Light/Dark、1280×820、900×600、宽/窄 Reader overlay、Tab/Shift+Tab、关闭动作和新增更新/诊断状态，Escape/1100 DIP 精确边界由 Presentation 自动化覆盖。
@@ -286,6 +286,8 @@
 - 2026-09-04：完成 Light 1280×820、Dark 900×600 的宽屏 Reader、窄屏 Reader overlay、AI 设置和 About/更新/诊断视觉检查；Tab/Shift+Tab 与 overlay 关闭动作通过，Escape 与 1100 DIP 分界由自动化回归覆盖。
 - 2026-09-04：试用反馈发现无有效数据根时启动立即弹出文件夹选择器，错误选择后恢复入口不在数据管理页；同一启动失败还使 AI 配置错误绑定到数据库 Runtime，从而禁用 API Key 输入。按用户要求进入局部修复，不重建安装包。
 - 2026-09-04：完成试用修复：启动不再主动打开文件夹选择器，数据管理页可反复选择数据库文件夹，AI 配置与 Credential Manager 操作不再依赖数据库 Runtime。最新 Windows Release build 为 0 warning / 0 error，全量 .NET tests 295/295 通过；真实 Windows UI 验证确认启动选择器已延后、数据管理入口可用且 API Key 可输入。仅把已验证的内置 Python Runtime 复制到忽略的开发输出供即时试用，未调用发布或打包脚本。
+- 2026-09-04：用户进一步明确首次运行应自动创建数据库文件夹，同时保留数据管理页的更改地址功能。进入局部实施：Windows 宿主在没有已保存地址时创建独立默认数据根并由现有 Application/Core 初始化数据库；显式地址与已有有效地址仍优先，已有无效地址不被静默覆盖，选错后继续由数据管理页恢复。仍不重建安装包。
+- 2026-09-04：完成默认数据根实现与 ADR 0009：默认地址为 `%LocalAppData%\Terraria AI Wiki\WikiData`，空目录和已有有效数据库均可作为更改目标，非空错误目录保持拒绝且不修改内容。用户正在运行旧开发版导致常规输出被锁定，未强制结束其进程；改用忽略的独立 artifacts 输出完成 9 项目 Release build（0 warning / 0 error）和 297/297 .NET tests，并补齐 5,907 个已验证 Python Runtime 文件供直接试用，未调用打包脚本。
 
 ## 发现、偏差与决策
 
@@ -294,6 +296,7 @@
 - **已决定**：Phase 11 不配置商业签名。unsigned 是已知发布限制，必须测试并公开说明，不得以 hash 或自签名替代。
 - **已决定**：保留 Evergreen WebView2、内置 CPython Runtime、Windows Credential Manager，以及安装/更新/修复/卸载/P0 回归。
 - **已决定**：不升级业务依赖、不改变 P0/协议/schema、不恢复 MAUI/Android 工具链、不并行建设第二安装器或第二更新渠道。
+- **已决定**：Windows 首次运行在没有已保存数据根时自动创建 `%LocalAppData%\Terraria AI Wiki\WikiData`，再由现有 Application/Core 创建和初始化 `Manager.db` 与活动 Wiki 数据库；数据管理页始终保留更改文件夹入口。显式命令行根与已有有效根优先，已有无效根不被静默覆盖或删除。
 - **发现**：Velopack 默认安装在 `%LocalAppData%\{packId}`，而当前用户配置位于 `%LocalAppData%\Terraria AI Wiki`；installer ID 必须与配置目录分离，否则 repair/uninstall 可能删除用户配置。
 - **发现**：GitHub public GithubSource 不需要客户端 token，但匿名 API 有每 IP 60 requests/hour 限制；显式检查和安全降级是首版必要边界。
 - **发现**：普通 Windows 10 22H2 已 EOL；源码 target 的 17763 API 下限仍不等于支持或兼容证据。
@@ -307,7 +310,7 @@
 
 ## 验证结果
 
-- 最新未打包 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 295/295 通过（Core 92、Application 54、WikiTools 28、Windows 121）。`0.11.0-local.22` 仍是修复前候选，按用户要求未重建。
+- 最新未打包 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 297/297 通过（Core 92、Application 54、WikiTools 28、Windows 123）。`0.11.0-local.22` 仍是修复前候选，按用户要求未重建。
 - Python frozen 回归通过：ruff check/format、strict mypy、pytest 77 passed / 4 explicit opt-in skipped；内置 CPython 3.14.7 x64、OpenSSL 3.5.7、pydantic-ai 2.31.0 的真实跨语言 fake-provider 测试通过，未生成 `.pyc`，退出后无 Python 子进程。
 - 最终本地候选生成 119,647,140-byte Setup、114,926,892-byte portable zip、115,056,548-byte full package；7/7 SHA-256 一致，单制品低于 2 GiB，应用与 Setup PE 均确认无 certificate table，portable 解包与 payload manifest 精确一致。
 - 实际 Windows 11 安装 smoke：Search 1、JS 1、CSS 1、image 1、audio 3、Viewer messages 9/9、cleanup true；repair 恢复故意损坏的 Viewer/Python，升级后 payload 无混合版本，portable smoke 和卸载注册/快捷方式/安装根清理通过。

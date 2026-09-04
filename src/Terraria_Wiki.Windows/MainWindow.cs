@@ -144,7 +144,6 @@ internal sealed partial class MainWindow : Window
         {
             var runtime = await WindowsClientRuntime.CreateAsync(
                 _runtimeArguments,
-                new AvaloniaDataRootPicker(this),
                 IsDarkTheme,
                 _lifetime.Token);
             _runtime = runtime;
@@ -247,10 +246,10 @@ internal sealed partial class MainWindow : Window
                     "已取消选择；当前数据文件夹没有改变，可以随时重新选择。");
                 return;
             }
-            if (!DataRootResolver.TryValidate(selected, out var normalized, out _))
+            if (!DataRootResolver.TryPrepareForInitialization(selected, out var normalized, out _))
             {
                 _shellViewModel.Management.ReportDataRootSelection(
-                    "所选文件夹不可用；请选择包含有效 Manager.db 的 Wiki 数据文件夹。你可以立即重新选择。");
+                    "所选文件夹不可用；请选择空文件夹或包含有效 Manager.db 的 Wiki 数据文件夹。你可以立即重新选择。");
                 return;
             }
 
@@ -312,6 +311,8 @@ internal sealed partial class MainWindow : Window
         {
             WindowsClientStartupException { Code: "webview2-missing" } => StartupRecoveryKind.InstallWebView2,
             DataRootResolutionException => StartupRecoveryKind.SelectDataRoot,
+            ApplicationUseCaseException { Code: "initialization-failed" or "no-wikis" } =>
+                StartupRecoveryKind.SelectDataRoot,
             _ => StartupRecoveryKind.Retry,
         };
         var message = exception switch
@@ -328,9 +329,15 @@ internal sealed partial class MainWindow : Window
         _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
         if (recovery == StartupRecoveryKind.SelectDataRoot)
         {
-            var dataRootMessage = exception is DataRootResolutionException { Code: "data-root-required" }
-                ? "尚未选择有效的 Wiki 数据文件夹。请在数据管理页面选择包含 Manager.db 的文件夹。"
-                : "Wiki 数据文件夹不可用。请在数据管理页面重新选择包含有效 Manager.db 的文件夹。";
+            var dataRootMessage = exception switch
+            {
+                DataRootResolutionException { Code: "data-root-required" } =>
+                    "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。",
+                DataRootResolutionException { Code: "default-data-root-unavailable" } =>
+                    "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他空文件夹或已有数据库文件夹。",
+                _ =>
+                    "Wiki 数据库无法初始化。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。",
+            };
             _shellViewModel.ShowDataRootRecovery(dataRootMessage);
             return;
         }

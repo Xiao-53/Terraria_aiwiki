@@ -1,15 +1,10 @@
 namespace Terraria_Wiki.Windows.Hosting;
 
-internal interface IDataRootPicker
-{
-    Task<string?> PickAsync(CancellationToken cancellationToken = default);
-}
-
 internal enum DataRootSource
 {
     CommandLine,
     SavedSettings,
-    FolderPicker,
+    ManagedDefault,
 }
 
 internal sealed record DataRootResolution(string Path, DataRootSource Source);
@@ -17,58 +12,63 @@ internal sealed record DataRootResolution(string Path, DataRootSource Source);
 internal sealed class DataRootResolver
 {
     private readonly HostSettingsStore _settings;
-    private readonly IDataRootPicker _picker;
 
-    public DataRootResolver(HostSettingsStore settings, IDataRootPicker picker)
+    public DataRootResolver(HostSettingsStore settings)
     {
         _settings = settings ?? throw new ArgumentNullException(nameof(settings));
-        _picker = picker ?? throw new ArgumentNullException(nameof(picker));
     }
 
     public async Task<DataRootResolution> ResolveAsync(
         IReadOnlyList<string> arguments,
-        CancellationToken cancellationToken = default)
-        => await ResolveAsync(
-            arguments,
-            allowFolderPicker: true,
-            cancellationToken).ConfigureAwait(false);
-
-    internal async Task<DataRootResolution> ResolveAsync(
-        IReadOnlyList<string> arguments,
-        bool allowFolderPicker,
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(arguments);
         var explicitPath = ParseExplicitPath(arguments);
         if (explicitPath is not null)
         {
-            var validated = Validate(explicitPath, "invalid-explicit-data-root");
+            var validated = ValidateForInitialization(explicitPath, "invalid-explicit-data-root");
             await _settings.SaveDataRootAsync(validated, cancellationToken).ConfigureAwait(false);
             return new DataRootResolution(validated, DataRootSource.CommandLine);
         }
 
         var saved = await _settings.LoadDataRootAsync(cancellationToken).ConfigureAwait(false);
-        if (!string.IsNullOrWhiteSpace(saved) && TryValidate(saved, out var savedPath, out _))
+        if (!string.IsNullOrWhiteSpace(saved) && TryPrepareForInitialization(saved, out var savedPath, out _))
             return new DataRootResolution(savedPath!, DataRootSource.SavedSettings);
 
-        if (!allowFolderPicker)
+        if (!string.IsNullOrWhiteSpace(saved))
         {
             throw new DataRootResolutionException(
                 "data-root-required",
-                "尚未选择有效的 Wiki 数据文件夹。请在数据管理页面选择包含 Manager.db 的文件夹。");
+                "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改文件夹。");
         }
 
-        var selected = await _picker.PickAsync(cancellationToken).ConfigureAwait(false);
-        if (string.IsNullOrWhiteSpace(selected))
+        var defaultPath = Path.Combine(
+            Path.GetDirectoryName(_settings.FilePath)!,
+            "WikiData");
+        try
+        {
+            Directory.CreateDirectory(defaultPath);
+        }
+        catch (Exception exception) when (exception is IOException
+                                          or UnauthorizedAccessException
+                                          or ArgumentException
+                                          or NotSupportedException)
         {
             throw new DataRootResolutionException(
-                "data-root-selection-cancelled",
-                "No Wiki data folder was selected. Choose the folder that contains Manager.db and retry.");
+                "default-data-root-unavailable",
+                "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他文件夹。",
+                exception);
         }
 
-        var selectedPath = Validate(selected, "invalid-selected-data-root");
-        await _settings.SaveDataRootAsync(selectedPath, cancellationToken).ConfigureAwait(false);
-        return new DataRootResolution(selectedPath, DataRootSource.FolderPicker);
+        if (!TryPrepareForInitialization(defaultPath, out var normalizedDefault, out _))
+        {
+            throw new DataRootResolutionException(
+                "default-data-root-unavailable",
+                "默认 Wiki 数据文件夹包含无法识别的数据。请在数据管理页面选择其他文件夹。");
+        }
+
+        await _settings.SaveDataRootAsync(normalizedDefault!, cancellationToken).ConfigureAwait(false);
+        return new DataRootResolution(normalizedDefault!, DataRootSource.ManagedDefault);
     }
 
     internal static string? ParseExplicitPath(IReadOnlyList<string> arguments)
@@ -101,7 +101,10 @@ internal sealed class DataRootResolver
         return value;
     }
 
-    internal static bool TryValidate(string candidate, out string? normalized, out string? error)
+    internal static bool TryPrepareForInitialization(
+        string candidate,
+        out string? normalized,
+        out string? error)
     {
         normalized = null;
         error = null;
@@ -123,6 +126,11 @@ internal sealed class DataRootResolver
             var managerPath = Path.Combine(fullPath, "Manager.db");
             if (!File.Exists(managerPath))
             {
+                if (!Directory.EnumerateFileSystemEntries(fullPath).Any())
+                {
+                    normalized = fullPath;
+                    return true;
+                }
                 error = $"The selected folder does not contain Manager.db: {fullPath}";
                 return false;
             }
@@ -156,9 +164,9 @@ internal sealed class DataRootResolver
         }
     }
 
-    private static string Validate(string candidate, string code)
+    private static string ValidateForInitialization(string candidate, string code)
     {
-        if (TryValidate(candidate, out var normalized, out var error))
+        if (TryPrepareForInitialization(candidate, out var normalized, out var error))
             return normalized!;
         throw new DataRootResolutionException(code, error ?? "The Wiki data folder is invalid.");
     }
@@ -166,8 +174,8 @@ internal sealed class DataRootResolver
 
 internal sealed class DataRootResolutionException : IOException
 {
-    public DataRootResolutionException(string code, string message)
-        : base(message) => Code = code;
+    public DataRootResolutionException(string code, string message, Exception? innerException = null)
+        : base(message, innerException) => Code = code;
 
     public string Code { get; }
 }

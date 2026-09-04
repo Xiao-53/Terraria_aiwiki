@@ -52,7 +52,8 @@
 - Windows `.pkg` 导入先调用 `InspectPackageAsync`，保存 inspection token 并显示元数据；用户确认后才调用 `ImportPackageAsync`。0.4 之前的数据包必须明确提示兼容迁移并传递 legacy consent，包格式与既有 staging/backup/rollback 不变。
 - Windows 导出由原生保存文件选择器决定目标。若目标已存在，宿主先在同目录写唯一临时包，完整成功后才替换目标；失败或取消清理临时文件并保留旧目标。
 - 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；Reader 保持关闭并提示先下载或导入，不把无内容状态升级为整应用启动失败。
-- 没有有效数据根时，启动不得自动打开系统文件夹选择器，也不得把 Shell 锁在阻塞流程中；应用直接进入数据管理页，在“数据库文件夹”区域由用户显式选择。取消、选错或后续数据库初始化失败都保留页面和重选入口，只有验证通过后才保存并重新组合 Runtime。
+- 没有已保存数据根时，Windows 宿主不得自动打开系统文件夹选择器；它在 `%LocalAppData%\Terraria AI Wiki\WikiData` 创建默认数据根并把绝对路径交给现有 Application/Core，由既有初始化流程创建 `Manager.db` 与活动 Wiki 数据库。已有有效保存根与显式命令行根优先；已有无效保存根不得被默认根静默覆盖，而应直接进入数据管理页恢复。
+- 数据管理页始终显示当前数据库文件夹并保留更改入口。更改时可选择包含有效 `Manager.db` 的已有数据根，或选择空文件夹作为新数据根；非空且不含有效数据库的目录必须拒绝。取消、选错或后续数据库初始化失败都保留页面和再次选择入口，只有路径验证通过后才保存并重新组合 Runtime。
 
 ## 设置
 
@@ -84,6 +85,6 @@
 
 Application/Core 公共 API、Python Agent、NDJSON v1、`ai-runtime.json`、SQLite schema、Wiki 数据包和 Viewer 内容协议不因 Presentation 改变。新增状态模型保持在 Windows assembly 内部；不得把 UI 状态升级为公共持久模型或 Application port。
 
-数据根启动失败时不弹出选择器、不提供无效的通用重试，而是进入数据管理页提供“选择/重新选择 Wiki 数据文件夹”；验证失败或取消不替换已保存路径，页面保持可操作，验证通过后才重新组合 Runtime。WebView2 缺失时提供“重试”和 Microsoft 官方获取入口；其他启动失败只保留适用的安全恢复动作。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
+首次启动自动创建宿主管理的默认数据根，不弹出选择器；创建或数据库初始化失败时不提供无效的通用重试，而是进入数据管理页提供“选择/更改 Wiki 数据文件夹”。空文件夹可由既有 Application/Core 初始化，非空错误目录、无效数据库或取消都不替换已保存路径，页面保持可操作。WebView2 缺失时提供“重试”和 Microsoft 官方获取入口；其他启动失败只保留适用的安全恢复动作。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
 若增加多轮、自动会话历史或同步、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化、Windows 产品化或 Android UI，必须建立独立变更并更新相应能力契约。

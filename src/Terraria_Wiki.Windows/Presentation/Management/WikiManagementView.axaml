@@ -47,7 +47,7 @@
           <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
             <StackPanel Spacing="4">
               <TextBlock Text="数据库文件夹" Classes="section-title" />
-              <TextBlock Text="应用启动时不会自动弹出选择器。请选择包含 Manager.db 的 Wiki 数据文件夹；选错、取消或连接失败后都可以重新选择。"
+              <TextBlock Text="首次运行会自动创建默认数据库文件夹。需要使用已有数据库或更换磁盘时，可以在这里更改；选错、取消或连接失败后仍可再次选择。"
                          Classes="page-subtitle" TextWrapping="Wrap" />
               <SelectableTextBlock Text="{Binding DataRootPath}" Margin="0,6,0,0"
                                    TextWrapping="Wrap"
@@ -57,7 +57,7 @@
                     Classes="primary-action" VerticalAlignment="Center"
                     Command="{Binding SelectDataRootCommand}"
                     AutomationProperties.AutomationId="SelectDataRoot"
-                    AutomationProperties.Name="选择或重新选择 Wiki 数据文件夹" />
+                    AutomationProperties.Name="更改 Wiki 数据文件夹" />
           </Grid>
         </Border>
 

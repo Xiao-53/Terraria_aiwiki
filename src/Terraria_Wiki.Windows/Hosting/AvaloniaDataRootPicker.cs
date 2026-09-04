@@ -3,7 +3,7 @@ using Avalonia.Platform.Storage;
 
 namespace Terraria_Wiki.Windows.Hosting;
 
-internal sealed class AvaloniaDataRootPicker : IDataRootPicker
+internal sealed class AvaloniaDataRootPicker
 {
     private readonly TopLevel _owner;
 
