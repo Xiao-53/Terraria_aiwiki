@@ -70,7 +70,24 @@ public sealed class PresentationFlowTests
         Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
         Assert.Contains("重新选择", shell.Management.StatusMessage, StringComparison.Ordinal);
         shell.Management.SetDataRoot(@"C:\WikiData");
+        Assert.Equal(@"C:\WikiData", shell.Management.DataRootPath);
         Assert.Equal("更改文件夹", shell.Management.DataRootActionText);
+    }
+
+    [Fact]
+    public void EmptyWikiStartupClosesReaderAndOpensDownloadOnboarding()
+    {
+        using var shell = new ShellViewModel();
+
+        shell.ShowEmptyWikiOnboarding();
+
+        Assert.Equal(ShellSection.Management, shell.CurrentSection);
+        Assert.True(shell.IsManagementVisible);
+        Assert.Equal(ReaderPaneState.Closed, shell.ReaderState);
+        Assert.False(shell.IsReaderVisible);
+        Assert.False(shell.HasStartupError);
+        Assert.Contains("尚无页面内容", shell.StartupStatus, StringComparison.Ordinal);
+        Assert.Contains("下载页面与资源", shell.Management.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]
@@ -108,6 +125,30 @@ public sealed class PresentationFlowTests
         shell.NavigateChat();
         Assert.Equal(ShellSection.Chat, shell.CurrentSection);
         Assert.Equal(ReaderPaneState.Home, shell.ReaderState);
+        Assert.True(shell.IsReaderVisible);
+    }
+
+    [Fact]
+    public void SettingsTemporarilyHidesReaderAndLeavingRestoresItsPreviousState()
+    {
+        using var shell = new ShellViewModel();
+        shell.OpenWikiReader();
+
+        Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
+        Assert.True(shell.IsReaderVisible);
+
+        shell.NavigateSettings();
+
+        Assert.True(shell.IsSettingsSelected);
+        Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
+        Assert.False(shell.IsReaderVisible);
+        Assert.False(shell.IsReaderInlineVisible);
+        Assert.False(shell.IsReaderOverlayVisible);
+
+        shell.NavigateFavorites();
+
+        Assert.True(shell.IsFavoritesSelected);
+        Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
         Assert.True(shell.IsReaderVisible);
     }
 
@@ -329,7 +370,7 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
-    public async Task AnsweringStateKeepsComposerQuestionAndTransitionsFromThinkingToCompactTrace()
+    public async Task AnsweringStateClearsComposerAndTransitionsFromThinkingToCompactTrace()
     {
         using var chat = new ChatViewModel(
             new SafeMarkdownParser(),
@@ -354,7 +395,8 @@ public sealed class PresentationFlowTests
         var run = chat.SendAsync();
         await toolStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
 
-        Assert.Equal("需要分析的问题", chat.Question);
+        Assert.Equal(string.Empty, chat.Question);
+        Assert.Equal("需要分析的问题", chat.SubmittedQuestion);
         Assert.True(chat.IsThinking);
         Assert.False(chat.IsStreamingAnswer);
         Assert.False(chat.IsToolTraceVisible);
@@ -400,6 +442,7 @@ public sealed class PresentationFlowTests
 
         Assert.Equal(ChatRunState.Completed, chat.RunState);
         Assert.Equal("第一个问题", chat.SubmittedQuestion);
+        Assert.Equal(string.Empty, chat.Question);
         Assert.Equal("# 答案", chat.AnswerDocument.Source);
         Assert.Single(chat.Tools);
         Assert.Equal("完成", chat.Tools[0].Status);

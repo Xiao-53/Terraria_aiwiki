@@ -206,12 +206,13 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public bool IsManagementVisible => IsManagementSelected;
     public bool IsSettingsVisible => IsSettingsSelected;
     public bool IsWikiVisible => IsWikiSelected;
-    public bool IsReaderVisible => ReaderState switch
-    {
-        ReaderPaneState.Home => IsWideLayout,
-        ReaderPaneState.ChatSource or ReaderPaneState.Wiki => true,
-        _ => false,
-    };
+    public bool IsReaderVisible => !IsSettingsSelected
+                                   && (ReaderState switch
+                                   {
+                                       ReaderPaneState.Home => IsWideLayout,
+                                       ReaderPaneState.ChatSource or ReaderPaneState.Wiki => true,
+                                       _ => false,
+                                   });
     public bool IsReaderOverlayVisible => IsReaderVisible && !IsWideLayout;
     public bool IsReaderInlineVisible => IsReaderVisible && IsWideLayout;
     public bool CanCloseReader => IsReaderVisible;
@@ -285,6 +286,16 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         NavigateManagement();
     }
 
+    public void ShowEmptyWikiOnboarding()
+    {
+        Reader.Detach();
+        Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
+        CloseReader();
+        Management.ShowEmptyWikiOnboarding();
+        SetStartupStatus("当前 Wiki 尚无页面内容 · 请在数据管理中下载或导入");
+        NavigateManagement();
+    }
+
     public bool TryCloseOverlay()
     {
         if (!IsReaderOverlayVisible)
@@ -295,31 +306,35 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void NavigateChat()
     {
+        var isLeavingSettings = IsSettingsSelected;
         CurrentSection = ShellSection.Chat;
-        if (ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
     }
 
     public void NavigateFavorites()
     {
+        var isLeavingSettings = IsSettingsSelected;
         CurrentSection = ShellSection.Favorites;
-        if (ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Favorites.RefreshAsync();
     }
 
     public void NavigateLibrary()
     {
+        var isLeavingSettings = IsSettingsSelected;
         CurrentSection = ShellSection.Library;
-        if (ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Library.RefreshAsync();
     }
 
     public void NavigateManagement()
     {
+        var isLeavingSettings = IsSettingsSelected;
         CurrentSection = ShellSection.Management;
-        if (ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Management.RefreshAsync();
     }
@@ -327,8 +342,6 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public void NavigateSettings()
     {
         CurrentSection = ShellSection.Settings;
-        if (ReaderState == ReaderPaneState.Wiki)
-            ReaderState = ReaderPaneState.Home;
     }
 
     public void RefreshAfterWikiDataChange()

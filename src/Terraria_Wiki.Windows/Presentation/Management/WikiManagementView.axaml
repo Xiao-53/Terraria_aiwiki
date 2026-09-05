@@ -27,9 +27,16 @@
       <Grid RowDefinitions="Auto,Auto" ColumnDefinitions="*,Auto" ColumnSpacing="12">
         <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
                    VerticalAlignment="Center" AutomationProperties.Name="数据管理状态" />
-        <Button Grid.Column="1" Content="取消" Classes="secondary-action"
-                Command="{Binding CancelOperationCommand}" IsVisible="{Binding IsBusy}"
-                AutomationProperties.Name="取消当前数据操作" />
+        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
+                    VerticalAlignment="Center">
+          <Button Content="下载页面与资源" Classes="primary-action"
+                  Command="{Binding DownloadAllCommand}"
+                  IsVisible="{Binding NeedsPageData}"
+                  AutomationProperties.Name="下载 Wiki 页面与资源" />
+          <Button Content="取消" Classes="secondary-action"
+                  Command="{Binding CancelOperationCommand}" IsVisible="{Binding IsBusy}"
+                  AutomationProperties.Name="取消当前数据操作" />
+        </StackPanel>
         <ProgressBar Grid.Row="1" Grid.ColumnSpan="2" Margin="0,10,0,0" Height="3"
                      Minimum="0" Maximum="{Binding ProgressMaximum}"
                      Value="{Binding ProgressValue}"
@@ -44,21 +51,27 @@
       <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="20"
                   Margin="0,0,0,24">
         <Border Classes="section-surface">
-          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="20">
+          <StackPanel Margin="0,20,0,0" Spacing="12">
             <StackPanel Spacing="4">
               <TextBlock Text="数据库文件夹" Classes="section-title" />
               <TextBlock Text="首次运行会自动创建默认数据库文件夹。需要使用已有数据库或更换磁盘时，可以在这里更改；选错、取消或连接失败后仍可再次选择。"
                          Classes="page-subtitle" TextWrapping="Wrap" />
-              <SelectableTextBlock Text="{Binding DataRootPath}" Margin="0,6,0,0"
-                                   TextWrapping="Wrap"
-                                   AutomationProperties.Name="当前 Wiki 数据文件夹" />
             </StackPanel>
-            <Button Grid.Column="1" Content="{Binding DataRootActionText}"
-                    Classes="primary-action" VerticalAlignment="Center"
-                    Command="{Binding SelectDataRootCommand}"
-                    AutomationProperties.AutomationId="SelectDataRoot"
-                    AutomationProperties.Name="更改 Wiki 数据文件夹" />
-          </Grid>
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <Border Classes="path-field" MinWidth="0">
+                <SelectableTextBlock Text="{Binding DataRootPath}"
+                                     TextWrapping="NoWrap" TextTrimming="PathSegmentEllipsis"
+                                     MaxLines="1" VerticalAlignment="Center"
+                                     ToolTip.Tip="{Binding DataRootPath}"
+                                     AutomationProperties.Name="当前 Wiki 数据文件夹" />
+              </Border>
+              <Button Grid.Column="1" Content="{Binding DataRootActionText}"
+                      Classes="secondary-action" VerticalAlignment="Center"
+                      Command="{Binding SelectDataRootCommand}"
+                      AutomationProperties.AutomationId="SelectDataRoot"
+                      AutomationProperties.Name="更改 Wiki 数据文件夹" />
+            </Grid>
+          </StackPanel>
         </Border>
 
         <Border Classes="confirmation-card" IsVisible="{Binding IsConfirmationVisible}"
@@ -153,11 +166,11 @@
               <TextBlock Text="所有内容继续写入同一份 SQLite/FTS5 数据，不建立 AI 专用副本。"
                          Classes="page-subtitle" TextWrapping="Wrap" />
             </StackPanel>
+            <Border Classes="management-status" IsVisible="{Binding NeedsPageData}">
+              <TextBlock Text="首次使用：当前 Wiki 尚无页面内容。应用不会自动联网；点击“下载页面与资源”，或从本地数据包导入。"
+                         TextWrapping="Wrap" AutomationProperties.Name="首次使用数据引导" />
+            </Border>
             <WrapPanel ItemWidth="190" ItemHeight="44">
-              <Button Content="下载页面与资源" Classes="primary-action"
-                      Margin="0,0,8,8" Command="{Binding DownloadAllCommand}"
-                      IsVisible="{Binding NeedsPageData}"
-                      AutomationProperties.Name="下载 Wiki 页面与资源" />
               <Button Content="仅下载页面" Classes="secondary-action"
                       Margin="0,0,8,8" Command="{Binding DownloadPagesCommand}"
                       IsVisible="{Binding NeedsPageData}"

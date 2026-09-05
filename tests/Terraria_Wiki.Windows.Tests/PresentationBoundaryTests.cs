@@ -35,6 +35,9 @@ public sealed class PresentationBoundaryTests
         var library = File.ReadAllText(Path.Combine(root, "Presentation", "Library", "WikiLibraryView.axaml"));
         var management = File.ReadAllText(Path.Combine(root, "Presentation", "Management", "WikiManagementView.axaml"));
         var settings = File.ReadAllText(Path.Combine(root, "Presentation", "Settings", "SettingsView.axaml"));
+        var settingsViewModel = File.ReadAllText(Path.Combine(root, "Presentation", "Settings", "AiSettingsViewModel.cs"));
+        var secretTextBox = File.ReadAllText(Path.Combine(root, "Presentation", "Settings", "SecretTextBox.cs"));
+        var controls = File.ReadAllText(Path.Combine(root, "Presentation", "Styles", "Controls.axaml"));
 
         Assert.Equal(1, Count(xaml, "<NativeWebView"));
         Assert.Equal(1, Count(combined, "new ViewerWebViewSession("));
@@ -49,6 +52,12 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("更改 Wiki 数据文件夹", management, StringComparison.Ordinal);
         Assert.Contains("首次运行会自动创建默认数据库文件夹", management, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"SelectDataRoot\"", management, StringComparison.Ordinal);
+        Assert.Contains("TextTrimming=\"PathSegmentEllipsis\"", management, StringComparison.Ordinal);
+        Assert.Contains("TextWrapping=\"NoWrap\"", management, StringComparison.Ordinal);
+        Assert.Contains("ToolTip.Tip=\"{Binding DataRootPath}\"", management, StringComparison.Ordinal);
+        Assert.Matches("Content=\"\\{Binding DataRootActionText\\}\"[\\s\\S]*?Classes=\"secondary-action\"", management);
+        Assert.Matches("Content=\"下载页面与资源\"[\\s\\S]*?Classes=\"primary-action\"", management);
+        Assert.Contains("AutomationProperties.Name=\"首次使用数据引导\"", management, StringComparison.Ordinal);
         Assert.Contains("查看全部页面", library, StringComparison.Ordinal);
         Assert.Contains("查看历史记录", library, StringComparison.Ordinal);
         Assert.Contains("确认清空浏览历史", library, StringComparison.Ordinal);
@@ -61,8 +70,19 @@ public sealed class PresentationBoundaryTests
         Assert.Equal(1, Count(settings, "<ComboBoxItem Content=\"DeepSeek 官方 API\" />"));
         Assert.Equal(1, Count(settings, "<ComboBoxItem Content=\"自定义 OpenAI-compatible\" />"));
         Assert.Contains("<settings:SecretTextBox", settings, StringComparison.Ordinal);
+        Assert.Contains("Classes=\"api-key-input\"", settings, StringComparison.Ordinal);
         Assert.Contains("PasswordChar=\"●\"", settings, StringComparison.Ordinal);
         Assert.Contains("AI 思考强度", settings, StringComparison.Ordinal);
+        Assert.Equal(1, Count(settings, "Text=\"模型服务\""));
+        Assert.DoesNotContain("本机运行环境", settings, StringComparison.Ordinal);
+        Assert.DoesNotContain("模型行为", settings, StringComparison.Ordinal);
+        Assert.DoesNotContain("Python", settings, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("public string PythonExecutable", settingsViewModel, StringComparison.Ordinal);
+        Assert.Contains("StyleKeyOverride => typeof(TextBox)", secretTextBox, StringComparison.Ordinal);
+        Assert.Contains("TextBox.api-key-input", controls, StringComparison.Ordinal);
+        Assert.Contains("MinHeight\" Value=\"40\"", controls, StringComparison.Ordinal);
+        Assert.Contains("TextBox.api-key-input:focus", controls, StringComparison.Ordinal);
+        Assert.Contains("TextBox.api-key-input:disabled", controls, StringComparison.Ordinal);
         Assert.DoesNotContain("Wiki 阅读导航", shell, StringComparison.Ordinal);
     }
 

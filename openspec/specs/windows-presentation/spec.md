@@ -10,7 +10,7 @@
 - Windows Shell 使用固定窄导航栏、标题区和细描边工作区。初始窗口为 1280×820 DIP，最小窗口为 900×600 DIP。
 - 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。拖动分隔条不会自动关闭 Reader；关闭只由 Reader 叉号执行，顶部 Wiki 按钮可重新打开。
 - 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
-- Chat/收藏/资料库/数据管理/设置/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。
+- Chat/收藏/资料库/数据管理/设置/Wiki 导航不取消活动回答；Chat 的当前单轮结果在内存中保留，退出应用才统一取消和清理。设置页临时独占主工作区并隐藏共享 Reader，离开设置后按进入前的 Reader 状态恢复，不销毁或复制 Viewer。
 
 ## 视觉系统与交互状态
 
@@ -23,7 +23,7 @@
 ## Chat 交互
 
 - 每次问题都是独立单轮：发送新问题前清除旧正文、工具状态、来源和 Token 花费，不向 Agent 传递或持久化历史。
-- Enter 必须在多行 TextBox 消费换行前通过预览路由发送，Shift+Enter 保留换行；若 `TextPresenter.PreeditText` 表示中文输入法仍在组词，Enter 只交给输入法确认候选，不触发发送。回答期间禁止并发发送，只提供停止；已提交问题保留在底部只读输入栏，不清空也不另建右上角问题卡，输入区继续明确提示键盘行为。
+- Enter 必须在多行 TextBox 消费换行前通过预览路由发送，Shift+Enter 保留换行；若 `TextPresenter.PreeditText` 表示中文输入法仍在组词，Enter 只交给输入法确认候选，不触发发送。回答期间禁止并发发送，只提供停止；问题被接受后立即清空底部输入框，已提交文本仍保留在当前单轮状态中供结果与收藏使用，输入区继续明确提示键盘行为。
 - 回答期间的停止图标必须在圆形 composer 按钮内双向居中。Chat 右上角收藏按钮占用独立布局栏，当前问题、流式 Markdown、最终回答及其滚动内容不得进入或覆盖该区域。
 - 可见结果包含当前问题、最多每 75 ms 刷新的流式 Markdown、Wiki 工具进度、可信来源、Token 花费和安全状态。回答区用小型“AI 结论”标签与 Markdown 正文标题区分；可信来源使用等宽整行按钮，标题、详情与打开箭头保持一致对齐。Token 花费只显示输入、输出与合计 token，不显示模型请求数、工具调用数或美元估算，并与完成状态分别使用轻量信息条。思考中使用轻量状态面板、进度条和紧凑工具轨迹；首个正文增量后显示独立回答区，完成后工具轨迹降为次级摘要，避免大面积空白与厚重卡片堆叠。
 - AI Disabled/Failed 必须留在 Chat 内显示固定安全错误、重试 AI 和打开 Wiki；不弹阻塞对话框、不自动切页，离线 Search/Reader 保持可用。
@@ -48,12 +48,12 @@
 
 - 左侧“数据管理”只经 Application `ActiveWikiUseCases` 与 `WikiDataUseCases` 列出/切换 Wiki、刷新统计，并执行页面/资源下载、更新、失败项重试或清理、数据库整理、资源删除和整库删除；Presentation 不直接访问 SQLite 或复制 Core 生命周期实现。
 - 下载、更新、重试和维护等长操作显示页内进度、当前动作与取消入口。失败只显示不含本机路径的安全状态，不阻塞 Chat、资料库和离线设置访问。
-- 切换 Wiki、清理失败项、删除资源、删除整库和导入覆盖必须先显示目标与影响范围，再经页内确认调用既有 Application 用例。活动数据变化后刷新搜索、收藏和资料库；需要时让同一个 Viewer/Reader 重新绑定动态 loopback，不创建第二个会话。
+- 切换 Wiki、清理失败项、删除资源、删除整库和导入覆盖必须先显示目标与影响范围，再经页内确认调用既有 Application 用例。活动数据变化后刷新搜索、收藏和资料库；需要时让同一个 Viewer/Reader 重新绑定动态 loopback，AI 继续通过同一个 Application 查询边界读取新内容，不创建第二个会话或要求重启应用。
 - Windows `.pkg` 导入先调用 `InspectPackageAsync`，保存 inspection token 并显示元数据；用户确认后才调用 `ImportPackageAsync`。0.4 之前的数据包必须明确提示兼容迁移并传递 legacy consent，包格式与既有 staging/backup/rollback 不变。
 - Windows 导出由原生保存文件选择器决定目标。若目标已存在，宿主先在同目录写唯一临时包，完整成功后才替换目标；失败或取消清理临时文件并保留旧目标。
-- 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；Reader 保持关闭并提示先下载或导入，不把无内容状态升级为整应用启动失败。
+- 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；启动完成后自动选择数据管理页，Reader 保持关闭，并明确提示应用不会自动联网、用户可执行“下载页面与资源”或导入本地数据包。无内容状态不得升级为整应用启动失败。
 - 没有已保存数据根时，Windows 宿主不得自动打开系统文件夹选择器；它在 `%LocalAppData%\Terraria AI Wiki\WikiData` 创建默认数据根并把绝对路径交给现有 Application/Core，由既有初始化流程创建 `Manager.db` 与活动 Wiki 数据库。已有有效保存根与显式命令行根优先；已有无效保存根不得被默认根静默覆盖，而应直接进入数据管理页恢复。
-- 数据管理页始终显示当前数据库文件夹并保留更改入口。更改时可选择包含有效 `Manager.db` 的已有数据根，或选择空文件夹作为新数据根；非空且不含有效数据库的目录必须拒绝。取消、选错或后续数据库初始化失败都保留页面和再次选择入口，只有路径验证通过后才保存并重新组合 Runtime。
+- 数据管理页始终在带边框的单行只读区域显示当前数据库文件夹，显示层使用 `PathSegmentEllipsis` 折叠中间目录、悬停显示完整路径并允许选择复制；完整值仍用于保存和重组。右侧保留次级“更改文件夹”入口。更改时可选择包含有效 `Manager.db` 的已有数据根，或选择空文件夹作为新数据根；非空且不含有效数据库的目录必须拒绝。取消、选错或后续数据库初始化失败都保留页面和再次选择入口，只有路径验证通过后才保存并重新组合 Runtime。
 
 ## 设置
 
@@ -61,7 +61,7 @@
 - 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
 - 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
 - 设置页使用“常规设置 / AI 配置”二级菜单，不增加第六个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
-- DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。Python 只读显示安装目录中的内置 Runtime；API key 不回显并保存到 Windows Credential Manager，提供保留、替换和显式清除；思考强度提供服务默认、关闭、低、高、最大五档。
+- DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。“模型服务”是唯一 AI 配置区域，合并提供商字段、API Key、思考强度和数据发送说明；普通用户界面不显示 Python 版本或路径。API key 保存到 Windows Credential Manager，不回显真实值或长度；已有凭据以固定长度遮蔽标记和“已保存”文字显示，空底层输入仍表示保留，输入新值表示替换，并另有显式清除操作。思考强度提供服务默认、关闭、低、高、最大五档。
 - AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
 - AI 配置与 Credential Manager 不依赖 Wiki 数据库 Runtime 才可编辑。没有有效数据根时 API Key 输入、provider 载入与保存仍可用；保存成功后明确提示 AI 将在选定有效数据根后启动，不把暂时无法重启误报成凭据保存失败。
 - 常规页同级“关于与更新”区域显示应用版本、安装/portable 形态、Windows/WebView2 状态、unsigned 告知和有界诊断。只有用户点击后才检查公开 GitHub stable Releases；检查、可用、下载、取消、待重启、失败与禁用均为页内状态，失败不影响离线功能。

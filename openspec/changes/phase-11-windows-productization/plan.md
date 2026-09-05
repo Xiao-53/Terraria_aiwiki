@@ -4,7 +4,7 @@
 - Phase：11 — Windows Productization
 - 执行环境：WSL Codex CLI 负责阅读、编辑、计划维护和平台无关检查；Windows 11 x64 负责 .NET/Avalonia、内置 Python、安装器、portable、升级、修复、卸载和目标平台验证；Windows 10 22H2 x64 仅执行低成本兼容性门槛
 - 创建日期：2026-09-03
-- 最后更新：2026-09-04
+- 最后更新：2026-09-05
 - 范围：Windows 错误恢复、内置 Python Runtime、Credential Manager、Evergreen WebView2 前置处理、版本化 self-contained 发布、普通 Windows 安装程序、portable zip、GitHub Releases 更新与发布准备、发布诊断和许可告知
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0008-use-github-releases-windows-distribution.md`、`assets/windows/README.md`
 
@@ -68,7 +68,7 @@
 6. v2 → v3 首次迁移可重试且不丢 key：只有 Credential Manager 写入与 v3 durable replace 成功后，明文才从主配置消失；失败时保留可恢复的旧配置、当前离线能力和安全页内状态。
 7. Evergreen WebView2 是安装前置：`Setup.exe` 通过官方 bootstrap 检查/安装，Host probe 继续作为修复兜底。portable 在 Runtime 缺失时提供明确的 Microsoft 官方获取/修复动作，不捆绑 Fixed Version Chromium。
 8. 版本、Git tag、commit、公开仓库 URL、installer ID、制品命名、update channel、SHA-256、Runtime provenance、第三方 notices、内容署名、隐私/数据发送说明和发布 runbook 有单一事实源。
-9. 设置页不再要求普通用户选择 Python；在既有“常规设置 / AI 配置”中显示内置 Runtime、凭据和更新状态，并在既有区域提供版本、检查更新与安全诊断。不得增加第六个全局导航或阻塞式成功弹窗。
+9. 设置页不再要求普通用户选择 Python，也不显示 Python 版本或路径；AI 配置把 provider、凭据、思考强度和数据发送说明合并到唯一“模型服务”区域，并在常规设置既有区域提供版本、检查更新与安全诊断。不得增加第六个全局导航或阻塞式成功弹窗。
 10. 增加有界、隐私安全的本地诊断，只记录版本、稳定事件/错误 code、Runtime/update 状态和耗时；不记录问题/回答、Wiki HTML、API key、bearer、provider 原始响应、完整用户路径或数据库内容。
 11. 干净 Windows 11 x64 环境完成安装、首次启动、无外部 Runtime smoke、内置 Python AI smoke、更新、修复、卸载、重装和 portable 回归；全过程保留 host settings、Chat 收藏、Credential Manager secret 与外部 Wiki data root。
 12. 发布物如实标记为 unsigned，安装说明展示 GitHub tag、SHA-256 校验和与预期 Windows 警告；不能把 hash、GitHub 来源或开源说明描述成代码签名。
@@ -141,7 +141,7 @@
 10. **凭据与迁移**：新增 Windows 内部 credential store 小边界，直接包装 `CredWriteW` / `CredReadW` / `CredDeleteW` / `CredFree`，测试用内存 fake。v3 JSON 只保存 version/provider；UI 不回显真实 key，空输入保留已有 key，替换与显式清除分开。
 11. **迁移顺序**：严格验证 v2 → 写 Credential Manager → 写 durable v3 临时文件 → 原子替换主文件 → 重启 Runtime。v3 replace 前失败保留可重试 v2；v3 成功后 credential 成为唯一 key 来源。
 12. **Evergreen WebView2**：`vpk pack --framework webview2` 或当时官方等价机制负责安装前置，应用不额外声明 .NET Runtime。Host 缺失态保留 probe，portable 提供官方获取/修复入口，不下载未知 URL或捆绑 Fixed Version。
-13. **诊断与 UI**：复用现有 startup error、Chat 和 Settings，不新增全局导航。AI 设置移除 Python picker，显示 credential/bundled runtime；常规设置或同级“关于与诊断”区域显示版本、更新、WebView2 与日志入口。覆盖初始、检查中、可用、无更新、下载中、待重启、失败、取消和禁用状态。
+13. **诊断与 UI**：复用现有 startup error、Chat 和 Settings，不新增全局导航。AI 设置移除 Python picker、版本和路径，只显示模型服务与 credential；常规设置或同级“关于与诊断”区域显示版本、更新、WebView2 与日志入口。覆盖初始、检查中、可用、无更新、下载中、待重启、失败、取消和禁用状态。
 14. **发布清单**：为每个候选记录 version/tag/commit/RID、installer ID/channel、Python/WebView2 策略、payload/hash、unsigned 状态和 notices；制品检查拒绝 `.venv`、`__pycache__`、`.pyc`、tests、数据库、`.pkg`、secret、证书、构建缓存和绝对用户路径。
 15. **许可表达**：根级说明将“产品自有源码许可证”“官方 Wiki 文本 CC BY-NC-SA 4.0”“逐文件媒体/游戏资产”“Calamity 3.0 内容”“MIT/PSF/.NET/NuGet/PyPI 第三方”分开；发布页不得暗示 wiki.gg、Re-Logic 或 Calamity 团队背书。
 
@@ -173,7 +173,7 @@
 - **MODIFY** `src/Terraria_Wiki.Windows/AI/{AiRuntimeConfiguration.cs,AiRuntimeConfigurationStore.cs,AiSidecarProcess.cs,WindowsAiRuntime.cs}`：v3 非 secret 配置、内置 Runtime 定位、Credential Manager 来源、只读 Python flags 和稳定恢复错误。
 - **ADD candidate** `src/Terraria_Wiki.Windows/AI/WindowsCredentialStore.cs`：最小 Win32 generic credential adapter；不引入跨平台公共接口。
 - **ADD/MODIFY candidate** `src/Terraria_Wiki.Windows/Updates/**` 与 `src/Terraria_Wiki.Windows/Hosting/{WindowsClientRuntime.cs,WebView2RuntimeProbe.cs}`：GitHub stable update、版本/portable 检测、WebView2 恢复、安全诊断和生命周期接线；具体拆分服从当前调用关系，不预建框架。
-- **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Settings/{SettingsView.axaml,AiSettingsViewModel.cs}` 与必要的现有状态文件：移除用户 Python picker，显示 credential/bundled-runtime/version/update/diagnostic 状态；复用现有样式，不增加全局入口。
+- **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Settings/{SettingsView.axaml,AiSettingsViewModel.cs}` 与必要的现有状态文件：移除用户 Python picker、版本和路径，把 provider/credential/reasoning/data-send 合并到唯一模型服务区，并保留 version/update/diagnostic 状态；复用现有样式，不增加全局入口。
 - **MODIFY only if required** `src/Terraria_Wiki.Windows/Presentation/Styles/Controls.axaml`：仅在现有语义 class 无法表达新状态时增加可复用 class；页面不写 raw hex。
 - **MODIFY/ADD** `tests/Terraria_Wiki.Windows.Tests/**`：v2→v3、credential fake/native、内置 Runtime、只读进程参数、GitHub update 状态、hook/生命周期、WebView2 恢复、诊断脱敏、version/package boundary 与 UI 状态。
 - **MODIFY only if packaging proves necessary** `agent/sidecar_launcher.py`：只做 embeddable path/只读启动兼容；Agent 业务、协议与 provider 边界不变，相应 Python tests 同步覆盖。
@@ -241,7 +241,7 @@
 ### UI / 可访问性
 
 - 新状态沿用语义 token/style，无页面 raw hex、无第二主题/图标依赖、无第六全局导航；设置内容在 820 DIP 宽度内自然换行。
-- 更新 UI 覆盖 idle/checking/up-to-date/available/downloading/ready/cancelled/failed，凭据/WebView2/bundled Runtime 也有可用、缺失、失败与重试状态；过期异步结果不得覆盖新检查或退出状态。
+- 更新 UI 覆盖 idle/checking/up-to-date/available/downloading/ready/cancelled/failed，凭据与 WebView2 也有可用、缺失、失败与重试状态；内置 Python 的版本和路径不面向普通用户显示，相关故障只通过安全的 AI Runtime 状态呈现。过期异步结果不得覆盖新检查或退出状态。
 - Light/Dark、1280×820、900×600、1100 DIP 宽窄分界、Reader 开/关、实际可用缩放、Tab 顺序、focus-visible、disabled、Automation Name 和至少 44×44 DIP 图标命中区实际检查。
 - 所有错误采用页内安全状态；重试不清除仍可用内容，不弹阻塞式成功对话框，不泄漏路径、provider 响应、release token 或底层异常。
 
@@ -288,6 +288,9 @@
 - 2026-09-04：完成试用修复：启动不再主动打开文件夹选择器，数据管理页可反复选择数据库文件夹，AI 配置与 Credential Manager 操作不再依赖数据库 Runtime。最新 Windows Release build 为 0 warning / 0 error，全量 .NET tests 295/295 通过；真实 Windows UI 验证确认启动选择器已延后、数据管理入口可用且 API Key 可输入。仅把已验证的内置 Python Runtime 复制到忽略的开发输出供即时试用，未调用发布或打包脚本。
 - 2026-09-04：用户进一步明确首次运行应自动创建数据库文件夹，同时保留数据管理页的更改地址功能。进入局部实施：Windows 宿主在没有已保存地址时创建独立默认数据根并由现有 Application/Core 初始化数据库；显式地址与已有有效地址仍优先，已有无效地址不被静默覆盖，选错后继续由数据管理页恢复。仍不重建安装包。
 - 2026-09-04：完成默认数据根实现与 ADR 0009：默认地址为 `%LocalAppData%\Terraria AI Wiki\WikiData`，空目录和已有有效数据库均可作为更改目标，非空错误目录保持拒绝且不修改内容。用户正在运行旧开发版导致常规输出被锁定，未强制结束其进程；改用忽略的独立 artifacts 输出完成 9 项目 Release build（0 warning / 0 error）和 297/297 .NET tests，并补齐 5,907 个已验证 Python Runtime 文件供直接试用，未调用打包脚本。
+- 2026-09-05：完成本轮 AI 设置与空数据库引导修复：`SecretTextBox` 明确复用 Fluent `TextBox` 模板，AI 设置合并为唯一“模型服务”区域且不再显示 Python；数据库地址改为可复制、悬停看全值的 `PathSegmentEllipsis` 单行框，“更改文件夹”降为次级操作；空 Wiki 启动关闭 Reader 并自动进入数据管理，顶部直接显示不自动联网的首次使用说明与“下载页面与资源”主按钮。既有数据变更事件继续刷新查询消费者并重绑唯一 Viewer，未改变 Application/Core、schema、数据包或协议。
+- 2026-09-05：标准 Windows Release 开发输出完成 9 项目 build（0 warning / 0 error），40 项相关回归和 299/299 全量 .NET tests 通过。Windows 11 25H2 build 26200 使用两套隔离 host settings/data roots 实测 Light 1280×820 与 Dark 900×600：两边均创建 `Manager.db` 并直接显示数据管理；宽 Reader 分栏、窄 Reader 覆盖、路径省略、首次使用主按钮和 AI 单区布局无挤压重叠。API Key 实际控件为 300×40 DIP，UI Automation 输入返回 8 个遮蔽字符并立即启用“保存并应用”；非交互会话未能把全局键盘注入送入窗口，因此本轮不把物理键盘/剪贴板手工输入记作已重新实测。未保存密钥、下载数据、请求模型、运行 publish 或重建包。
+- 2026-09-05：用户试用要求发送后清空 Chat 编辑框、设置页临时隐藏 Wiki Reader 并在离开后恢复，以及让已保存 API Key 在输入区具有明确反馈。实现保持已提交问题的内部单轮/收藏状态，设置页只隐藏且不销毁唯一 Viewer，凭据只显示固定八位遮蔽与“已保存”而不读取真实值或泄漏长度。34 项 Chat/Settings/Presentation 定向回归和 300/300 全量 .NET tests 通过；按用户要求只更新未打包 Release 开发输出，不运行 publish/Velopack，由用户继续实际 UI 验收。连续会话与“新对话”按钮涉及现有单轮 Agent/协议/收藏契约，留作用户选择方案后的独立 change，不在本局部修复中放置无后端行为的按钮。
 
 ## 发现、偏差与决策
 
@@ -310,11 +313,11 @@
 
 ## 验证结果
 
-- 最新未打包 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 297/297 通过（Core 92、Application 54、WikiTools 28、Windows 123）。`0.11.0-local.22` 仍是修复前候选，按用户要求未重建。
+- 最新未打包 Windows Release solution build 覆盖 9 个项目，0 warning / 0 error；全量 .NET tests 300/300 通过（Core 92、Application 54、WikiTools 28、Windows 126）。本轮 Chat/Settings/Presentation 34 项定向回归通过；此前设置、数据管理、Presentation 边界与流程的 40 项定向回归证据仍保留。`0.11.0-local.22` 仍是修复前候选，按用户要求未重建。
 - Python frozen 回归通过：ruff check/format、strict mypy、pytest 77 passed / 4 explicit opt-in skipped；内置 CPython 3.14.7 x64、OpenSSL 3.5.7、pydantic-ai 2.31.0 的真实跨语言 fake-provider 测试通过，未生成 `.pyc`，退出后无 Python 子进程。
 - 最终本地候选生成 119,647,140-byte Setup、114,926,892-byte portable zip、115,056,548-byte full package；7/7 SHA-256 一致，单制品低于 2 GiB，应用与 Setup PE 均确认无 certificate table，portable 解包与 payload manifest 精确一致。
 - 实际 Windows 11 安装 smoke：Search 1、JS 1、CSS 1、image 1、audio 3、Viewer messages 9/9、cleanup true；repair 恢复故意损坏的 Viewer/Python，升级后 payload 无混合版本，portable smoke 和卸载注册/快捷方式/安装根清理通过。
-- Light/Dark、1280×820、900×600、宽/窄 Reader、设置/更新/诊断与键盘焦点已完成实际 UI 检查；精确 Reader threshold/Escape 另有自动化证据。
+- 此前在 Windows 11 25H2 build 26200 的标准开发输出以隔离配置实际检查 Light 1280×820、Dark 900×600、空库自动导航、首次使用主按钮、单行路径框、宽/窄 Reader 与 AI 设置；API Key Fluent 模板、300×40 DIP 尺寸、焦点、遮蔽值和保存启用通过实际 UI Automation。当前发送清空、设置临时隐藏 Reader 和固定“已保存”遮蔽反馈已编译并有行为回归，但按用户要求交由其继续实际 UI 验收；物理键盘/剪贴板输入也未在当前非交互会话重新手工验收。精确 Reader threshold/Escape 继续有 Presentation 自动化证据。
 - 公开 GitHub upload、真实 GitHub update source、WebView2 缺失干净机、Windows 10、真实付费 provider、软件许可证确认与逐项素材权利审计尚未执行；不能由本地 feed、已有 WebView2 或 fake provider 代替。
 
 ## 完成摘要

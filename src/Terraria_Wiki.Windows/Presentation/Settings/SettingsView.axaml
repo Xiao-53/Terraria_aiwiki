@@ -314,71 +314,64 @@
                 <ComboBoxItem Content="Chat Completions API" />
               </ComboBox>
             </Grid>
-          </StackPanel>
 
-          <Border Classes="section-surface">
-            <StackPanel Margin="0,20,0,0" Spacing="12">
-              <TextBlock Text="本机运行环境" Classes="section-title" />
-              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
-                <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="Python" FontWeight="SemiBold" />
-                  <TextBlock Text="随应用安装并更新，不再依赖系统 Python。" Classes="muted" TextWrapping="Wrap" />
-                </StackPanel>
-                <SelectableTextBlock Grid.Column="1" Text="{Binding Ai.PythonExecutable}"
-                                     VerticalAlignment="Center" TextWrapping="Wrap"
-                                     AutomationProperties.Name="内置 AI Python 路径" />
-              </Grid>
-              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
-                <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="API Key" FontWeight="SemiBold" />
-                  <TextBlock Text="{Binding Ai.CredentialStatus}" Classes="muted" TextWrapping="Wrap" />
-                </StackPanel>
-                <StackPanel Grid.Column="1" Spacing="8">
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="API Key" FontWeight="SemiBold" />
+                <TextBlock Text="{Binding Ai.CredentialStatus}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <StackPanel Grid.Column="1" Spacing="8">
+                <Grid>
                   <settings:SecretTextBox Text="{Binding Ai.ApiKey, Mode=TwoWay}"
-                                          PasswordChar="●" PlaceholderText="输入或替换 API Key"
+                                          Classes="api-key-input"
+                                          PasswordChar="●"
+                                          PlaceholderText="{Binding Ai.ApiKeyPlaceholder}"
                                           IsEnabled="{Binding Ai.IsAvailable}"
                                           AutomationProperties.AutomationId="AiApiKeyInput"
                                           AutomationProperties.Name="AI API Key"
-                                          AutomationProperties.HelpText="密钥保存到 Windows Credential Manager；已有值不会回显。" />
-                  <Button Content="清除已保存的 API Key" Classes="toolbar-action"
-                          HorizontalAlignment="Right"
-                          Command="{Binding Ai.ClearCredentialCommand}"
-                          IsVisible="{Binding Ai.HasStoredCredential}"
-                          ToolTip.Tip="立即从 Windows Credential Manager 删除密钥并停用 AI"
-                          AutomationProperties.Name="清除 Windows Credential Manager 中的 AI API Key" />
-                </StackPanel>
-              </Grid>
-            </StackPanel>
-          </Border>
+                                          AutomationProperties.HelpText="密钥保存到 Windows Credential Manager；已有真实值不会回显，固定遮蔽标记仅表示已保存。" />
+                  <TextBlock Text="●●●●●●●●  已保存"
+                             Margin="12,0,0,0"
+                             VerticalAlignment="Center"
+                             Foreground="{DynamicResource TerrariaTextSecondaryBrush}"
+                             IsHitTestVisible="False"
+                             IsVisible="{Binding Ai.ShowStoredCredentialMask}"
+                             AutomationProperties.Name="API Key 已保存，真实值不回显" />
+                </Grid>
+                <Button Content="清除已保存的 API Key" Classes="toolbar-action"
+                        HorizontalAlignment="Right"
+                        Command="{Binding Ai.ClearCredentialCommand}"
+                        IsVisible="{Binding Ai.HasStoredCredential}"
+                        ToolTip.Tip="立即从 Windows Credential Manager 删除密钥并停用 AI"
+                        AutomationProperties.Name="清除 Windows Credential Manager 中的 AI API Key" />
+              </StackPanel>
+            </Grid>
 
-          <Border Classes="section-surface">
-            <StackPanel Margin="0,20,0,0" Spacing="12">
-              <TextBlock Text="模型行为" Classes="section-title" />
-              <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
-                <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="思考强度" FontWeight="SemiBold" />
-                  <TextBlock Text="服务默认最兼容；其他档位会作为 reasoning effort 发送。" Classes="muted" TextWrapping="Wrap" />
-                </StackPanel>
-                <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ReasoningEffortIndex, Mode=TwoWay}"
-                          IsEnabled="{Binding Ai.IsAvailable}"
-                          AutomationProperties.AutomationId="AiReasoningEffort"
-                          AutomationProperties.Name="AI 思考强度">
-                  <ComboBoxItem Content="服务默认" />
-                  <ComboBoxItem Content="关闭" />
-                  <ComboBoxItem Content="低" />
-                  <ComboBoxItem Content="高" />
-                  <ComboBoxItem Content="最大" />
-                </ComboBox>
-              </Grid>
-              <Border Classes="card" Padding="16">
-                <StackPanel Spacing="4">
-                  <TextBlock Text="连接说明" FontWeight="SemiBold" />
-                  <TextBlock Text="提问时读取的本地 Wiki 内容会发送给所选远程模型服务。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
-                             Classes="muted" TextWrapping="Wrap" />
-                </StackPanel>
-              </Border>
-            </StackPanel>
-          </Border>
+            <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="思考强度" FontWeight="SemiBold" />
+                <TextBlock Text="服务默认最兼容；其他档位会作为 reasoning effort 发送。" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ReasoningEffortIndex, Mode=TwoWay}"
+                        IsEnabled="{Binding Ai.IsAvailable}"
+                        AutomationProperties.AutomationId="AiReasoningEffort"
+                        AutomationProperties.Name="AI 思考强度">
+                <ComboBoxItem Content="服务默认" />
+                <ComboBoxItem Content="关闭" />
+                <ComboBoxItem Content="低" />
+                <ComboBoxItem Content="高" />
+                <ComboBoxItem Content="最大" />
+              </ComboBox>
+            </Grid>
+
+            <Border Classes="card" Padding="16">
+              <StackPanel Spacing="4">
+                <TextBlock Text="连接说明" FontWeight="SemiBold" />
+                <TextBlock Text="提问时读取的本地 Wiki 内容会发送给所选远程模型服务。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
+                           Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+            </Border>
+          </StackPanel>
         </StackPanel>
       </Grid>
     </ScrollViewer>

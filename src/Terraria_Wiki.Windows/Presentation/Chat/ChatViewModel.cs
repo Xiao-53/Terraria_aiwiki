@@ -294,6 +294,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             return;
 
         ResetForQuestion(question);
+        Question = string.Empty;
         _answerCancellation = new CancellationTokenSource();
         var current = _answerCancellation;
         RunState = ChatRunState.Answering;

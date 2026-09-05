@@ -94,20 +94,24 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string PythonExecutable
-    {
-        get => _pythonExecutable;
-    }
-
     public string ApiKey
     {
         get => _apiKey;
-        set { if (SetProperty(ref _apiKey, value ?? string.Empty)) MarkDirty(); }
+        set
+        {
+            if (!SetProperty(ref _apiKey, value ?? string.Empty))
+                return;
+            OnPropertyChanged(nameof(ShowStoredCredentialMask));
+            OnPropertyChanged(nameof(ApiKeyPlaceholder));
+            MarkDirty();
+        }
     }
 
     public bool HasStoredCredential => _hasStoredCredential;
+    public bool ShowStoredCredentialMask => HasStoredCredential && ApiKey.Length == 0;
+    public string ApiKeyPlaceholder => HasStoredCredential ? string.Empty : "输入 API Key";
     public string CredentialStatus => HasStoredCredential
-        ? "已安全保存在 Windows Credential Manager；留空可继续使用，输入新值可替换。"
+        ? "已安全保存在 Windows Credential Manager；输入框中的固定遮蔽标记不代表密钥长度，输入新值可替换。"
         : "尚未保存密钥；输入后将写入 Windows Credential Manager，不写入配置文件。";
 
     public int DeepSeekModelIndex
@@ -185,7 +189,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             _hasLoaded = true;
             StatusMessage = draft.Exists
                 ? "AI 配置已载入。保存后会重启当前 AI Runtime。"
-                : "尚无 AI 配置；已准备内置 Python 与 DeepSeek 默认项，请输入 API Key。";
+                : "尚无 AI 配置；已准备 DeepSeek 默认项，请输入 API Key。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
@@ -275,6 +279,8 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             _hasStoredCredential = false;
             OnPropertyChanged(nameof(ApiKey));
             OnPropertyChanged(nameof(HasStoredCredential));
+            OnPropertyChanged(nameof(ShowStoredCredentialMask));
+            OnPropertyChanged(nameof(ApiKeyPlaceholder));
             OnPropertyChanged(nameof(CredentialStatus));
             _savedDraft = BuildDraft(_savedDraft?.ConfigurationPath, _savedDraft?.Exists ?? true);
             IsDirty = false;
@@ -347,9 +353,10 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsDeepSeek));
         OnPropertyChanged(nameof(IsCustomProvider));
         OnPropertyChanged(nameof(ProviderDescription));
-        OnPropertyChanged(nameof(PythonExecutable));
         OnPropertyChanged(nameof(ApiKey));
         OnPropertyChanged(nameof(HasStoredCredential));
+        OnPropertyChanged(nameof(ShowStoredCredentialMask));
+        OnPropertyChanged(nameof(ApiKeyPlaceholder));
         OnPropertyChanged(nameof(CredentialStatus));
         OnPropertyChanged(nameof(DeepSeekModelIndex));
         OnPropertyChanged(nameof(CustomBaseUrl));
@@ -378,7 +385,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
                 CustomApiIndex == 1 ? "chat_completions" : "responses",
                 MapReasoningEffort());
         return new AiRuntimeConfigurationDraft(
-            PythonExecutable,
+            _pythonExecutable,
             provider,
             ApiKey,
             configurationPath ?? _savedDraft?.ConfigurationPath ?? string.Empty,

@@ -382,6 +382,9 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 
     internal void ReportDataRootSelection(string message) => StatusMessage = message;
 
+    internal void ShowEmptyWikiOnboarding() =>
+        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入本地数据包。";
+
     internal void EndDataRootSelection() => IsSelectingDataRoot = false;
 
     public void Attach(WikiApplication application)
@@ -421,7 +424,9 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         try
         {
             await ReloadAsync(current.Token);
-            StatusMessage = "Wiki 数据状态已刷新。";
+            StatusMessage = NeedsPageData
+                ? "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入本地数据包。"
+                : "Wiki 数据状态已刷新。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {

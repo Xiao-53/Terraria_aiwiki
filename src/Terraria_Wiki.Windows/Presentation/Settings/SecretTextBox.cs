@@ -8,6 +8,8 @@ namespace Terraria_Wiki.Windows.Presentation.Settings;
 
 internal sealed class SecretTextBox : TextBox
 {
+    protected override Type StyleKeyOverride => typeof(TextBox);
+
     protected override AutomationPeer OnCreateAutomationPeer() =>
         new SecretTextBoxAutomationPeer(this);
 }

@@ -138,6 +138,7 @@
                   AutomationProperties.Name="重试应用启动" />
           <Button Content="打开 Wiki" Command="{Binding OpenWikiReaderCommand}"
                   Classes="wiki-preview-button"
+                  IsVisible="{Binding !IsSettingsSelected}"
                   ToolTip.Tip="打开 Wiki Reader"
                   AutomationProperties.AutomationId="WikiPreview"
                   AutomationProperties.Name="打开 Wiki 预览" />

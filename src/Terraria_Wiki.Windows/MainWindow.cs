@@ -177,10 +177,7 @@ internal sealed partial class MainWindow : Window
             _aiStartupTask = EnableAiInBackgroundAsync(runtime);
             if (!activeWiki.IsPageDownloaded)
             {
-                _shellViewModel.Reader.Detach();
-                _shellViewModel.Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
-                _shellViewModel.CloseReader();
-                _shellViewModel.SetStartupStatus("本地 Runtime 已就绪 · 当前 Wiki 尚未下载数据");
+                _shellViewModel.ShowEmptyWikiOnboarding();
                 return;
             }
 

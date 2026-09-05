@@ -123,7 +123,7 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。最新未打包源代码会在首次运行自动创建 Windows 默认数据根，并在数据管理页保留更改入口；Windows Release 构建为 0 warning/0 error，297/297 .NET tests 通过。此前的 `0.11.0-local.22` 安装与 portable 候选不含最新试用修复，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
+**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。最新未打包源代码会在首次运行自动创建 Windows 默认数据根，空内容时直接进入数据管理页，并保留更改入口；Chat 发送后清空输入框，设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。Windows Release 构建为 0 warning/0 error，300/300 .NET tests 通过。此前的 `0.11.0-local.22` 安装与 portable 候选不含最新试用修复，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
 
 ## 工作区结构
 

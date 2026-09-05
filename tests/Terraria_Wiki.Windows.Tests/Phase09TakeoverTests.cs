@@ -61,6 +61,7 @@ public sealed class Phase09TakeoverTests
             metadata);
         string? importedToken = null;
         bool? legacyConsent = null;
+        WikiDataChangedEventArgs? changed = null;
         using var viewModel = new WikiManagementViewModel();
         var actions = Actions(
             list: _ => Task.FromResult<IReadOnlyList<WikiBookSnapshot>>([active]),
@@ -80,6 +81,7 @@ public sealed class Phase09TakeoverTests
             },
         };
         viewModel.Attach(actions);
+        viewModel.DataChanged += (_, args) => changed = args;
         await viewModel.RefreshAsync();
 
         await viewModel.BeginImportAsync();
@@ -92,7 +94,43 @@ public sealed class Phase09TakeoverTests
 
         Assert.Equal(inspection.InspectionToken, importedToken);
         Assert.True(legacyConsent);
+        Assert.NotNull(changed);
+        Assert.True(changed!.RequiresViewerRebind);
         Assert.Contains("已导入", viewModel.StatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task EmptyWikiOffersDownloadAndPublishesRebindAfterContentArrives()
+    {
+        var active = Wiki(1, "泰拉瑞亚中文 Wiki", downloaded: false);
+        WikiDataChangedEventArgs? changed = null;
+        using var viewModel = new WikiManagementViewModel();
+        var actions = Actions(
+            list: _ => Task.FromResult<IReadOnlyList<WikiBookSnapshot>>([active]),
+            active: _ => Task.FromResult(active)) with
+        {
+            Download = (_, _, _) =>
+            {
+                active = Wiki(1, "泰拉瑞亚中文 Wiki", downloaded: true);
+                return Task.FromResult(new WikiOperationSummary { Pages = 100, Resources = 5 });
+            },
+        };
+        viewModel.Attach(actions);
+        viewModel.DataChanged += (_, args) => changed = args;
+
+        await viewModel.RefreshAsync();
+
+        Assert.True(viewModel.NeedsPageData);
+        Assert.True(viewModel.DownloadAllCommand.CanExecute(null));
+        Assert.Contains("首次使用", viewModel.StatusMessage, StringComparison.Ordinal);
+
+        await viewModel.DownloadAsync(includeResources: true);
+
+        Assert.True(viewModel.HasPageData);
+        Assert.False(viewModel.NeedsPageData);
+        Assert.NotNull(changed);
+        Assert.True(changed!.RequiresViewerRebind);
+        Assert.Contains("页面与资源下载完成", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 
     [Fact]

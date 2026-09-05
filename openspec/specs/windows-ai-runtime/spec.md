@@ -15,7 +15,7 @@
 - Windows 设置页可以读取并显式保存同一 v3 文件。当前 UI 只提供 `DeepSeek 官方 API` 与 `自定义 OpenAI-compatible` 两种选择：DeepSeek 预设固定 `https://api.deepseek.com` 与 Responses API，并提供 `deepseek-v4-flash` / `deepseek-v4-pro`；自定义项要求用户显式填写 endpoint、model 与 Responses / Chat Completions。provider 类型是 UI 预设，不写入 schema；不能严格识别为该官方组合的既有配置一律作为自定义项显示。
 - 思考强度 UI 固定为服务默认、关闭、低、高、最大，分别保存为 `null`、`none`、`low`、`high`、`max`。自定义兼容服务可以忽略或拒绝该参数，必须按 endpoint 分别验证，不能因 UI 可选择而宣称通用支持。
 - Host 只从安装目录 `AgentRuntime\python\python.exe` 定位内置 CPython。Phase 11 固定 Python 3.14.7 x64 embeddable、官方 URL/SHA-256、uv 0.12.9 与 `uv.lock` 生产依赖，并在 Sidecar 握手中继续验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。运行期不下载、不调用 pip/uv，也不允许用户改用外部 Python。
-- API key 只保存为当前 Windows 用户 generic Credential，固定 target 为 `TerrariaAIWiki.Windows/AI/APIKey`，UTF-8 blob 不超过 Credential Manager 的 2560-byte 上限。设置页不回显已有值：空输入保留、新输入替换，显式清除会删除凭据并停用 AI，但保留 provider 配置。
+- API key 只保存为当前 Windows 用户 generic Credential，固定 target 为 `TerrariaAIWiki.Windows/AI/APIKey`，UTF-8 blob 不超过 Credential Manager 的 2560-byte 上限。设置页不读取或回显已有真实值与长度，以固定遮蔽标记明确表示凭据已保存：空底层输入保留、新输入替换，显式清除会删除凭据并停用 AI，但保留 provider 配置。
 - v2 首次读取执行可重试迁移：先严格验证 provider/key，再写 Credential Manager，最后 durable 写入并原子替换 v3；任一步失败都保留旧文件并恢复先前凭据。Host 只把读取到的 key 写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入参数、NDJSON、UI、诊断、Git 或 smoke 结果。
 
 配置形状：

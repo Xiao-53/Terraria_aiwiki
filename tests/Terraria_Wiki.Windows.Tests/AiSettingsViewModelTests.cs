@@ -1,5 +1,7 @@
 using Avalonia.Automation.Peers;
 using Avalonia.Automation.Provider;
+using Avalonia.Controls;
+using System.Reflection;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Settings;
@@ -9,15 +11,25 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class AiSettingsViewModelTests
 {
     [Fact]
-    public void SecretTextBoxAutomationValueIsMasked()
+    public void SecretTextBoxUsesTextBoxThemeAndAutomationValueIsMasked()
     {
         var textBox = new SecretTextBox { Text = "secret-value", PasswordChar = '●' };
+        var styleKey = typeof(SecretTextBox).GetProperty(
+            "StyleKeyOverride",
+            BindingFlags.Instance | BindingFlags.NonPublic);
         var peer = Assert.IsType<SecretTextBoxAutomationPeer>(
             ControlAutomationPeer.CreatePeerForElement(textBox));
         var provider = Assert.IsAssignableFrom<IValueProvider>(peer);
 
+        Assert.NotNull(styleKey);
+        Assert.Equal(typeof(TextBox), styleKey!.GetValue(textBox));
         Assert.Equal(new string('●', "secret-value".Length), provider.Value);
         Assert.DoesNotContain("secret-value", provider.Value, StringComparison.Ordinal);
+
+        provider.SetValue("pasted-secret");
+
+        Assert.Equal("pasted-secret", textBox.Text);
+        Assert.Equal(new string('●', "pasted-secret".Length), provider.Value);
     }
 
     [Fact]
@@ -127,27 +139,54 @@ public sealed class AiSettingsViewModelTests
     }
 
     [Fact]
-    public async Task BundledPythonIsReadOnlyAndCredentialStatusDoesNotExposeSecret()
+    public async Task BundledRuntimePathStaysInternalAndCredentialStatusDoesNotExposeSecret()
     {
-        const string bundledPython = @"C:\app\AgentRuntime\python\python.exe";
+        using var directory = new TestDirectory();
+        var bundledPython = Path.Combine(directory.Path, "python.exe");
+        await File.WriteAllBytesAsync(bundledPython, [0]);
+        var configurationPath = Path.Combine(directory.Path, "ai-runtime.json");
+        AiRuntimeConfigurationDraft? requested = null;
         using var viewModel = new AiSettingsViewModel(
             _ => Task.FromResult(new AiRuntimeConfigurationDraft(
                 bundledPython,
                 new AiProviderConfiguration("https://api.deepseek.com", "deepseek-v4-flash", "responses", null),
                 string.Empty,
-                @"C:\config\ai-runtime.json",
+                configurationPath,
                 Exists: true,
                 HasStoredCredential: true)),
-            (_, _) => throw new InvalidOperationException(),
-            _ => throw new InvalidOperationException());
+            (draft, _) =>
+            {
+                requested = draft;
+                return Task.FromResult(AiRuntimeConfiguration.Create(
+                    draft.ConfigurationPath,
+                    draft.PythonExecutable,
+                    draft.Provider,
+                    "stored-test-key"));
+            },
+            _ => Task.FromResult(new WindowsAiRuntimeStatus(
+                WindowsAiRuntimeState.Ready,
+                "AI Runtime 已就绪。")));
         viewModel.Attach();
 
         await viewModel.RefreshAsync();
+        viewModel.ReasoningEffortIndex = 2;
+        await viewModel.SaveAsync();
 
-        Assert.Equal(bundledPython, viewModel.PythonExecutable);
+        Assert.Null(typeof(AiSettingsViewModel).GetProperty(
+            "PythonExecutable",
+            BindingFlags.Instance | BindingFlags.Public));
+        Assert.Equal(bundledPython, requested?.PythonExecutable);
         Assert.True(viewModel.HasStoredCredential);
         Assert.Equal(string.Empty, viewModel.ApiKey);
+        Assert.True(viewModel.ShowStoredCredentialMask);
+        Assert.Equal(string.Empty, viewModel.ApiKeyPlaceholder);
         Assert.Contains("Windows Credential Manager", viewModel.CredentialStatus, StringComparison.Ordinal);
+        Assert.Contains("固定遮蔽", viewModel.CredentialStatus, StringComparison.Ordinal);
+
+        viewModel.ApiKey = "replacement-test-key";
+
+        Assert.False(viewModel.ShowStoredCredentialMask);
+        Assert.True(viewModel.IsDirty);
     }
 
     [Fact]
