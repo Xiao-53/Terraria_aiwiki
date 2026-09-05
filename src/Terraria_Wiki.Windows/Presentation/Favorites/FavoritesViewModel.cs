@@ -1,39 +1,35 @@
 using System.Collections.ObjectModel;
 using Terraria_Wiki.Application;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 
 namespace Terraria_Wiki.Windows.Presentation.Favorites;
 
 internal sealed class ChatFavoriteItemViewModel
 {
-    private readonly Func<ChatFavoriteRecord, Task> _open;
-    private readonly Func<Guid, Task> _remove;
+    private readonly Func<ChatConversation, Task> _open;
+    private readonly Func<ChatConversation, Task> _remove;
 
     public ChatFavoriteItemViewModel(
-        ChatFavoriteRecord record,
-        Func<ChatFavoriteRecord, Task> open,
-        Func<Guid, Task> remove)
+        ChatConversation conversation,
+        Func<ChatConversation, Task> open,
+        Func<ChatConversation, Task> remove)
     {
-        Record = record;
+        Conversation = conversation;
         _open = open;
         _remove = remove;
-        OpenCommand = new AsyncCommand(_ => _open(Record));
-        RemoveCommand = new AsyncCommand(_ => _remove(Record.Id));
+        OpenCommand = new AsyncCommand(_ => _open(Conversation));
+        RemoveCommand = new AsyncCommand(_ => _remove(Conversation));
     }
 
-    public ChatFavoriteRecord Record { get; }
-    public string Question => Record.Question;
-    public string Preview => BuildPreview(Record.Markdown);
-    public string TimeText => Record.FavoritedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+    public ChatConversation Conversation { get; }
+    public string Question => Conversation.Title;
+    public string Preview => Conversation.Turns.LastOrDefault()?.Markdown ?? "";
+    public string TimeText => $"{Conversation.UpdatedAt.LocalDateTime:yyyy-MM-dd HH:mm} · {Conversation.Turns.Count} 轮";
     public AsyncCommand OpenCommand { get; }
     public AsyncCommand RemoveCommand { get; }
-    internal Task OpenAsync() => _open(Record);
-
-    private static string BuildPreview(string markdown)
-    {
-        var text = string.Join(' ', markdown.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries)).Trim();
-        return text.Length <= 180 ? text : text[..180] + "…";
-    }
+    internal Task OpenAsync() => _open(Conversation);
+    internal Task RemoveAsync() => _remove(Conversation);
 }
 
 internal sealed class WikiFavoriteItemViewModel
@@ -63,19 +59,19 @@ internal sealed class WikiFavoriteItemViewModel
 
 internal sealed class FavoritesViewModel : ObservableObject
 {
-    private readonly IChatFavoriteStore _chatStore;
-    private readonly Func<ChatFavoriteRecord, Task> _openChat;
+    private readonly IChatConversationStore _conversationStore;
+    private readonly Func<ChatConversation, Task> _openChat;
     private readonly Func<string, Task> _openWiki;
     private WikiLibraryUseCases? _wikiLibrary;
     private string _statusMessage = "收藏会保存在本机。";
     private bool _isBusy;
 
     public FavoritesViewModel(
-        IChatFavoriteStore chatStore,
-        Func<ChatFavoriteRecord, Task> openChat,
+        IChatConversationStore conversationStore,
+        Func<ChatConversation, Task> openChat,
         Func<string, Task> openWiki)
     {
-        _chatStore = chatStore ?? throw new ArgumentNullException(nameof(chatStore));
+        _conversationStore = conversationStore ?? throw new ArgumentNullException(nameof(conversationStore));
         _openChat = openChat ?? throw new ArgumentNullException(nameof(openChat));
         _openWiki = openWiki ?? throw new ArgumentNullException(nameof(openWiki));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => !IsBusy);
@@ -83,33 +79,20 @@ internal sealed class FavoritesViewModel : ObservableObject
 
     public ObservableCollection<ChatFavoriteItemViewModel> ChatFavorites { get; } = [];
     public ObservableCollection<WikiFavoriteItemViewModel> WikiFavorites { get; } = [];
-    public event Action<Guid>? ChatFavoriteRemoved;
-
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
-    }
-
+    public event Action<Guid, bool>? ConversationFavoriteChanged;
+    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
     public bool IsBusy
     {
         get => _isBusy;
-        private set
-        {
-            if (SetProperty(ref _isBusy, value))
-                RefreshCommand.NotifyCanExecuteChanged();
-        }
+        private set { if (SetProperty(ref _isBusy, value)) RefreshCommand.NotifyCanExecuteChanged(); }
     }
-
     public bool HasChatFavorites => ChatFavorites.Count > 0;
     public bool HasWikiFavorites => WikiFavorites.Count > 0;
     public bool IsEmpty => !HasChatFavorites && !HasWikiFavorites;
     public AsyncCommand RefreshCommand { get; }
 
-    public void AttachWikiLibrary(WikiLibraryUseCases library)
-    {
+    public void AttachWikiLibrary(WikiLibraryUseCases library) =>
         _wikiLibrary = library ?? throw new ArgumentNullException(nameof(library));
-    }
 
     public void DetachWikiLibrary()
     {
@@ -118,37 +101,12 @@ internal sealed class FavoritesViewModel : ObservableObject
         RaiseCollectionProperties();
     }
 
-    public async Task<bool> ToggleChatAsync(ChatFavoriteRecord record, bool isFavorite)
-    {
-        try
-        {
-            if (isFavorite)
-                await _chatStore.RemoveAsync(record.Id);
-            else
-                await _chatStore.SaveAsync(record);
-            await RefreshAsync();
-            StatusMessage = isFavorite ? "已取消收藏该对话。" : "已收藏该对话。";
-            return !isFavorite;
-        }
-        catch
-        {
-            StatusMessage = "无法更新对话收藏。";
-            return isFavorite;
-        }
-    }
-
     public async Task<bool> IsWikiFavoriteAsync(string title)
     {
         if (_wikiLibrary is null || string.IsNullOrWhiteSpace(title))
             return false;
-        try
-        {
-            return await _wikiLibrary.IsFavoriteAsync(title);
-        }
-        catch
-        {
-            return false;
-        }
+        try { return await _wikiLibrary.IsFavoriteAsync(title); }
+        catch { return false; }
     }
 
     public async Task<bool> SetWikiFavoriteAsync(string title, bool favorite)
@@ -179,9 +137,9 @@ internal sealed class FavoritesViewModel : ObservableObject
         IsBusy = true;
         try
         {
-            var chats = await _chatStore.GetAllAsync();
+            var conversations = await _conversationStore.GetAllAsync();
             ChatFavorites.Clear();
-            foreach (var item in chats)
+            foreach (var item in conversations.Where(item => item.IsFavorite))
                 ChatFavorites.Add(new ChatFavoriteItemViewModel(item, _openChat, RemoveChatAsync));
 
             WikiFavorites.Clear();
@@ -191,7 +149,6 @@ internal sealed class FavoritesViewModel : ObservableObject
                 foreach (var item in favorites.Items)
                     WikiFavorites.Add(new WikiFavoriteItemViewModel(item, _openWiki, RemoveWikiAsync));
             }
-
             StatusMessage = IsEmpty ? "还没有收藏。" : $"{ChatFavorites.Count} 个对话 · {WikiFavorites.Count} 个 Wiki 页面";
         }
         catch
@@ -205,11 +162,23 @@ internal sealed class FavoritesViewModel : ObservableObject
         }
     }
 
-    private async Task RemoveChatAsync(Guid id)
+    private async Task RemoveChatAsync(ChatConversation conversation)
     {
-        await _chatStore.RemoveAsync(id);
-        ChatFavoriteRemoved?.Invoke(id);
-        await RefreshAsync();
+        try
+        {
+            await _conversationStore.SaveAsync(conversation with
+            {
+                IsFavorite = false,
+                UpdatedAt = DateTimeOffset.Now,
+            });
+            ConversationFavoriteChanged?.Invoke(conversation.Id, false);
+            await RefreshAsync();
+            StatusMessage = "已取消收藏；对话仍保留在历史中。";
+        }
+        catch
+        {
+            StatusMessage = "无法更新对话收藏；现有收藏未被更改。";
+        }
     }
 
     private async Task RemoveWikiAsync(string title) => await SetWikiFavoriteAsync(title, favorite: false);

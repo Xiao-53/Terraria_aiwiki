@@ -54,6 +54,9 @@ internal sealed record AiAgentUsage
     [JsonPropertyName("input_tokens")]
     public required int InputTokens { get; init; }
 
+    [JsonPropertyName("cached_input_tokens")]
+    public required int CachedInputTokens { get; init; }
+
     [JsonPropertyName("output_tokens")]
     public required int OutputTokens { get; init; }
 
@@ -95,9 +98,11 @@ internal sealed record AiSidecarEvent(
     string? PythonVersion = null,
     string? PydanticAiVersion = null);
 
+internal sealed record AiConversationHistoryTurn(string User, string Assistant);
+
 internal static class AiSidecarProtocol
 {
-    public const int Version = 1;
+    public const int Version = 2;
     public const int MaxLineBytes = 256 * 1024;
 
     private static readonly UTF8Encoding StrictUtf8 = new(false, true);
@@ -131,12 +136,16 @@ internal static class AiSidecarProtocol
             },
         });
 
-    public static byte[] CreateAnswer(string requestId, string question) => Serialize(new
+    public static byte[] CreateAnswer(
+        string requestId,
+        string question,
+        IReadOnlyList<AiConversationHistoryTurn> history) => Serialize(new
     {
         version = Version,
         type = "answer",
         requestId,
         question,
+        history = history.Select(turn => new { user = turn.User, assistant = turn.Assistant }),
     });
 
     public static byte[] CreateCancel(string requestId, string targetRequestId) => Serialize(new
@@ -303,6 +312,8 @@ internal static class AiSidecarProtocol
             || answer.Usage.Requests < 0
             || answer.Usage.ToolCalls < 0
             || answer.Usage.InputTokens < 0
+            || answer.Usage.CachedInputTokens < 0
+            || answer.Usage.CachedInputTokens > answer.Usage.InputTokens
             || answer.Usage.OutputTokens < 0
             || answer.Usage.TotalTokens < 0
             || answer.Usage.TotalTokens != answer.Usage.InputTokens + answer.Usage.OutputTokens

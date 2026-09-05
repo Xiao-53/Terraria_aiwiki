@@ -3,6 +3,7 @@ using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Threading;
 using Avalonia.VisualTree;
 
 namespace Terraria_Wiki.Windows.Presentation.Chat;
@@ -33,5 +34,10 @@ internal sealed partial class ChatView : UserControl
             viewModel.SendCommand.Execute(null);
             args.Handled = true;
         }
+    }
+
+    private void OnNewConversationClick(object? sender, RoutedEventArgs args)
+    {
+        Dispatcher.UIThread.Post(() => this.FindControl<TextBox>("QuestionBox")?.Focus());
     }
 }

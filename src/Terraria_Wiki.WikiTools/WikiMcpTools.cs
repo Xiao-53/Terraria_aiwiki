@@ -1,5 +1,6 @@
 using System.ComponentModel;
 using System.ComponentModel.DataAnnotations;
+using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using ModelContextProtocol.Server;
@@ -56,11 +57,17 @@ internal sealed class WikiMcpTools
         OpenWorld = false,
         UseStructuredContent = true,
         OutputSchemaType = typeof(WikiReadToolResponse))]
-    [Description("Reads one page from the active local Terraria Wiki, resolving redirects and anchors without recording history.")]
+    [Description("Reads bounded plain-text evidence blocks from one local Wiki page, resolving redirects and anchors without recording history. Continue with next_cursor when evidence is incomplete.")]
     public Task<CallToolResult> ReadWikiAsync(
         [Required]
         [Description("The exact local Wiki page title, optionally followed by a #fragment anchor.")]
         string? title = null,
+        [MaxLength(32768)]
+        [Description("Optional question or topic used to prioritize matching sections.")]
+        string? focus = null,
+        [Range(0, int.MaxValue)]
+        [Description("Optional continuation cursor returned by an earlier read with the same title and focus.")]
+        int? cursor = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(
             async token =>
@@ -68,13 +75,22 @@ internal sealed class WikiMcpTools
                 if (title is null)
                     throw new ArgumentNullException(nameof(title));
                 var result = await _query.ReadAsync(title, token).ConfigureAwait(false);
+                var evidence = result.IsFound && result.Content is not null && result.Title is not null
+                    ? WikiEvidenceFormatter.Format(result.Title, result.Content, result.Anchor, focus, cursor)
+                    : WikiEvidencePage.Empty;
                 return new WikiReadToolResponse(
                     result.RequestedTitle,
                     result.RequestedPageTitle,
                     result.IsFound ? "found" : "not_found",
                     result.IsFound,
                     result.Title,
-                    result.Content,
+                    result.IsFound ? "wiki_blocks_v1" : null,
+                    evidence.Blocks,
+                    evidence.IncludedCharacters,
+                    result.Content?.EnumerateRunes().Count() ?? 0,
+                    evidence.IsComplete,
+                    evidence.NextCursor,
+                    evidence.AvailableSections,
                     result.LastModified,
                     result.IsRedirect,
                     result.RedirectFromTitle,

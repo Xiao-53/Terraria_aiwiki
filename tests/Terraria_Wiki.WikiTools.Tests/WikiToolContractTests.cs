@@ -1,3 +1,4 @@
+using System.Text;
 using System.Text.Json;
 using ModelContextProtocol.Protocol;
 using Terraria_Wiki.Application;
@@ -31,14 +32,16 @@ public sealed class WikiToolContractTests
         Assert.Equal(1, maxResults.GetProperty("minimum").GetInt32());
         Assert.Equal(100, maxResults.GetProperty("maximum").GetInt32());
 
-        Assert.Equal(["title"], PropertyNames(read.InputSchema));
+        Assert.Equal(["cursor", "focus", "title"], PropertyNames(read.InputSchema));
         Assert.Equal(["title"], RequiredNames(read.InputSchema));
         Assert.Contains("results", search.OutputSchema!.Value.GetRawText(), StringComparison.Ordinal);
         foreach (var property in new[] { "title", "redirect_target", "summary", "match_type", "highlights", "start", "length" })
             Assert.Contains($"\"{property}\"", search.OutputSchema.Value.GetRawText(), StringComparison.Ordinal);
         foreach (var property in new[]
                  {
-                     "requested_title", "requested_page_title", "status", "is_found", "title", "content",
+                     "requested_title", "requested_page_title", "status", "is_found", "title", "content_format",
+                     "blocks", "section_path", "kind", "text", "included_characters", "original_characters",
+                     "is_complete", "next_cursor", "available_sections",
                      "last_modified", "is_redirect", "redirect_from_title", "redirect_target_title",
                      "redirect_target_anchor", "anchor",
                  })
@@ -113,11 +116,10 @@ public sealed class WikiToolContractTests
         Assert.Equal(3, ResultCount(configured));
         Assert.Equal(5, ResultCount(explicitLimit));
         Assert.Equal(0, ResultCount(empty));
-        Assert.Empty((await fixture.Application.Library.GetHistoryAsync(new PageRequest(0, 20))).Items);
     }
 
     [Fact]
-    public async Task ReadMatchesDirectPageRedirectAnchorAndNotFoundWithoutHistory()
+    public async Task ReadPreservesIdentityRedirectAnchorAndNotFoundWithoutExposingHtml()
     {
         await using var fixture = await WikiToolFixture.CreateAsync();
         await fixture.SaveSearchFixtureAsync();
@@ -137,7 +139,15 @@ public sealed class WikiToolContractTests
             Assert.Equal(direct.IsFound ? "found" : "not_found", actual.GetProperty("status").GetString());
             Assert.Equal(direct.IsFound, actual.GetProperty("is_found").GetBoolean());
             AssertNullableString(direct.Title, actual.GetProperty("title"));
-            AssertNullableString(direct.Content, actual.GetProperty("content"));
+            Assert.False(actual.TryGetProperty("content", out _));
+            Assert.Equal(direct.IsFound ? "wiki_blocks_v1" : null, actual.GetProperty("content_format").GetString());
+            Assert.Equal(
+                direct.Content?.EnumerateRunes().Count() ?? 0,
+                actual.GetProperty("original_characters").GetInt32());
+            var included = actual.GetProperty("blocks").EnumerateArray()
+                .Sum(block => block.GetProperty("text").GetString()!.EnumerateRunes().Count());
+            Assert.Equal(included, actual.GetProperty("included_characters").GetInt32());
+            Assert.InRange(included, 0, WikiEvidenceFormatter.MaxBlockCharacters);
             AssertNullableString(direct.RedirectFromTitle, actual.GetProperty("redirect_from_title"));
             AssertNullableString(direct.RedirectTargetTitle, actual.GetProperty("redirect_target_title"));
             AssertNullableString(direct.RedirectTargetAnchor, actual.GetProperty("redirect_target_anchor"));
@@ -148,8 +158,6 @@ public sealed class WikiToolContractTests
             else
                 Assert.Equal(JsonValueKind.Null, actual.GetProperty("last_modified").ValueKind);
         }
-
-        Assert.Empty((await fixture.Application.Library.GetHistoryAsync(new PageRequest(0, 20))).Items);
     }
 
     private static string[] PropertyNames(JsonElement schema) => schema

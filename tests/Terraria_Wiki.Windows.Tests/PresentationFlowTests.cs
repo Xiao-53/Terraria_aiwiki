@@ -4,6 +4,7 @@ using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Presentation.Chat;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Library;
 using Terraria_Wiki.Windows.Presentation.Markdown;
@@ -178,26 +179,33 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
-    public async Task LibraryPagesHistoryFilteringPagingAndClearUseProvidedApplicationBoundary()
+    public async Task LibraryPagesAndConversationHistoryFilterOpenAndClearIndependently()
     {
         var openedTitle = string.Empty;
+        var openedConversation = string.Empty;
         var pageRequests = new List<PageRequest>();
         var allPages = Enumerable.Range(1, 101)
             .Select(index => new WikiPageListItem(
                 $"页面 {index:000}",
                 new DateTime(2026, 9, 1).AddMinutes(index)))
             .ToList();
-        var history = new List<WikiHistoryItem>
-        {
-            new(1, "今天一", DateTime.Today.AddHours(10), DateTime.Today.ToString("yyyy-MM-dd")),
-            new(2, "今天二", DateTime.Today.AddHours(9), DateTime.Today.ToString("yyyy-MM-dd")),
-            new(3, "昨天", DateTime.Today.AddDays(-1).AddHours(20), DateTime.Today.AddDays(-1).ToString("yyyy-MM-dd")),
-        };
-        using var library = new WikiLibraryViewModel(title =>
+        var store = new MemoryChatConversationStore();
+        var today = Conversation("今天一", 3);
+        var favorite = Conversation("今天二", 2, favorite: true);
+        var yesterday = Conversation("昨天", 1);
+        await store.SaveAsync(today);
+        await store.SaveAsync(favorite);
+        await store.SaveAsync(yesterday);
+        var deleted = new List<Guid>();
+        using var library = new WikiLibraryViewModel(store, title =>
         {
             openedTitle = title;
             return Task.CompletedTask;
-        });
+        }, conversation =>
+        {
+            openedConversation = conversation.Title;
+            return Task.CompletedTask;
+        }, deleted.Add);
         library.Attach(
             (request, _) =>
             {
@@ -211,23 +219,6 @@ public sealed class PresentationFlowTests
                     filtered.Count,
                     request.Offset,
                     request.Limit));
-            },
-            (request, _) =>
-            {
-                var filtered = history
-                    .Where(item => string.IsNullOrWhiteSpace(request.FilterText)
-                                   || item.WikiTitle.Contains(request.FilterText, StringComparison.OrdinalIgnoreCase))
-                    .ToList();
-                return Task.FromResult(new PageSlice<WikiHistoryItem>(
-                    filtered.Skip(request.Offset).Take(request.Limit).ToArray(),
-                    filtered.Count,
-                    request.Offset,
-                    request.Limit));
-            },
-            _ =>
-            {
-                history.Clear();
-                return Task.CompletedTask;
             });
 
         await library.RefreshAsync();
@@ -248,13 +239,14 @@ public sealed class PresentationFlowTests
         Assert.Equal(0, pageRequests[^1].Offset);
 
         library.Query = string.Empty;
-        await library.SelectSectionAsync(WikiLibrarySection.History);
+        await library.SelectSectionAsync(WikiLibrarySection.Conversations);
         Assert.Equal(3, library.History.Count);
-        Assert.True(library.History[0].ShowDateHeader);
-        Assert.False(library.History[1].ShowDateHeader);
-        Assert.True(library.History[2].ShowDateHeader);
         await library.History[0].OpenAsync();
-        Assert.Equal("今天一", openedTitle);
+        Assert.Equal("今天一", openedConversation);
+
+        library.Query = "今天一";
+        await library.RefreshAsync();
+        Assert.Single(library.History);
 
         library.RequestClearHistory();
         Assert.True(library.IsClearConfirmationVisible);
@@ -263,20 +255,63 @@ public sealed class PresentationFlowTests
         library.RequestClearHistory();
         await library.ConfirmClearHistoryAsync();
         Assert.Empty(library.History);
-        Assert.Equal("浏览历史已清空。", library.StatusMessage);
+        Assert.Equal(new[] { today.Id, yesterday.Id }.Order(), deleted.Order());
+        Assert.Equal("未收藏的对话历史已清空。", library.StatusMessage);
+        library.Query = string.Empty;
+        await library.RefreshAsync();
+        Assert.Single(library.History);
+        Assert.Equal("今天二", library.History[0].Title);
+
+        library.History[0].DeleteCommand.Execute(null);
+        Assert.True(library.IsDeleteConfirmationVisible);
+        Assert.Contains("今天二", library.DeleteConfirmationText, StringComparison.Ordinal);
+        await library.ConfirmDeleteAsync();
+        Assert.Empty(library.History);
+        Assert.Contains(favorite.Id, deleted);
+    }
+
+    [Fact]
+    public async Task DeletingTheOpenConversationFromHistoryStartsABlankConversation()
+    {
+        var store = new MemoryChatConversationStore();
+        var conversation = Conversation("当前对话", 1);
+        await store.SaveAsync(conversation);
+        using var shell = new ShellViewModel(store);
+        Assert.True(shell.Chat.LoadConversation(conversation));
+
+        await shell.Library.SelectSectionAsync(WikiLibrarySection.Conversations);
+        shell.Library.History.Single().DeleteCommand.Execute(null);
+        await shell.Library.ConfirmDeleteAsync();
+
+        Assert.True(shell.Chat.IsEmpty);
+        Assert.Null(shell.Chat.CurrentConversationId);
+        Assert.Empty(await store.GetAllAsync());
+    }
+
+    [Fact]
+    public async Task FavoriteRemovalFailureKeepsTheItemAndReportsASafeStatus()
+    {
+        var favorite = Conversation("保留收藏", 1, favorite: true);
+        var store = new FailingSaveConversationStore(favorite);
+        var favorites = new FavoritesViewModel(store, _ => Task.CompletedTask, _ => Task.CompletedTask);
+        await favorites.RefreshAsync();
+
+        await favorites.ChatFavorites.Single().RemoveAsync();
+
+        Assert.Single(favorites.ChatFavorites);
+        Assert.Equal("无法更新对话收藏；现有收藏未被更改。", favorites.StatusMessage);
     }
 
     [Fact]
     public async Task LibraryClearFailureKeepsHistoryAndReportsSafeStatus()
     {
-        var item = new WikiHistoryItem(1, "保留页面", DateTime.Today, DateTime.Today.ToString("yyyy-MM-dd"));
-        using var library = new WikiLibraryViewModel(_ => Task.CompletedTask);
-        library.Attach(
-            (request, _) => Task.FromResult(new PageSlice<WikiPageListItem>([], 0, request.Offset, request.Limit)),
-            (request, _) => Task.FromResult(new PageSlice<WikiHistoryItem>([item], 1, request.Offset, request.Limit)),
-            _ => throw new InvalidOperationException("simulated"));
+        var store = new ThrowingConversationStore(Conversation("保留对话", 1));
+        using var library = new WikiLibraryViewModel(
+            store, _ => Task.CompletedTask, _ => Task.CompletedTask, _ => { });
+        library.Attach((request, _) => Task.FromResult(
+            new PageSlice<WikiPageListItem>([], 0, request.Offset, request.Limit)));
 
-        await library.SelectSectionAsync(WikiLibrarySection.History);
+        await library.SelectSectionAsync(WikiLibrarySection.Conversations);
         library.RequestClearHistory();
         await library.ConfirmClearHistoryAsync();
 
@@ -289,7 +324,8 @@ public sealed class PresentationFlowTests
     {
         var slowRequestStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var slowRequestCancelled = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
-        using var library = new WikiLibraryViewModel(_ => Task.CompletedTask);
+        using var library = new WikiLibraryViewModel(
+            new MemoryChatConversationStore(), _ => Task.CompletedTask, _ => Task.CompletedTask, _ => { });
         library.Attach(
             async (request, token) =>
             {
@@ -312,9 +348,7 @@ public sealed class PresentationFlowTests
                     1,
                     request.Offset,
                     request.Limit);
-            },
-            (request, _) => Task.FromResult(new PageSlice<WikiHistoryItem>([], 0, request.Offset, request.Limit)),
-            _ => Task.CompletedTask);
+            });
 
         library.Query = "慢请求";
         await slowRequestStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
@@ -344,9 +378,7 @@ public sealed class PresentationFlowTests
                 [new WikiPageListItem("资料库页面", new DateTime(2026, 9, 2))],
                 1,
                 request.Offset,
-                request.Limit)),
-            (request, _) => Task.FromResult(new PageSlice<WikiHistoryItem>([], 0, request.Offset, request.Limit)),
-            _ => Task.CompletedTask);
+                request.Limit)));
 
         shell.NavigateLibrary();
         await shell.Library.RefreshAsync();
@@ -372,10 +404,12 @@ public sealed class PresentationFlowTests
     [Fact]
     public async Task AnsweringStateClearsComposerAndTransitionsFromThinkingToCompactTrace()
     {
+        var store = new MemoryChatConversationStore();
         using var chat = new ChatViewModel(
             new SafeMarkdownParser(),
             _ => Task.CompletedTask,
-            () => { });
+            () => { },
+            store);
         var toolStarted = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         var complete = new TaskCompletionSource(TaskCreationOptions.RunContinuationsAsynchronously);
         chat.AttachRuntime(FakeChatRuntime.Ready(async (_, onEvent, token) =>
@@ -388,7 +422,10 @@ public sealed class PresentationFlowTests
                 AiRunEventKind.ToolFinished,
                 Name: "search_wiki",
                 Status: "succeeded"));
-            return Answer("完成答案");
+            return Answer("完成答案") with
+            {
+                ToolTrace = [new AiAgentToolCall { Name = "search_wiki", Status = "succeeded" }],
+            };
         }));
         chat.Question = "需要分析的问题";
 
@@ -401,6 +438,11 @@ public sealed class PresentationFlowTests
         Assert.False(chat.IsStreamingAnswer);
         Assert.False(chat.IsToolTraceVisible);
         Assert.Equal("AI 正在回答…", chat.ComposerPlaceholder);
+        Assert.False(chat.CanStartNewConversation);
+        var activeId = chat.CurrentConversationId;
+        chat.StartNewConversation();
+        Assert.Equal(activeId, chat.CurrentConversationId);
+        Assert.False(chat.IsEmpty);
 
         complete.TrySetResult();
         await run;
@@ -409,10 +451,17 @@ public sealed class PresentationFlowTests
         Assert.True(chat.IsToolTraceVisible);
         Assert.True(chat.IsTerminalStatusVisible);
         Assert.Equal("向 AI 提问…", chat.ComposerPlaceholder);
+
+        chat.Question = "尚未发送的草稿";
+        chat.StartNewConversation();
+        Assert.True(chat.IsEmpty);
+        Assert.Null(chat.CurrentConversationId);
+        Assert.Equal("尚未发送的草稿", chat.Question);
+        Assert.Single(await store.GetAllAsync());
     }
 
     [Fact]
-    public async Task ChatStreamsToolsFinalMarkdownSourcesAndUsageAsIndependentQuestion()
+    public async Task ChatStreamsToolsAndKeepsTranscriptWhileSendingPlainTextHistory()
     {
         var openedWiki = false;
         AiAgentSource? openedSource = null;
@@ -433,7 +482,10 @@ public sealed class PresentationFlowTests
                 ResolvedTitle = "真实页面",
                 Anchor = "章节",
                 LastModified = new DateTimeOffset(2026, 8, 1, 0, 0, 0, TimeSpan.Zero),
-            });
+            }) with
+            {
+                ToolTrace = [new AiAgentToolCall { Name = "search_wiki", Status = "succeeded" }],
+            };
         });
         chat.AttachRuntime(runtime);
         chat.Question = " 第一个问题 ";
@@ -447,7 +499,7 @@ public sealed class PresentationFlowTests
         Assert.Single(chat.Tools);
         Assert.Equal("完成", chat.Tools[0].Status);
         Assert.Single(chat.Sources);
-        Assert.Equal("输入 3 · 输出 2 · 合计 5 Token", chat.UsageText);
+        Assert.Equal("输入 3（缓存未命中/不可用，未缓存 3） · 输出 2 · 合计 5 Token", chat.UsageText);
 
         await chat.Sources[0].OpenAsync();
         Assert.Equal("真实页面", openedSource!.ResolvedTitle);
@@ -457,6 +509,11 @@ public sealed class PresentationFlowTests
         runtime.AnswerHandler = (_, _, _) => Task.FromResult(Answer("第二个答案"));
         chat.Question = "第二个问题";
         await chat.SendAsync();
+        Assert.Equal(2, chat.Turns.Count);
+        Assert.Equal("第一个问题", chat.Turns[0].Question);
+        var prior = Assert.Single(runtime.LastHistory);
+        Assert.Equal("第一个问题", prior.User);
+        Assert.Equal("# 答案", prior.Assistant);
         Assert.Equal("第二个问题", chat.SubmittedQuestion);
         Assert.Equal("第二个答案", chat.AnswerDocument.Source);
         Assert.Empty(chat.Sources);
@@ -466,7 +523,7 @@ public sealed class PresentationFlowTests
     [Fact]
     public async Task CompletedChatCanBeFavoritedAndRestoredWithoutNewAgentRun()
     {
-        var store = new MemoryChatFavoriteStore();
+        var store = new MemoryChatConversationStore();
         using var shell = new ShellViewModel(store);
         var runtime = FakeChatRuntime.Ready((_, _, _) => Task.FromResult(Answer("# 收藏答案")));
         shell.Chat.AttachRuntime(runtime);
@@ -487,7 +544,7 @@ public sealed class PresentationFlowTests
 
         await shell.Chat.ToggleFavoriteAsync();
         Assert.False(shell.Chat.IsFavorite);
-        Assert.Empty(await store.GetAllAsync());
+        Assert.False(Assert.Single(await store.GetAllAsync()).IsFavorite);
     }
 
     [Fact]
@@ -544,7 +601,7 @@ public sealed class PresentationFlowTests
     public async Task UnavailableWikiLibraryNeverReportsAChangedFavoriteState()
     {
         var favorites = new FavoritesViewModel(
-            new MemoryChatFavoriteStore(),
+            new MemoryChatConversationStore(),
             _ => Task.CompletedTask,
             _ => Task.CompletedTask);
 
@@ -710,6 +767,7 @@ public sealed class PresentationFlowTests
             Requests = 1,
             ToolCalls = sources.Length,
             InputTokens = 3,
+            CachedInputTokens = 0,
             OutputTokens = 2,
             TotalTokens = 5,
             CostUsd = null,
@@ -723,6 +781,7 @@ public sealed class PresentationFlowTests
         public ChatAvailability Status { get; private set; } = status;
         public int CancelCalls { get; private set; }
         public int RetryCalls { get; private set; }
+        public IReadOnlyList<AiConversationHistoryTurn> LastHistory { get; private set; } = [];
         public Func<string, Func<AiRunEvent, ValueTask>, CancellationToken, Task<AiAgentAnswer>> AnswerHandler { get; set; } =
             (_, _, _) => Task.FromResult(Answer("默认答案"));
 
@@ -736,8 +795,13 @@ public sealed class PresentationFlowTests
 
         public Task<AiAgentAnswer> AnswerAsync(
             string question,
+            IReadOnlyList<AiConversationHistoryTurn> history,
             Func<AiRunEvent, ValueTask> onEvent,
-            CancellationToken cancellationToken) => AnswerHandler(question, onEvent, cancellationToken);
+            CancellationToken cancellationToken)
+        {
+            LastHistory = history;
+            return AnswerHandler(question, onEvent, cancellationToken);
+        }
 
         public Task CancelAsync()
         {
@@ -759,6 +823,69 @@ public sealed class PresentationFlowTests
             Status = status;
             StatusChanged?.Invoke(this, status);
         }
+    }
+
+    private static ChatConversation Conversation(string title, int hours, bool favorite = false)
+    {
+        var timestamp = new DateTimeOffset(2026, 9, 5, hours, 0, 0, TimeSpan.Zero);
+        return new ChatConversation
+        {
+            Id = Guid.NewGuid(),
+            Title = title,
+            CreatedAt = timestamp,
+            UpdatedAt = timestamp,
+            IsFavorite = favorite,
+            Turns =
+            [
+                new ChatConversationTurn
+                {
+                    Id = Guid.NewGuid(),
+                    Question = title + "的问题",
+                    Markdown = title + "的回答",
+                    Status = ChatConversationTurnStatus.Completed,
+                    CreatedAt = timestamp,
+                    UpdatedAt = timestamp,
+                },
+            ],
+        };
+    }
+
+    private sealed class ThrowingConversationStore(ChatConversation conversation) : IChatConversationStore
+    {
+        public Task<IReadOnlyList<ChatConversation>> GetAllAsync(
+            string? filter = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ChatConversation>>([conversation]);
+
+        public Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ChatConversation?>(conversation.Id == id ? conversation : null);
+
+        public Task SaveAsync(ChatConversation value, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.CompletedTask;
+
+        public Task DeleteUnfavoritedAsync(CancellationToken cancellationToken = default) =>
+            throw new InvalidOperationException("simulated");
+    }
+
+    private sealed class FailingSaveConversationStore(ChatConversation conversation) : IChatConversationStore
+    {
+        public Task<IReadOnlyList<ChatConversation>> GetAllAsync(
+            string? filter = null,
+            CancellationToken cancellationToken = default) =>
+            Task.FromResult<IReadOnlyList<ChatConversation>>([conversation]);
+
+        public Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ChatConversation?>(conversation.Id == id ? conversation : null);
+
+        public Task SaveAsync(ChatConversation value, CancellationToken cancellationToken = default) =>
+            throw new IOException("simulated");
+
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
+
+        public Task DeleteUnfavoritedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }
 

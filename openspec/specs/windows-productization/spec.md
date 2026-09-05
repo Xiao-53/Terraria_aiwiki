@@ -15,7 +15,7 @@
 ## 安装、portable 与数据保留
 
 - Setup 在当前用户范围安装、注册开始菜单入口和卸载项；portable 解压到用户可写目录即可运行，不注册 Installed Apps 或安装快捷方式。两者执行同一应用二进制与 Viewer/Agent/Python payload。
-- Host settings、Chat 收藏、`ai-runtime.json`、Windows Credential Manager secret 与外部 Wiki data root 必须位于安装根之外。安装、覆盖安装式 repair、N→N+1、卸载和重装不得删除或改写这些数据。
+- Host settings、完整 Chat 会话库、保留用于回退的旧 `chat-favorites.json`、`ai-runtime.json`、Windows Credential Manager secret 与外部 Wiki data root 必须位于安装根之外。安装、覆盖安装式 repair、N→N+1、卸载和重装不得删除或改写这些数据。会话库固定在 `%LocalAppData%\Terraria AI Wiki\conversations`。
 - repair 定义为重新运行相同或更高可信版本的完整 Setup；它恢复受控 DLL、Viewer、Agent 与 Python 文件。delta 只能用于重建并校验目标 full package，不能直接作为完整包 apply。
 - 更新、repair 或退出前必须走统一 Runtime 清理：停止回答，关闭所属 Python 进程树、WikiTool loopback 与唯一 Viewer transport。不得扫描或结束不属于本应用的进程。
 
@@ -38,7 +38,7 @@
 ## 验收场景
 
 1. Windows Release build/tests 和 Python frozen checks 通过；self-contained payload 包含唯一 Viewer、Agent、内置 Python 与 notices，不含开发工具、数据库、secret 或缓存。
-2. Setup 完成安装、开始菜单启动、P0 Search/Viewer/assets/bridge/AI fake smoke、同版本 repair、N→N+1、重装和干净卸载；外部 settings/favorites/data/credential canary 保持不变。
+2. Setup 完成安装、开始菜单启动、P0 Search/Viewer/assets/bridge/AI fake smoke、同版本 repair、N→N+1、重装和干净卸载；外部 settings/conversations/legacy-favorites/data/credential canary 保持不变。
 3. Portable 从新目录启动同一 P0 与内置 Runtime，不创建安装注册；更新上下文正确识别 portable，失败不破坏当前 payload。
 4. Credential Manager、严格 v3、WebView2 缺失恢复、诊断轮换/脱敏、更新全部状态与进程清理均有自动化证据。
 5. UI 在 Light/Dark、1280×820 与 900×600 下保持既有五导航、页内异步状态、键盘/焦点和可读布局，不增加新的全局入口。

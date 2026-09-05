@@ -43,6 +43,9 @@ public sealed class AiSidecarClientTests
                     connection.Enqueue(Ready(requestId));
                 else if (type == "answer")
                 {
+                    var history = message.RootElement.GetProperty("history").EnumerateArray().ToArray();
+                    Assert.Equal("上一问", Assert.Single(history).GetProperty("user").GetString());
+                    Assert.Equal("上一答", history[0].GetProperty("assistant").GetString());
                     connection.Enqueue(Event("run_started", requestId));
                     connection.Enqueue(Event("tool_started", requestId, "\"name\":\"search_wiki\""));
                     connection.Enqueue(Event("tool_finished", requestId, "\"name\":\"search_wiki\",\"status\":\"succeeded\""));
@@ -58,11 +61,14 @@ public sealed class AiSidecarClientTests
             await using var client = await StartAsync(factory);
             var events = new List<AiRunEvent>();
 
-            var answer = await client.AnswerAsync("问题", value =>
-            {
-                events.Add(value);
-                return ValueTask.CompletedTask;
-            });
+            var answer = await client.AnswerAsync(
+                "问题",
+                [new AiConversationHistoryTurn("上一问", "上一答")],
+                value =>
+                {
+                    events.Add(value);
+                    return ValueTask.CompletedTask;
+                });
 
             Assert.Equal("证据回答", answer.Markdown);
             Assert.Equal("Page", answer.Sources.Single().ResolvedTitle);
@@ -281,12 +287,12 @@ public sealed class AiSidecarClientTests
     }
 
     private static string Ready(string requestId) =>
-        Event("ready", requestId, "\"runtimeVersion\":\"1\",\"pythonVersion\":\"3.12.3\",\"pydanticAiVersion\":\"2.31.0\"");
+        Event("ready", requestId, "\"runtimeVersion\":\"2\",\"pythonVersion\":\"3.12.3\",\"pydanticAiVersion\":\"2.31.0\"");
 
     private static string Completed(string requestId, string markdown) => JsonSerializer.Serialize(
         new Dictionary<string, object?>
         {
-            ["version"] = 1,
+            ["version"] = 2,
             ["type"] = "completed",
             ["requestId"] = requestId,
             ["answer"] = new Dictionary<string, object?>
@@ -308,6 +314,7 @@ public sealed class AiSidecarClientTests
                     ["requests"] = 3,
                     ["tool_calls"] = 2,
                     ["input_tokens"] = 10,
+                    ["cached_input_tokens"] = 0,
                     ["output_tokens"] = 4,
                     ["total_tokens"] = 14,
                     ["cost_usd"] = null,
@@ -321,7 +328,7 @@ public sealed class AiSidecarClientTests
         });
 
     private static string Event(string type, string requestId, string? fields = null) =>
-        $"{{\"version\":1,\"type\":\"{type}\",\"requestId\":\"{requestId}\"{(fields is null ? string.Empty : "," + fields)}}}";
+        $"{{\"version\":2,\"type\":\"{type}\",\"requestId\":\"{requestId}\"{(fields is null ? string.Empty : "," + fields)}}}";
 
     private sealed class ScriptedConnectionFactory(
         Action<JsonDocument, ScriptedConnection> onWrite) : IAiSidecarConnectionFactory

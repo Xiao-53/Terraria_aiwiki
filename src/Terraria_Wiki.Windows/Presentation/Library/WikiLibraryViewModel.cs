@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using Terraria_Wiki.Application;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 
 namespace Terraria_Wiki.Windows.Presentation.Library;
@@ -7,91 +8,95 @@ namespace Terraria_Wiki.Windows.Presentation.Library;
 internal enum WikiLibrarySection
 {
     Pages,
-    History,
+    Conversations,
 }
 
 internal sealed class WikiPageItemViewModel
 {
-    private readonly Func<string, Task> _open;
-
     public WikiPageItemViewModel(WikiPageListItem item, Func<string, Task> open)
     {
         Item = item;
         _open = open;
-        OpenCommand = new AsyncCommand(_ => OpenAsync());
+        OpenCommand = new AsyncCommand(_ => open(Title));
     }
 
     public WikiPageListItem Item { get; }
     public string Title => Item.Title;
     public string ModifiedText => Item.LastModified.ToString("yyyy-MM-dd HH:mm");
     public AsyncCommand OpenCommand { get; }
-
     internal Task OpenAsync() => _open(Title);
+
+    private readonly Func<string, Task> _open;
 }
 
-internal sealed class WikiHistoryItemViewModel
+internal sealed class ConversationHistoryItemViewModel
 {
-    private readonly Func<string, Task> _open;
-
-    public WikiHistoryItemViewModel(
-        WikiHistoryItem item,
-        bool showDateHeader,
-        string dateLabel,
-        Func<string, Task> open)
+    public ConversationHistoryItemViewModel(
+        ChatConversation conversation,
+        Func<ChatConversation, Task> open,
+        Action<ChatConversation> requestDelete)
     {
-        Item = item;
-        ShowDateHeader = showDateHeader;
-        DateLabel = dateLabel;
+        Conversation = conversation;
         _open = open;
-        OpenCommand = new AsyncCommand(_ => OpenAsync());
+        OpenCommand = new AsyncCommand(_ => open(Conversation));
+        DeleteCommand = new RelayCommand(_ => requestDelete(Conversation));
     }
 
-    public WikiHistoryItem Item { get; }
-    public string Title => Item.WikiTitle;
-    public string TimeText => Item.ReadAt.ToString("HH:mm");
-    public bool ShowDateHeader { get; }
-    public string DateLabel { get; }
+    public ChatConversation Conversation { get; }
+    public string Title => Conversation.Title;
+    public string UpdatedText => Conversation.UpdatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
+    public string Detail => $"{Conversation.Turns.Count} 轮" + (Conversation.IsFavorite ? " · 已收藏" : "");
     public AsyncCommand OpenCommand { get; }
+    public RelayCommand DeleteCommand { get; }
+    internal Task OpenAsync() => _open(Conversation);
 
-    internal Task OpenAsync() => _open(Title);
+    private readonly Func<ChatConversation, Task> _open;
 }
 
 internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
 {
     internal const int PageSize = 100;
     private static readonly TimeSpan FilterDelay = TimeSpan.FromMilliseconds(180);
-
+    private readonly IChatConversationStore _conversationStore;
     private readonly Func<string, Task> _openPage;
+    private readonly Func<ChatConversation, Task> _openConversation;
+    private readonly Action<Guid> _conversationDeleted;
     private Func<PageRequest, CancellationToken, Task<PageSlice<WikiPageListItem>>>? _getPages;
-    private Func<PageRequest, CancellationToken, Task<PageSlice<WikiHistoryItem>>>? _getHistory;
-    private Func<CancellationToken, Task>? _clearHistory;
     private CancellationTokenSource? _loadCancellation;
     private WikiLibrarySection _currentSection = WikiLibrarySection.Pages;
+    private ChatConversation? _pendingDelete;
     private string _query = string.Empty;
     private string _statusMessage = "正在准备 Wiki 资料库…";
-    private bool _isAvailable;
+    private bool _isWikiAvailable;
     private bool _isBusy;
+    private bool _isDeleteConfirmationVisible;
     private bool _isClearConfirmationVisible;
     private int _totalCount;
     private bool _disposed;
 
-    public WikiLibraryViewModel(Func<string, Task> openPage)
+    public WikiLibraryViewModel(
+        IChatConversationStore conversationStore,
+        Func<string, Task> openPage,
+        Func<ChatConversation, Task> openConversation,
+        Action<Guid> conversationDeleted)
     {
-        _openPage = openPage ?? throw new ArgumentNullException(nameof(openPage));
+        _conversationStore = conversationStore;
+        _openPage = openPage;
+        _openConversation = openConversation;
+        _conversationDeleted = conversationDeleted;
         SelectPagesCommand = new AsyncCommand(_ => SelectSectionAsync(WikiLibrarySection.Pages));
-        SelectHistoryCommand = new AsyncCommand(_ => SelectSectionAsync(WikiLibrarySection.History));
-        RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => IsAvailable && !IsBusy);
+        SelectHistoryCommand = new AsyncCommand(_ => SelectSectionAsync(WikiLibrarySection.Conversations));
+        RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => !IsBusy);
         LoadMoreCommand = new AsyncCommand(_ => LoadMoreAsync(), _ => CanLoadMore);
         RequestClearHistoryCommand = new RelayCommand(_ => RequestClearHistory(), _ => CanRequestClearHistory);
-        CancelClearHistoryCommand = new RelayCommand(_ => CancelClearHistory(), _ => IsClearConfirmationVisible);
-        ConfirmClearHistoryCommand = new AsyncCommand(
-            _ => ConfirmClearHistoryAsync(),
-            _ => IsClearConfirmationVisible && IsAvailable && !IsBusy);
+        CancelClearHistoryCommand = new RelayCommand(_ => CancelConfirmations());
+        ConfirmClearHistoryCommand = new AsyncCommand(_ => ConfirmClearHistoryAsync(), _ => IsClearConfirmationVisible && !IsBusy);
+        CancelDeleteCommand = new RelayCommand(_ => CancelConfirmations());
+        ConfirmDeleteCommand = new AsyncCommand(_ => ConfirmDeleteAsync(), _ => IsDeleteConfirmationVisible && !IsBusy);
     }
 
     public ObservableCollection<WikiPageItemViewModel> Pages { get; } = [];
-    public ObservableCollection<WikiHistoryItemViewModel> History { get; } = [];
-
+    public ObservableCollection<ConversationHistoryItemViewModel> History { get; } = [];
     public WikiLibrarySection CurrentSection
     {
         get => _currentSection;
@@ -101,83 +106,48 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
                 return;
             OnPropertyChanged(nameof(IsPagesSelected));
             OnPropertyChanged(nameof(IsHistorySelected));
-            OnPropertyChanged(nameof(IsPagesUnselected));
-            OnPropertyChanged(nameof(IsHistoryUnselected));
             OnPropertyChanged(nameof(IsPagesVisible));
             OnPropertyChanged(nameof(IsHistoryVisible));
             RefreshViewState();
         }
     }
-
     public string Query
     {
         get => _query;
-        set
-        {
-            if (SetProperty(ref _query, value ?? string.Empty))
-                _ = LoadAsync(reset: true, useFilterDelay: true);
-        }
+        set { if (SetProperty(ref _query, value ?? string.Empty)) _ = LoadAsync(true, true); }
     }
-
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
-    }
-
-    public bool IsAvailable
-    {
-        get => _isAvailable;
-        private set
-        {
-            if (SetProperty(ref _isAvailable, value))
-                RefreshViewState();
-        }
-    }
-
+    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
     public bool IsBusy
     {
         get => _isBusy;
-        private set
-        {
-            if (SetProperty(ref _isBusy, value))
-                RefreshViewState();
-        }
+        private set { if (SetProperty(ref _isBusy, value)) RefreshViewState(); }
     }
-
     public bool IsClearConfirmationVisible
     {
         get => _isClearConfirmationVisible;
-        private set
-        {
-            if (!SetProperty(ref _isClearConfirmationVisible, value))
-                return;
-            CancelClearHistoryCommand.NotifyCanExecuteChanged();
-            ConfirmClearHistoryCommand.NotifyCanExecuteChanged();
-        }
+        private set { if (SetProperty(ref _isClearConfirmationVisible, value)) RefreshViewState(); }
     }
-
+    public bool IsDeleteConfirmationVisible
+    {
+        get => _isDeleteConfirmationVisible;
+        private set { if (SetProperty(ref _isDeleteConfirmationVisible, value)) RefreshViewState(); }
+    }
+    public string DeleteConfirmationText => _pendingDelete is null
+        ? string.Empty
+        : $"确定删除对话“{_pendingDelete.Title}”吗？";
     public int TotalCount
     {
         get => _totalCount;
-        private set
-        {
-            if (SetProperty(ref _totalCount, value))
-                RefreshViewState();
-        }
+        private set { if (SetProperty(ref _totalCount, value)) RefreshViewState(); }
     }
-
     public bool IsPagesSelected => CurrentSection == WikiLibrarySection.Pages;
-    public bool IsHistorySelected => CurrentSection == WikiLibrarySection.History;
-    public bool IsPagesUnselected => !IsPagesSelected;
-    public bool IsHistoryUnselected => !IsHistorySelected;
+    public bool IsHistorySelected => CurrentSection == WikiLibrarySection.Conversations;
     public bool IsPagesVisible => IsPagesSelected;
     public bool IsHistoryVisible => IsHistorySelected;
     public bool HasItems => CurrentItemCount > 0;
-    public bool IsEmpty => IsAvailable && !IsBusy && CurrentItemCount == 0;
-    public bool CanLoadMore => IsAvailable && !IsBusy && CurrentItemCount < TotalCount;
-    public bool CanRequestClearHistory => IsHistorySelected && IsAvailable && !IsBusy && History.Count > 0;
-
+    public bool IsEmpty => !IsBusy && CurrentItemCount == 0;
+    public bool CanLoadMore => IsPagesSelected && _isWikiAvailable && !IsBusy && Pages.Count < TotalCount;
+    public bool CanRequestClearHistory => IsHistorySelected && !IsBusy && History.Any(item => !item.Conversation.IsFavorite);
     public AsyncCommand SelectPagesCommand { get; }
     public AsyncCommand SelectHistoryCommand { get; }
     public AsyncCommand RefreshCommand { get; }
@@ -185,40 +155,32 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
     public RelayCommand RequestClearHistoryCommand { get; }
     public RelayCommand CancelClearHistoryCommand { get; }
     public AsyncCommand ConfirmClearHistoryCommand { get; }
-
+    public RelayCommand CancelDeleteCommand { get; }
+    public AsyncCommand ConfirmDeleteCommand { get; }
     private int CurrentItemCount => IsPagesSelected ? Pages.Count : History.Count;
 
     public void Attach(WikiLibraryUseCases library)
     {
         ArgumentNullException.ThrowIfNull(library);
-        Attach(library.GetPagesAsync, library.GetHistoryAsync, library.ClearHistoryAsync);
+        _getPages = library.GetPagesAsync;
+        _isWikiAvailable = true;
+        StatusMessage = "浏览全部页面或本机对话历史。";
     }
 
-    internal void Attach(
-        Func<PageRequest, CancellationToken, Task<PageSlice<WikiPageListItem>>> getPages,
-        Func<PageRequest, CancellationToken, Task<PageSlice<WikiHistoryItem>>> getHistory,
-        Func<CancellationToken, Task> clearHistory)
+    internal void Attach(Func<PageRequest, CancellationToken, Task<PageSlice<WikiPageListItem>>> getPages)
     {
-        _getPages = getPages ?? throw new ArgumentNullException(nameof(getPages));
-        _getHistory = getHistory ?? throw new ArgumentNullException(nameof(getHistory));
-        _clearHistory = clearHistory ?? throw new ArgumentNullException(nameof(clearHistory));
-        IsAvailable = true;
-        StatusMessage = "浏览全部页面或最近阅读记录。";
+        _getPages = getPages;
+        _isWikiAvailable = true;
     }
 
     public void Detach()
     {
         CancelCurrentLoad();
         _getPages = null;
-        _getHistory = null;
-        _clearHistory = null;
-        IsAvailable = false;
-        IsBusy = false;
-        IsClearConfirmationVisible = false;
+        _isWikiAvailable = false;
         Pages.Clear();
-        History.Clear();
-        TotalCount = 0;
-        StatusMessage = "本地 Wiki 数据源不可用。";
+        if (IsPagesSelected)
+            StatusMessage = "本地 Wiki 数据源不可用。";
         RefreshViewState();
     }
 
@@ -227,14 +189,12 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         if (CurrentSection == section)
             return;
         CurrentSection = section;
-        IsClearConfirmationVisible = false;
-        await LoadAsync(reset: true, useFilterDelay: false);
+        CancelConfirmations();
+        await LoadAsync(true, false);
     }
 
-    internal Task RefreshAsync() => LoadAsync(reset: true, useFilterDelay: false);
-
-    internal Task LoadMoreAsync() =>
-        CanLoadMore ? LoadAsync(reset: false, useFilterDelay: false) : Task.CompletedTask;
+    internal Task RefreshAsync() => LoadAsync(true, false);
+    internal Task LoadMoreAsync() => CanLoadMore ? LoadAsync(false, false) : Task.CompletedTask;
 
     internal void RequestClearHistory()
     {
@@ -242,45 +202,29 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
             IsClearConfirmationVisible = true;
     }
 
-    internal void CancelClearHistory() => IsClearConfirmationVisible = false;
+    internal void CancelClearHistory() => CancelConfirmations();
 
     internal async Task ConfirmClearHistoryAsync()
     {
-        var clearHistory = _clearHistory;
-        if (!IsClearConfirmationVisible || clearHistory is null || IsBusy)
+        if (!IsClearConfirmationVisible || IsBusy)
             return;
-
-        CancelCurrentLoad();
-        var current = new CancellationTokenSource();
-        _loadCancellation = current;
         IsBusy = true;
-        var cleared = false;
+        string resultMessage;
         try
         {
-            await clearHistory(current.Token);
-            current.Token.ThrowIfCancellationRequested();
-            cleared = true;
+            var removedIds = (await _conversationStore.GetAllAsync())
+                .Where(item => !item.IsFavorite)
+                .Select(item => item.Id)
+                .ToArray();
+            await _conversationStore.DeleteUnfavoritedAsync();
+            foreach (var id in removedIds)
+                _conversationDeleted(id);
+            resultMessage = "未收藏的对话历史已清空。";
         }
-        catch (OperationCanceledException) when (current.IsCancellationRequested)
-        {
-        }
-        catch
-        {
-            StatusMessage = "无法清空浏览历史；现有记录未被更改。";
-        }
-        finally
-        {
-            if (ReferenceEquals(current, _loadCancellation))
-            {
-                _loadCancellation = null;
-                current.Dispose();
-                IsBusy = false;
-                IsClearConfirmationVisible = false;
-            }
-        }
-
-        if (cleared && await LoadAsync(reset: true, useFilterDelay: false))
-            StatusMessage = "浏览历史已清空。";
+        catch { resultMessage = "无法清空对话历史；现有记录未被更改。"; }
+        finally { IsBusy = false; CancelConfirmations(); }
+        await LoadAsync(true, false);
+        StatusMessage = resultMessage;
     }
 
     public void Dispose()
@@ -293,11 +237,8 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
 
     private async Task<bool> LoadAsync(bool reset, bool useFilterDelay)
     {
-        var getPages = _getPages;
-        var getHistory = _getHistory;
-        if (!IsAvailable || (IsPagesSelected ? getPages is null : getHistory is null))
+        if (IsPagesSelected && (!_isWikiAvailable || _getPages is null))
             return false;
-
         CancelCurrentLoad();
         var current = new CancellationTokenSource();
         _loadCancellation = current;
@@ -306,39 +247,43 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         var query = Query.Trim();
         var offset = reset ? 0 : CurrentItemCount;
         IsBusy = true;
-        StatusMessage = section == WikiLibrarySection.Pages ? "正在载入全部页面…" : "正在载入浏览历史…";
-
+        StatusMessage = section == WikiLibrarySection.Pages ? "正在载入全部页面…" : "正在载入对话历史…";
         try
         {
             if (useFilterDelay)
                 await Task.Delay(FilterDelay, token);
-
             if (section == WikiLibrarySection.Pages)
             {
-                var slice = await getPages!(new PageRequest(offset, PageSize, query), token);
+                var slice = await _getPages!(new PageRequest(offset, PageSize, query), token);
                 token.ThrowIfCancellationRequested();
                 if (!ReferenceEquals(current, _loadCancellation) || CurrentSection != section)
                     return false;
-                ApplyPages(slice, reset);
+                if (reset) Pages.Clear();
+                foreach (var item in slice.Items) Pages.Add(new WikiPageItemViewModel(item, _openPage));
+                TotalCount = slice.TotalCount;
+                StatusMessage = TotalCount == 0 ? EmptyMessage("页面") : $"已显示 {Pages.Count} / {TotalCount} 个页面";
             }
             else
             {
-                var slice = await getHistory!(new PageRequest(offset, PageSize, query), token);
+                var conversations = await _conversationStore.GetAllAsync(query, token);
                 token.ThrowIfCancellationRequested();
                 if (!ReferenceEquals(current, _loadCancellation) || CurrentSection != section)
                     return false;
-                ApplyHistory(slice, reset);
+                History.Clear();
+                foreach (var item in conversations)
+                    History.Add(new ConversationHistoryItemViewModel(item, _openConversation, RequestDelete));
+                TotalCount = History.Count;
+                StatusMessage = TotalCount == 0 ? EmptyMessage("对话") : $"共 {TotalCount} 段本地对话";
             }
             return true;
         }
-        catch (OperationCanceledException) when (token.IsCancellationRequested)
-        {
-            return false;
-        }
+        catch (OperationCanceledException) when (token.IsCancellationRequested) { return false; }
         catch
         {
             if (ReferenceEquals(current, _loadCancellation))
-                StatusMessage = "资料库暂时不可用；本地数据未被修改。";
+                StatusMessage = section == WikiLibrarySection.Pages
+                    ? "资料库暂时不可用；本地数据未被修改。"
+                    : "对话历史暂时不可用；当前内存对话仍可使用。";
             return false;
         }
         finally
@@ -353,60 +298,49 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         }
     }
 
-    private void ApplyPages(PageSlice<WikiPageListItem> slice, bool reset)
+    private void RequestDelete(ChatConversation conversation)
     {
-        if (reset)
-            Pages.Clear();
-        foreach (var item in slice.Items)
-            Pages.Add(new WikiPageItemViewModel(item, _openPage));
-        TotalCount = slice.TotalCount;
-        StatusMessage = TotalCount == 0
-            ? BuildEmptyMessage("页面")
-            : $"已显示 {Pages.Count} / {TotalCount} 个页面";
-        RefreshViewState();
+        _pendingDelete = conversation;
+        OnPropertyChanged(nameof(DeleteConfirmationText));
+        IsDeleteConfirmationVisible = true;
     }
 
-    private void ApplyHistory(PageSlice<WikiHistoryItem> slice, bool reset)
+    internal async Task ConfirmDeleteAsync()
     {
-        if (reset)
-            History.Clear();
-        var previousDateKey = History.LastOrDefault()?.Item.DateKey;
-        foreach (var item in slice.Items)
+        var conversation = _pendingDelete;
+        if (conversation is null || !IsDeleteConfirmationVisible || IsBusy)
+            return;
+        IsBusy = true;
+        string resultMessage;
+        try
         {
-            var showDateHeader = !string.Equals(previousDateKey, item.DateKey, StringComparison.Ordinal);
-            History.Add(new WikiHistoryItemViewModel(
-                item,
-                showDateHeader,
-                FormatDateLabel(item.ReadAt),
-                _openPage));
-            previousDateKey = item.DateKey;
+            await _conversationStore.DeleteAsync(conversation.Id);
+            _conversationDeleted(conversation.Id);
+            resultMessage = "对话已删除。";
         }
-        TotalCount = slice.TotalCount;
-        StatusMessage = TotalCount == 0
-            ? BuildEmptyMessage("历史记录")
-            : $"已显示 {History.Count} / {TotalCount} 条历史记录";
-        RefreshViewState();
+        catch { resultMessage = "无法删除对话；现有记录未被更改。"; }
+        finally { IsBusy = false; CancelConfirmations(); }
+        await LoadAsync(true, false);
+        StatusMessage = resultMessage;
     }
 
-    private string BuildEmptyMessage(string subject) =>
-        Query.Trim().Length == 0 ? $"还没有{subject}。" : $"没有匹配“{Query.Trim()}”的{subject}。";
-
-    private static string FormatDateLabel(DateTime value)
+    private void CancelConfirmations()
     {
-        var date = value.Date;
-        if (date == DateTime.Today)
-            return "今天";
-        if (date == DateTime.Today.AddDays(-1))
-            return "昨天";
-        return date.ToString("yyyy年M月d日");
+        _pendingDelete = null;
+        IsDeleteConfirmationVisible = false;
+        IsClearConfirmationVisible = false;
+        OnPropertyChanged(nameof(DeleteConfirmationText));
     }
+
+    private string EmptyMessage(string subject) => Query.Trim().Length == 0
+        ? $"还没有{subject}。"
+        : $"没有匹配“{Query.Trim()}”的{subject}。";
 
     private void CancelCurrentLoad()
     {
         var current = _loadCancellation;
         _loadCancellation = null;
-        if (current is null)
-            return;
+        if (current is null) return;
         current.Cancel();
         current.Dispose();
     }
@@ -421,5 +355,6 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         LoadMoreCommand.NotifyCanExecuteChanged();
         RequestClearHistoryCommand.NotifyCanExecuteChanged();
         ConfirmClearHistoryCommand.NotifyCanExecuteChanged();
+        ConfirmDeleteCommand.NotifyCanExecuteChanged();
     }
 }

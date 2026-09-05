@@ -94,7 +94,13 @@ _READ_OUTPUT_SCHEMA: dict[str, Any] = {
         "status": {"type": "string"},
         "is_found": {"type": "boolean"},
         "title": {"type": ["string", "null"]},
-        "content": {"type": ["string", "null"]},
+        "content_format": {"type": ["string", "null"]},
+        "blocks": {"type": "array", "items": {"type": "object"}},
+        "included_characters": {"type": "integer"},
+        "original_characters": {"type": "integer"},
+        "is_complete": {"type": "boolean"},
+        "next_cursor": {"type": ["integer", "null"]},
+        "available_sections": {"type": "array", "items": {"type": "string"}},
         "last_modified": {"type": ["string", "null"]},
         "is_redirect": {"type": "boolean"},
         "redirect_from_title": {"type": ["string", "null"]},
@@ -108,7 +114,13 @@ _READ_OUTPUT_SCHEMA: dict[str, Any] = {
         "status",
         "is_found",
         "title",
-        "content",
+        "content_format",
+        "blocks",
+        "included_characters",
+        "original_characters",
+        "is_complete",
+        "next_cursor",
+        "available_sections",
         "last_modified",
         "is_redirect",
         "redirect_from_title",
@@ -139,7 +151,11 @@ def tool_definitions(names: Sequence[str] = ("search_wiki", "read_wiki")) -> lis
             description="Read one local Wiki page.",
             inputSchema={
                 "type": "object",
-                "properties": {"title": {"type": "string"}},
+                "properties": {
+                    "title": {"type": "string"},
+                    "focus": {"type": ["string", "null"]},
+                    "cursor": {"type": ["integer", "null"]},
+                },
                 "required": ["title"],
             },
             outputSchema=_READ_OUTPUT_SCHEMA,
@@ -228,7 +244,7 @@ def read_response(
     *,
     title: str = "月铸镐",
     anchor: str | None = "配方",
-    content: str = "<p>需要12夜银锭、3棱镜核心，在远古操纵机制作。</p>",
+    content: str = "需要12夜银锭、3棱镜核心，在远古操纵机制作。",
     redirect: bool = True,
 ) -> dict[str, Any]:
     requested_page_title = requested_title.partition("#")[0]
@@ -238,7 +254,13 @@ def read_response(
         "status": "found",
         "is_found": True,
         "title": title,
-        "content": content,
+        "content_format": "wiki_blocks_v1",
+        "blocks": [{"section_path": title, "kind": "paragraph", "text": content}],
+        "included_characters": len(content),
+        "original_characters": len(content),
+        "is_complete": True,
+        "next_cursor": None,
+        "available_sections": [],
         "last_modified": "2026-08-24T12:34:56Z",
         "is_redirect": redirect,
         "redirect_from_title": requested_page_title if redirect else None,
@@ -255,7 +277,13 @@ def not_found_response(requested_title: str) -> dict[str, Any]:
         "status": "not_found",
         "is_found": False,
         "title": None,
-        "content": None,
+        "content_format": None,
+        "blocks": [],
+        "included_characters": 0,
+        "original_characters": 0,
+        "is_complete": True,
+        "next_cursor": None,
+        "available_sections": [],
         "last_modified": None,
         "is_redirect": False,
         "redirect_from_title": None,
@@ -280,10 +308,11 @@ class ScriptedModel:
         self._usages = list(usages or [])
         self.calls = 0
         self.infos: list[AgentInfo] = []
+        self.messages: list[list[Any]] = []
         self.model = OfflineFunctionModel(self._respond)
 
     async def _respond(self, messages: list[Any], info: AgentInfo) -> ModelResponse:
-        del messages
+        self.messages.append(messages)
         self.infos.append(info)
         index = self.calls
         self.calls += 1

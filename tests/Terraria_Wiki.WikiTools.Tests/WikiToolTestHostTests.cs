@@ -29,7 +29,10 @@ public sealed class WikiToolTestHostTests
         Assert.Equal("月镐", read.StructuredContent!.Value.GetProperty("requested_title").GetString());
         Assert.Equal("月铸镐", read.StructuredContent!.Value.GetProperty("title").GetString());
         Assert.Equal("配方", read.StructuredContent!.Value.GetProperty("anchor").GetString());
-        Assert.Contains("12夜银锭", read.StructuredContent!.Value.GetProperty("content").GetString());
+        Assert.Contains(
+            "12夜银锭",
+            string.Concat(read.StructuredContent!.Value.GetProperty("blocks").EnumerateArray()
+                .Select(block => block.GetProperty("text").GetString())));
     }
 
     [Fact]

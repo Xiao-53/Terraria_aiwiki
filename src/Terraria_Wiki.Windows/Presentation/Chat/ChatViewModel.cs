@@ -2,7 +2,8 @@ using System.Collections.ObjectModel;
 using System.Text;
 using Avalonia.Threading;
 using Terraria_Wiki.Windows.AI;
-using Terraria_Wiki.Windows.Presentation.Favorites;
+using Terraria_Wiki.Windows.Hosting;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 using Terraria_Wiki.Windows.Presentation.Markdown;
 
@@ -31,12 +32,7 @@ internal sealed class ChatToolProgressViewModel : ObservableObject
 
     public string Name { get; }
     public string DisplayName { get; }
-
-    public string Status
-    {
-        get => _status;
-        set => SetProperty(ref _status, value);
-    }
+    public string Status { get => _status; set => SetProperty(ref _status, value); }
 }
 
 internal sealed class ChatSourceViewModel
@@ -49,14 +45,13 @@ internal sealed class ChatSourceViewModel
         _open = open;
         Title = source.ResolvedTitle;
         Detail = BuildDetail(source);
-        OpenCommand = new AsyncCommand(_ => OpenAsync());
+        OpenCommand = new AsyncCommand(_ => _open(Source));
     }
 
     public AiAgentSource Source { get; }
     public string Title { get; }
     public string Detail { get; }
     public AsyncCommand OpenCommand { get; }
-
     internal Task OpenAsync() => _open(Source);
 
     private static string BuildDetail(AiAgentSource source)
@@ -72,79 +67,56 @@ internal sealed class ChatSourceViewModel
     }
 }
 
-internal sealed class ChatViewModel : ObservableObject, IDisposable
+internal sealed class ChatTurnViewModel : ObservableObject
 {
     private static readonly TimeSpan RenderInterval = TimeSpan.FromMilliseconds(75);
-    private readonly SafeMarkdownParser _markdownParser;
+    private readonly SafeMarkdownParser _parser;
     private readonly Func<AiAgentSource, Task> _openSource;
-    private readonly Action _openWiki;
-    private readonly Func<ChatFavoriteRecord, bool, Task<bool>>? _toggleFavorite;
     private readonly StringBuilder _streamingMarkdown = new();
-    private IChatRuntimeGateway? _runtime;
-    private IDisposable? _runtimeOwner;
-    private CancellationTokenSource? _answerCancellation;
     private CancellationTokenSource? _scheduledRender;
     private DateTimeOffset _lastRender = DateTimeOffset.MinValue;
-    private string _question = string.Empty;
-    private string _submittedQuestion = string.Empty;
-    private string _statusMessage = "AI Runtime 正在启动。";
-    private string _usageText = string.Empty;
-    private SafeMarkdownDocument _answerDocument = SafeMarkdownDocument.Empty;
-    private ChatRunState _runState = ChatRunState.Empty;
-    private ChatAvailabilityState _availability = ChatAvailabilityState.Starting;
-    private Guid? _favoriteId;
-    private bool _isFavorite;
-    private bool _disposed;
+    private SafeMarkdownDocument _answerDocument;
+    private string _statusMessage;
+    private string _usageText;
+    private ChatRunState _runState;
 
-    public ChatViewModel(
-        SafeMarkdownParser markdownParser,
-        Func<AiAgentSource, Task> openSource,
-        Action openWiki,
-        Func<ChatFavoriteRecord, bool, Task<bool>>? toggleFavorite = null)
+    public ChatTurnViewModel(
+        ChatConversationTurn model,
+        SafeMarkdownParser parser,
+        Func<AiAgentSource, Task> openSource)
     {
-        _markdownParser = markdownParser ?? throw new ArgumentNullException(nameof(markdownParser));
-        _openSource = openSource ?? throw new ArgumentNullException(nameof(openSource));
-        _openWiki = openWiki ?? throw new ArgumentNullException(nameof(openWiki));
-        _toggleFavorite = toggleFavorite;
-        SendCommand = new AsyncCommand(_ => SendAsync(), _ => CanSend);
-        StopCommand = new AsyncCommand(_ => StopAsync(), _ => IsAnswering);
-        RetryCommand = new AsyncCommand(_ => RetryAsync(), _ => CanRetry);
-        OpenWikiCommand = new RelayCommand(_ => _openWiki());
-        ToggleFavoriteCommand = new AsyncCommand(_ => ToggleFavoriteAsync(), _ => CanFavorite);
+        Model = model;
+        _parser = parser;
+        _openSource = openSource;
+        _answerDocument = string.IsNullOrEmpty(model.Markdown) ? SafeMarkdownDocument.Empty : parser.Parse(model.Markdown);
+        _streamingMarkdown.Append(model.Markdown);
+        _usageText = model.Usage is null ? string.Empty : ChatViewModel.FormatTokenSpend(model.Usage);
+        _runState = MapRunState(model.Status);
+        _statusMessage = StatusFor(model.Status);
+        foreach (var source in model.Sources)
+            Sources.Add(new ChatSourceViewModel(source, openSource));
+        foreach (var call in model.ToolTrace)
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)));
     }
 
+    public ChatConversationTurn Model { get; private set; }
+    public string Question => Model.Question;
     public ObservableCollection<ChatToolProgressViewModel> Tools { get; } = [];
     public ObservableCollection<ChatSourceViewModel> Sources { get; } = [];
-
-    public string Question
+    public SafeMarkdownDocument AnswerDocument
     {
-        get => _question;
-        set
-        {
-            if (SetProperty(ref _question, value))
-                RefreshCommands();
-        }
-    }
-
-    public string SubmittedQuestion
-    {
-        get => _submittedQuestion;
+        get => _answerDocument;
         private set
         {
-            if (SetProperty(ref _submittedQuestion, value))
-            {
-                OnPropertyChanged(nameof(HasSubmittedQuestion));
-                OnPropertyChanged(nameof(IsEmpty));
-            }
+            if (!SetProperty(ref _answerDocument, value))
+                return;
+            OnPropertyChanged(nameof(HasAnswer));
+            OnPropertyChanged(nameof(IsThinking));
+            OnPropertyChanged(nameof(IsStreamingAnswer));
+            OnPropertyChanged(nameof(ActivityTitle));
         }
     }
-
-    public string StatusMessage
-    {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
-    }
-
+    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
     public string UsageText
     {
         get => _usageText;
@@ -154,23 +126,6 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
                 OnPropertyChanged(nameof(HasUsage));
         }
     }
-
-    public SafeMarkdownDocument AnswerDocument
-    {
-        get => _answerDocument;
-        private set
-        {
-            if (SetProperty(ref _answerDocument, value))
-            {
-                OnPropertyChanged(nameof(HasAnswer));
-                OnPropertyChanged(nameof(IsEmpty));
-                OnPropertyChanged(nameof(IsThinking));
-                OnPropertyChanged(nameof(IsStreamingAnswer));
-                OnPropertyChanged(nameof(ActivityTitle));
-            }
-        }
-    }
-
     public ChatRunState RunState
     {
         get => _runState;
@@ -179,24 +134,13 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _runState, value))
                 return;
             OnPropertyChanged(nameof(IsAnswering));
-            OnPropertyChanged(nameof(IsEmpty));
-            OnPropertyChanged(nameof(IsSendVisible));
-            OnPropertyChanged(nameof(IsStopVisible));
-            OnPropertyChanged(nameof(CanEditQuestion));
-            OnPropertyChanged(nameof(IsQuestionReadOnly));
-            OnPropertyChanged(nameof(CanFavorite));
             OnPropertyChanged(nameof(IsThinking));
             OnPropertyChanged(nameof(IsStreamingAnswer));
             OnPropertyChanged(nameof(IsToolTraceVisible));
             OnPropertyChanged(nameof(IsTerminalStatusVisible));
-            OnPropertyChanged(nameof(ComposerPlaceholder));
-            RefreshCommands();
         }
     }
-
     public bool IsAnswering => RunState == ChatRunState.Answering;
-    public bool IsEmpty => !HasSubmittedQuestion && !HasAnswer;
-    public bool HasSubmittedQuestion => !string.IsNullOrWhiteSpace(SubmittedQuestion);
     public bool HasAnswer => AnswerDocument.Source.Length > 0;
     public bool HasUsage => UsageText.Length > 0;
     public bool HasSources => Sources.Count > 0;
@@ -204,66 +148,252 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     public bool IsThinking => IsAnswering && !HasAnswer;
     public bool IsStreamingAnswer => IsAnswering && HasAnswer;
     public bool IsToolTraceVisible => HasTools && !IsAnswering;
-    public bool IsTerminalStatusVisible => HasSubmittedQuestion && !IsAnswering;
+    public bool IsTerminalStatusVisible => !IsAnswering;
     public string ActivityTitle => HasAnswer
         ? "正在生成回答"
         : HasTools ? "正在查阅本地 Wiki" : "正在分析问题";
+
+    public void ApplyEvent(AiRunEvent value)
+    {
+        switch (value.Kind)
+        {
+            case AiRunEventKind.RunStarted:
+                StatusMessage = "模型已开始分析。";
+                break;
+            case AiRunEventKind.ToolStarted:
+                Tools.Add(new ChatToolProgressViewModel(
+                    value.Name ?? "wiki_tool", DisplayToolName(value.Name), "正在执行…"));
+                RaiseToolProperties();
+                break;
+            case AiRunEventKind.ToolFinished:
+                var item = Tools.LastOrDefault(tool => tool.Name == value.Name && tool.Status == "正在执行…");
+                if (item is null)
+                    Tools.Add(new ChatToolProgressViewModel(
+                        value.Name ?? "wiki_tool", DisplayToolName(value.Name), DisplayToolStatus(value.Status)));
+                else
+                    item.Status = DisplayToolStatus(value.Status);
+                RaiseToolProperties();
+                break;
+            case AiRunEventKind.AnswerDelta:
+                if (!string.IsNullOrEmpty(value.Delta))
+                    AppendMarkdown(value.Delta);
+                break;
+        }
+    }
+
+    public void Complete(AiAgentAnswer answer, DateTimeOffset now)
+    {
+        CancelScheduledRender();
+        _streamingMarkdown.Clear();
+        _streamingMarkdown.Append(answer.Markdown);
+        AnswerDocument = _parser.Parse(answer.Markdown);
+        Sources.Clear();
+        foreach (var source in answer.Sources)
+            Sources.Add(new ChatSourceViewModel(source, _openSource));
+        Tools.Clear();
+        foreach (var call in answer.ToolTrace)
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)));
+        RaiseToolProperties();
+        OnPropertyChanged(nameof(HasSources));
+        UsageText = ChatViewModel.FormatTokenSpend(answer.Usage);
+        var status = answer.Status == "answered"
+            ? ChatConversationTurnStatus.Completed
+            : ChatConversationTurnStatus.InsufficientEvidence;
+        Model = Model with
+        {
+            Markdown = answer.Markdown,
+            Sources = answer.Sources,
+            ToolTrace = answer.ToolTrace,
+            Usage = answer.Usage,
+            Status = status,
+            UpdatedAt = now,
+        };
+        RunState = ChatRunState.Completed;
+        StatusMessage = status == ChatConversationTurnStatus.Completed
+            ? "回答完成。"
+            : "本地证据不足，请尝试更明确的问题。";
+    }
+
+    public void FinishNonSuccess(ChatConversationTurnStatus status, string message, DateTimeOffset now)
+    {
+        CancelScheduledRender();
+        var markdown = _streamingMarkdown.ToString();
+        if (markdown.Length > 0)
+            AnswerDocument = _parser.Parse(markdown);
+        Model = Model with { Markdown = markdown, Status = status, UpdatedAt = now };
+        RunState = status == ChatConversationTurnStatus.Cancelled ? ChatRunState.Cancelled : ChatRunState.Failed;
+        StatusMessage = message;
+    }
+
+    private void AppendMarkdown(string delta)
+    {
+        _streamingMarkdown.Append(delta);
+        var now = DateTimeOffset.UtcNow;
+        var elapsed = now - _lastRender;
+        if (elapsed >= RenderInterval)
+        {
+            RenderStreamingMarkdown(now);
+            return;
+        }
+        if (_scheduledRender is not null)
+            return;
+        _scheduledRender = new CancellationTokenSource();
+        _ = ScheduleRenderAsync(RenderInterval - elapsed, _scheduledRender);
+    }
+
+    private async Task ScheduleRenderAsync(TimeSpan delay, CancellationTokenSource scheduled)
+    {
+        try
+        {
+            await Task.Delay(delay, scheduled.Token);
+            void Render()
+            {
+                if (!ReferenceEquals(scheduled, _scheduledRender))
+                    return;
+                _scheduledRender = null;
+                RenderStreamingMarkdown(DateTimeOffset.UtcNow);
+            }
+            if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
+                Render();
+            else
+                await Dispatcher.UIThread.InvokeAsync(Render);
+        }
+        catch (OperationCanceledException) { }
+        finally { scheduled.Dispose(); }
+    }
+
+    private void RenderStreamingMarkdown(DateTimeOffset now)
+    {
+        _lastRender = now;
+        AnswerDocument = _parser.Parse(_streamingMarkdown.ToString());
+    }
+
+    private void CancelScheduledRender()
+    {
+        _scheduledRender?.Cancel();
+        _scheduledRender = null;
+    }
+
+    private void RaiseToolProperties()
+    {
+        OnPropertyChanged(nameof(HasTools));
+        OnPropertyChanged(nameof(IsToolTraceVisible));
+        OnPropertyChanged(nameof(ActivityTitle));
+    }
+
+    private static ChatRunState MapRunState(ChatConversationTurnStatus status) => status switch
+    {
+        ChatConversationTurnStatus.Pending => ChatRunState.Answering,
+        ChatConversationTurnStatus.Completed or ChatConversationTurnStatus.InsufficientEvidence => ChatRunState.Completed,
+        ChatConversationTurnStatus.Cancelled => ChatRunState.Cancelled,
+        _ => ChatRunState.Failed,
+    };
+
+    private static string StatusFor(ChatConversationTurnStatus status) => status switch
+    {
+        ChatConversationTurnStatus.Completed => "回答完成。",
+        ChatConversationTurnStatus.InsufficientEvidence => "本地证据不足。",
+        ChatConversationTurnStatus.Cancelled => "AI 回答已取消。",
+        ChatConversationTurnStatus.Interrupted => "上次回答中断。",
+        ChatConversationTurnStatus.Failed => "AI 回答失败。",
+        _ => "正在查询本地 Wiki…",
+    };
+
+    private static string DisplayToolName(string? name) => name switch
+    {
+        "search_wiki" => "搜索 Wiki",
+        "read_wiki" => "读取页面",
+        _ => "Wiki 工具",
+    };
+
+    private static string DisplayToolStatus(string? status) => status switch
+    {
+        "succeeded" => "完成",
+        "not_found" => "未找到",
+        _ => "失败",
+    };
+}
+
+internal sealed class ChatViewModel : ObservableObject, IDisposable
+{
+    internal const int HistoryCharacterBudget = 24_000;
+    private const string HistoryTruncationMarker = "\n\n[较早回答已在本地截断]";
+    private readonly SafeMarkdownParser _markdownParser;
+    private readonly Func<AiAgentSource, Task> _openSource;
+    private readonly Action _openWiki;
+    private readonly IChatConversationStore _store;
+    private IChatRuntimeGateway? _runtime;
+    private IDisposable? _runtimeOwner;
+    private CancellationTokenSource? _answerCancellation;
+    private ChatConversation? _conversation;
+    private string _question = string.Empty;
+    private string _statusMessage = "AI Runtime 正在启动。";
+    private ChatAvailabilityState _availability = ChatAvailabilityState.Starting;
+    private bool _disposed;
+
+    public ChatViewModel(
+        SafeMarkdownParser markdownParser,
+        Func<AiAgentSource, Task> openSource,
+        Action openWiki,
+        IChatConversationStore? store = null)
+    {
+        _markdownParser = markdownParser ?? throw new ArgumentNullException(nameof(markdownParser));
+        _openSource = openSource ?? throw new ArgumentNullException(nameof(openSource));
+        _openWiki = openWiki ?? throw new ArgumentNullException(nameof(openWiki));
+        _store = store ?? new MemoryChatConversationStore();
+        SendCommand = new AsyncCommand(_ => SendAsync(), _ => CanSend);
+        StopCommand = new AsyncCommand(_ => StopAsync(), _ => IsAnswering);
+        RetryCommand = new AsyncCommand(_ => RetryAsync(), _ => CanRetry);
+        OpenWikiCommand = new RelayCommand(_ => _openWiki());
+        ToggleFavoriteCommand = new AsyncCommand(_ => ToggleFavoriteAsync(), _ => CanFavorite);
+        NewConversationCommand = new RelayCommand(_ => StartNewConversation(), _ => CanStartNewConversation);
+    }
+
+    public ObservableCollection<ChatTurnViewModel> Turns { get; } = [];
+    public event Action<Guid?>? ConversationChanged;
+    public string Question
+    {
+        get => _question;
+        set { if (SetProperty(ref _question, value)) RefreshCommands(); }
+    }
+    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
+    public bool IsEmpty => Turns.Count == 0;
+    public bool IsAnswering => Turns.LastOrDefault()?.IsAnswering == true;
     public bool IsSendVisible => !IsAnswering;
     public bool IsStopVisible => IsAnswering;
     public string ComposerPlaceholder => IsAnswering ? "AI 正在回答…" : "向 AI 提问…";
     public bool CanEditQuestion => _availability == ChatAvailabilityState.Ready && !IsAnswering;
     public bool IsQuestionReadOnly => !CanEditQuestion;
     public bool CanSend => _availability == ChatAvailabilityState.Ready
-                           && !IsAnswering
-                           && !string.IsNullOrWhiteSpace(Question);
+                           && !IsAnswering && !string.IsNullOrWhiteSpace(Question)
+                           && (_conversation?.Turns.Count ?? 0) < 100;
     public bool CanRetry => !IsAnswering
                             && _availability is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed;
     public bool IsAiUnavailable => _availability is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed;
-    public bool CanFavorite => _toggleFavorite is not null && RunState == ChatRunState.Completed && HasAnswer;
+    public bool IsFavorite => _conversation?.IsFavorite == true;
+    public bool CanFavorite => _conversation is not null && !IsAnswering;
+    public bool CanStartNewConversation => !IsAnswering;
+    public Guid? CurrentConversationId => _conversation?.Id;
 
-    public bool IsFavorite
-    {
-        get => _isFavorite;
-        private set => SetProperty(ref _isFavorite, value);
-    }
+    // Compatibility projections retained for focused behavior tests and automation.
+    public string SubmittedQuestion => Turns.LastOrDefault()?.Question ?? string.Empty;
+    public SafeMarkdownDocument AnswerDocument => Turns.LastOrDefault()?.AnswerDocument ?? SafeMarkdownDocument.Empty;
+    public ObservableCollection<ChatToolProgressViewModel> Tools => Turns.LastOrDefault()?.Tools ?? [];
+    public ObservableCollection<ChatSourceViewModel> Sources => Turns.LastOrDefault()?.Sources ?? [];
+    public string UsageText => Turns.LastOrDefault()?.UsageText ?? string.Empty;
+    public ChatRunState RunState => Turns.LastOrDefault()?.RunState ?? (IsEmpty ? ChatRunState.Empty : ChatRunState.Ready);
+    public bool HasAnswer => Turns.LastOrDefault()?.HasAnswer == true;
+    public bool IsThinking => Turns.LastOrDefault()?.IsThinking == true;
+    public bool IsStreamingAnswer => Turns.LastOrDefault()?.IsStreamingAnswer == true;
+    public bool IsToolTraceVisible => Turns.LastOrDefault()?.IsToolTraceVisible == true;
+    public bool IsTerminalStatusVisible => Turns.LastOrDefault()?.IsTerminalStatusVisible == true;
 
     public AsyncCommand SendCommand { get; }
     public AsyncCommand StopCommand { get; }
     public AsyncCommand RetryCommand { get; }
     public RelayCommand OpenWikiCommand { get; }
     public AsyncCommand ToggleFavoriteCommand { get; }
-
-    public bool LoadFavorite(ChatFavoriteRecord favorite)
-    {
-        ArgumentNullException.ThrowIfNull(favorite);
-        if (IsAnswering)
-            return false;
-
-        _scheduledRender?.Cancel();
-        _scheduledRender = null;
-        _streamingMarkdown.Clear();
-        Question = string.Empty;
-        SubmittedQuestion = favorite.Question;
-        AnswerDocument = _markdownParser.Parse(favorite.Markdown);
-        UsageText = string.Empty;
-        Tools.Clear();
-        Sources.Clear();
-        foreach (var source in favorite.Sources)
-            Sources.Add(new ChatSourceViewModel(source.ToAgentSource(), _openSource));
-        OnPropertyChanged(nameof(HasTools));
-        OnPropertyChanged(nameof(HasSources));
-        _favoriteId = favorite.Id;
-        IsFavorite = true;
-        RunState = ChatRunState.Completed;
-        StatusMessage = "已打开收藏的单轮问答。";
-        return true;
-    }
-
-    public void MarkFavoriteRemoved(Guid id)
-    {
-        if (_favoriteId == id)
-            IsFavorite = false;
-    }
+    public RelayCommand NewConversationCommand { get; }
 
     public void AttachRuntime(IChatRuntimeGateway runtime, IDisposable? owner = null)
     {
@@ -283,7 +413,48 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         _runtimeOwner = null;
         _availability = ChatAvailabilityState.Stopped;
         StatusMessage = "AI Runtime 不可用；离线 Wiki 仍可使用。";
-        RefreshAvailabilityProperties();
+        RefreshProperties();
+    }
+
+    public bool LoadConversation(ChatConversation conversation)
+    {
+        ArgumentNullException.ThrowIfNull(conversation);
+        if (IsAnswering)
+            return false;
+        _conversation = conversation;
+        Turns.Clear();
+        foreach (var turn in conversation.Turns)
+            Turns.Add(new ChatTurnViewModel(turn, _markdownParser, _openSource));
+        Question = string.Empty;
+        StatusMessage = "已打开本地对话。";
+        RaiseConversationProperties();
+        ConversationChanged?.Invoke(conversation.Id);
+        return true;
+    }
+
+    public void StartNewConversation()
+    {
+        if (IsAnswering)
+            return;
+        _conversation = null;
+        Turns.Clear();
+        StatusMessage = "已开始新对话。";
+        RaiseConversationProperties();
+        ConversationChanged?.Invoke(null);
+    }
+
+    public void MarkConversationDeleted(Guid id)
+    {
+        if (_conversation?.Id == id)
+            StartNewConversation();
+    }
+
+    public void SetFavoriteState(Guid id, bool isFavorite)
+    {
+        if (_conversation?.Id != id)
+            return;
+        _conversation = _conversation with { IsFavorite = isFavorite };
+        OnPropertyChanged(nameof(IsFavorite));
     }
 
     public async Task SendAsync()
@@ -293,43 +464,69 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         if (runtime is null || !CanSend || question.Length == 0)
             return;
 
-        ResetForQuestion(question);
+        var now = DateTimeOffset.Now;
+        var conversation = _conversation ?? new ChatConversation
+        {
+            Id = Guid.NewGuid(),
+            Title = ChatConversation.CreateTitle(question),
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        var history = BuildHistory(conversation.Turns);
+        var pending = new ChatConversationTurn
+        {
+            Id = Guid.NewGuid(),
+            Question = question,
+            Status = ChatConversationTurnStatus.Pending,
+            CreatedAt = now,
+            UpdatedAt = now,
+        };
+        conversation = conversation with
+        {
+            UpdatedAt = now,
+            Turns = conversation.Turns.Append(pending).ToArray(),
+        };
+        _conversation = conversation;
+        var turnViewModel = new ChatTurnViewModel(pending, _markdownParser, _openSource);
+        Turns.Add(turnViewModel);
         Question = string.Empty;
+        RaiseConversationProperties();
+        await TrySaveAsync();
+
         _answerCancellation = new CancellationTokenSource();
         var current = _answerCancellation;
-        RunState = ChatRunState.Answering;
         StatusMessage = "正在查询本地 Wiki…";
         try
         {
-            var answer = await runtime.AnswerAsync(question, ApplyRunEventAsync, current.Token);
-            FlushMarkdown(answer.Markdown);
-            Sources.Clear();
-            foreach (var source in answer.Sources)
-                Sources.Add(new ChatSourceViewModel(source, _openSource));
-            OnPropertyChanged(nameof(HasSources));
-            UsageText = FormatTokenSpend(answer.Usage);
-            RunState = ChatRunState.Completed;
-            StatusMessage = answer.Status == "answered"
-                ? "回答完成。"
-                : "本地证据不足，请尝试更明确的问题。";
+            var answer = await runtime.AnswerAsync(
+                question,
+                history,
+                value => ApplyRunEventAsync(turnViewModel, value),
+                current.Token);
+            turnViewModel.Complete(answer, DateTimeOffset.Now);
+            StatusMessage = turnViewModel.StatusMessage;
         }
         catch (OperationCanceledException)
         {
-            FlushScheduledMarkdown();
-            RunState = ChatRunState.Cancelled;
-            StatusMessage = "AI 回答已取消。";
+            turnViewModel.FinishNonSuccess(
+                ChatConversationTurnStatus.Cancelled, "AI 回答已取消。", DateTimeOffset.Now);
+            StatusMessage = turnViewModel.StatusMessage;
         }
         catch (AiRuntimeException exception)
         {
-            FlushScheduledMarkdown();
-            RunState = ChatRunState.Failed;
-            StatusMessage = exception.Message + " 离线 Wiki 仍可使用。";
+            turnViewModel.FinishNonSuccess(
+                ChatConversationTurnStatus.Failed,
+                exception.Message + " 离线 Wiki 仍可使用。",
+                DateTimeOffset.Now);
+            StatusMessage = turnViewModel.StatusMessage;
         }
         catch
         {
-            FlushScheduledMarkdown();
-            RunState = ChatRunState.Failed;
-            StatusMessage = "AI 回答失败；离线 Wiki 仍可使用。";
+            turnViewModel.FinishNonSuccess(
+                ChatConversationTurnStatus.Failed,
+                "AI 回答失败；离线 Wiki 仍可使用。",
+                DateTimeOffset.Now);
+            StatusMessage = turnViewModel.StatusMessage;
         }
         finally
         {
@@ -338,7 +535,10 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
                 _answerCancellation.Dispose();
                 _answerCancellation = null;
             }
-            RefreshCommands();
+            SyncConversationFromTurns();
+            await TrySaveAsync();
+            RaiseConversationProperties();
+            ConversationChanged?.Invoke(_conversation?.Id);
         }
     }
 
@@ -347,15 +547,8 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         if (!IsAnswering)
             return;
         _answerCancellation?.Cancel();
-        try
-        {
-            if (_runtime is not null)
-                await _runtime.CancelAsync();
-        }
-        catch (AiRuntimeException exception)
-        {
-            StatusMessage = exception.Message;
-        }
+        try { if (_runtime is not null) await _runtime.CancelAsync(); }
+        catch (AiRuntimeException exception) { StatusMessage = exception.Message; }
     }
 
     public async Task RetryAsync()
@@ -363,18 +556,37 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         if (_runtime is null || !CanRetry)
             return;
         StatusMessage = "正在重新启动 AI Runtime…";
+        try { await _runtime.RetryAsync(CancellationToken.None); }
+        catch (OperationCanceledException) { StatusMessage = "重试 AI 已取消。"; }
+        catch { StatusMessage = "AI Runtime 启动失败；离线 Wiki 仍可使用。"; }
+    }
+
+    internal async Task ToggleFavoriteAsync()
+    {
+        if (_conversation is null || !CanFavorite)
+            return;
+        _conversation = _conversation with
+        {
+            IsFavorite = !_conversation.IsFavorite,
+            UpdatedAt = DateTimeOffset.Now,
+        };
         try
         {
-            await _runtime.RetryAsync(CancellationToken.None);
+            await _store.SaveAsync(_conversation);
+            StatusMessage = _conversation.IsFavorite ? "已收藏整段对话。" : "已取消收藏；对话仍保留在历史中。";
+            ConversationChanged?.Invoke(_conversation.Id);
         }
-        catch (OperationCanceledException)
+        catch (ChatConversationStoreException exception)
         {
-            StatusMessage = "重试 AI 已取消。";
+            _conversation = _conversation with { IsFavorite = !_conversation.IsFavorite };
+            StatusMessage = exception.Message;
         }
         catch
         {
-            StatusMessage = "AI Runtime 启动失败；离线 Wiki 仍可使用。";
+            _conversation = _conversation with { IsFavorite = !_conversation.IsFavorite };
+            StatusMessage = "无法更新对话收藏。";
         }
+        RaiseConversationProperties();
     }
 
     public void Dispose()
@@ -384,155 +596,83 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         _disposed = true;
         _answerCancellation?.Cancel();
         _answerCancellation?.Dispose();
-        _scheduledRender?.Cancel();
-        _scheduledRender?.Dispose();
         DetachRuntime();
     }
 
-    private void ResetForQuestion(string question)
+    internal static IReadOnlyList<AiConversationHistoryTurn> BuildHistory(
+        IReadOnlyList<ChatConversationTurn> turns)
     {
-        _scheduledRender?.Cancel();
-        _scheduledRender?.Dispose();
-        _scheduledRender = null;
-        _streamingMarkdown.Clear();
-        _lastRender = DateTimeOffset.MinValue;
-        _favoriteId = null;
-        IsFavorite = false;
-        SubmittedQuestion = question;
-        AnswerDocument = SafeMarkdownDocument.Empty;
-        UsageText = string.Empty;
-        Tools.Clear();
-        Sources.Clear();
-        OnPropertyChanged(nameof(HasTools));
-        OnPropertyChanged(nameof(IsToolTraceVisible));
-        OnPropertyChanged(nameof(ActivityTitle));
-        OnPropertyChanged(nameof(HasSources));
+        var selected = new List<AiConversationHistoryTurn>();
+        var remaining = HistoryCharacterBudget;
+        foreach (var turn in turns.Where(turn => turn.IsModelHistoryEligible).Reverse().Take(4))
+        {
+            var required = turn.Question.Length + turn.Markdown.Length;
+            if (required <= remaining)
+            {
+                selected.Add(new AiConversationHistoryTurn(turn.Question, turn.Markdown));
+                remaining -= required;
+                continue;
+            }
+            var answerBudget = remaining - turn.Question.Length;
+            if (answerBudget > HistoryTruncationMarker.Length)
+            {
+                var answer = TruncateAtParagraph(turn.Markdown, answerBudget - HistoryTruncationMarker.Length)
+                             + HistoryTruncationMarker;
+                selected.Add(new AiConversationHistoryTurn(turn.Question, answer));
+            }
+            break;
+        }
+        selected.Reverse();
+        return selected;
     }
 
-    private ValueTask ApplyRunEventAsync(AiRunEvent value)
+    internal static string FormatTokenSpend(AiAgentUsage usage)
+    {
+        var cache = usage.CachedInputTokens > 0
+            ? $"缓存 {usage.CachedInputTokens}，未缓存 {usage.InputTokens - usage.CachedInputTokens}"
+            : $"缓存未命中/不可用，未缓存 {usage.InputTokens}";
+        return $"输入 {usage.InputTokens}（{cache}） · 输出 {usage.OutputTokens} · 合计 {usage.TotalTokens} Token";
+    }
+
+    private static string TruncateAtParagraph(string value, int limit)
+    {
+        if (value.Length <= limit)
+            return value;
+        var candidate = value[..Math.Max(0, limit)];
+        var split = candidate.LastIndexOf("\n\n", StringComparison.Ordinal);
+        return (split > limit / 2 ? candidate[..split] : candidate).TrimEnd();
+    }
+
+    private ValueTask ApplyRunEventAsync(ChatTurnViewModel turn, AiRunEvent value)
     {
         if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
         {
-            ApplyRunEvent(value);
+            turn.ApplyEvent(value);
             return ValueTask.CompletedTask;
         }
-        return DispatchRunEventAsync(value);
+        return DispatchRunEventAsync(turn, value);
     }
 
-    private async ValueTask DispatchRunEventAsync(AiRunEvent value) =>
-        await Dispatcher.UIThread.InvokeAsync(() => ApplyRunEvent(value));
+    private static async ValueTask DispatchRunEventAsync(ChatTurnViewModel turn, AiRunEvent value) =>
+        await Dispatcher.UIThread.InvokeAsync(() => turn.ApplyEvent(value));
 
-    private void ApplyRunEvent(AiRunEvent value)
+    private async Task TrySaveAsync()
     {
-        switch (value.Kind)
-        {
-            case AiRunEventKind.RunStarted:
-                StatusMessage = "模型已开始分析。";
-                break;
-            case AiRunEventKind.ToolStarted:
-                Tools.Add(new ChatToolProgressViewModel(
-                    value.Name ?? "wiki_tool",
-                    DisplayToolName(value.Name),
-                    "正在执行…"));
-                OnPropertyChanged(nameof(HasTools));
-                OnPropertyChanged(nameof(IsToolTraceVisible));
-                OnPropertyChanged(nameof(ActivityTitle));
-                break;
-            case AiRunEventKind.ToolFinished:
-            {
-                var item = Tools.LastOrDefault(tool => tool.Name == value.Name && tool.Status == "正在执行…");
-                if (item is null)
-                {
-                    item = new ChatToolProgressViewModel(
-                        value.Name ?? "wiki_tool",
-                        DisplayToolName(value.Name),
-                        DisplayToolStatus(value.Status));
-                    Tools.Add(item);
-                }
-                else
-                {
-                    item.Status = DisplayToolStatus(value.Status);
-                }
-                OnPropertyChanged(nameof(HasTools));
-                OnPropertyChanged(nameof(IsToolTraceVisible));
-                OnPropertyChanged(nameof(ActivityTitle));
-                break;
-            }
-            case AiRunEventKind.AnswerDelta:
-                AppendMarkdown(value.Delta ?? string.Empty);
-                break;
-        }
-    }
-
-    private void AppendMarkdown(string delta)
-    {
-        if (delta.Length == 0)
+        if (_conversation is null)
             return;
-        _streamingMarkdown.Append(delta);
-        var now = DateTimeOffset.UtcNow;
-        var elapsed = now - _lastRender;
-        if (elapsed >= RenderInterval)
-        {
-            RenderStreamingMarkdown(now);
+        try { await _store.SaveAsync(_conversation); }
+        catch { StatusMessage = "当前对话仍可使用，但本地自动保存暂时不可用。"; }
+    }
+
+    private void SyncConversationFromTurns()
+    {
+        if (_conversation is null)
             return;
-        }
-        if (_scheduledRender is not null)
-            return;
-
-        _scheduledRender = new CancellationTokenSource();
-        var scheduled = _scheduledRender;
-        _ = ScheduleRenderAsync(RenderInterval - elapsed, scheduled);
-    }
-
-    private async Task ScheduleRenderAsync(TimeSpan delay, CancellationTokenSource scheduled)
-    {
-        try
+        _conversation = _conversation with
         {
-            await Task.Delay(delay, scheduled.Token);
-            void Render()
-            {
-                if (ReferenceEquals(scheduled, _scheduledRender))
-                {
-                    _scheduledRender = null;
-                    RenderStreamingMarkdown(DateTimeOffset.UtcNow);
-                }
-            }
-            if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
-                Render();
-            else
-                await Dispatcher.UIThread.InvokeAsync(Render);
-        }
-        catch (OperationCanceledException)
-        {
-        }
-        finally
-        {
-            scheduled.Dispose();
-        }
-    }
-
-    private void RenderStreamingMarkdown(DateTimeOffset now)
-    {
-        _lastRender = now;
-        AnswerDocument = _markdownParser.Parse(_streamingMarkdown.ToString());
-    }
-
-    private void FlushMarkdown(string finalMarkdown)
-    {
-        _scheduledRender?.Cancel();
-        _scheduledRender = null;
-        _streamingMarkdown.Clear();
-        _streamingMarkdown.Append(finalMarkdown);
-        AnswerDocument = _markdownParser.Parse(finalMarkdown);
-        _lastRender = DateTimeOffset.UtcNow;
-    }
-
-    private void FlushScheduledMarkdown()
-    {
-        _scheduledRender?.Cancel();
-        _scheduledRender = null;
-        if (_streamingMarkdown.Length > 0)
-            AnswerDocument = _markdownParser.Parse(_streamingMarkdown.ToString());
+            Turns = Turns.Select(turn => turn.Model).ToArray(),
+            UpdatedAt = Turns.LastOrDefault()?.Model.UpdatedAt ?? _conversation.UpdatedAt,
+        };
     }
 
     private void OnRuntimeStatusChanged(object? sender, ChatAvailability availability)
@@ -548,18 +688,37 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         _availability = availability.State;
         if (!IsAnswering || availability.State is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed)
             StatusMessage = availability.Message;
-        if (RunState == ChatRunState.Empty && availability.State == ChatAvailabilityState.Ready)
-            RunState = ChatRunState.Ready;
-        RefreshAvailabilityProperties();
+        RefreshProperties();
     }
 
-    private void RefreshAvailabilityProperties()
+    private void RaiseConversationProperties()
     {
+        OnPropertyChanged(nameof(IsEmpty));
+        OnPropertyChanged(nameof(IsFavorite));
+        OnPropertyChanged(nameof(CanFavorite));
+        OnPropertyChanged(nameof(CurrentConversationId));
+        OnPropertyChanged(nameof(SubmittedQuestion));
+        OnPropertyChanged(nameof(AnswerDocument));
+        OnPropertyChanged(nameof(Tools));
+        OnPropertyChanged(nameof(Sources));
+        OnPropertyChanged(nameof(UsageText));
+        OnPropertyChanged(nameof(RunState));
+        OnPropertyChanged(nameof(HasAnswer));
+        RefreshProperties();
+    }
+
+    private void RefreshProperties()
+    {
+        OnPropertyChanged(nameof(IsAnswering));
+        OnPropertyChanged(nameof(IsSendVisible));
+        OnPropertyChanged(nameof(IsStopVisible));
+        OnPropertyChanged(nameof(ComposerPlaceholder));
+        OnPropertyChanged(nameof(CanEditQuestion));
+        OnPropertyChanged(nameof(IsQuestionReadOnly));
         OnPropertyChanged(nameof(CanSend));
         OnPropertyChanged(nameof(CanRetry));
         OnPropertyChanged(nameof(IsAiUnavailable));
-        OnPropertyChanged(nameof(CanEditQuestion));
-        OnPropertyChanged(nameof(IsQuestionReadOnly));
+        OnPropertyChanged(nameof(CanStartNewConversation));
         RefreshCommands();
     }
 
@@ -569,39 +728,6 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         StopCommand.NotifyCanExecuteChanged();
         RetryCommand.NotifyCanExecuteChanged();
         ToggleFavoriteCommand.NotifyCanExecuteChanged();
+        NewConversationCommand.NotifyCanExecuteChanged();
     }
-
-    internal async Task ToggleFavoriteAsync()
-    {
-        if (_toggleFavorite is null || !CanFavorite)
-            return;
-        var id = _favoriteId ?? Guid.NewGuid();
-        var record = new ChatFavoriteRecord(
-            id,
-            SubmittedQuestion,
-            AnswerDocument.Source,
-            Sources.Select(source => ChatFavoriteSource.FromAgentSource(source.Source)).ToArray(),
-            DateTimeOffset.Now);
-        var favorite = await _toggleFavorite(record, IsFavorite);
-        _favoriteId = id;
-        IsFavorite = favorite;
-        StatusMessage = favorite ? "已收藏该对话。" : "已取消收藏该对话。";
-    }
-
-    private static string DisplayToolName(string? name) => name switch
-    {
-        "search_wiki" => "搜索 Wiki",
-        "read_wiki" => "读取页面",
-        _ => "Wiki 工具",
-    };
-
-    private static string DisplayToolStatus(string? status) => status switch
-    {
-        "succeeded" => "完成",
-        "not_found" => "未找到",
-        _ => "失败",
-    };
-
-    private static string FormatTokenSpend(AiAgentUsage usage) =>
-        $"输入 {usage.InputTokens} · 输出 {usage.OutputTokens} · 合计 {usage.TotalTokens} Token";
 }

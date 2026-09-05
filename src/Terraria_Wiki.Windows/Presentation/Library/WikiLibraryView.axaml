@@ -7,7 +7,7 @@
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
         <TextBlock Text="Wiki 资料库" Classes="page-title" />
-        <TextBlock Text="浏览本地全部页面与最近阅读记录" Classes="page-subtitle" />
+        <TextBlock Text="浏览本地 Wiki 页面与保存在本机的 AI 对话" Classes="page-subtitle" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
               VerticalAlignment="Center" AutomationProperties.Name="刷新 Wiki 资料库">
@@ -26,22 +26,21 @@
       <Button Content="全部页面" Command="{Binding SelectPagesCommand}"
               Classes="segment-button" Classes.selected="{Binding IsPagesSelected}"
               AutomationProperties.Name="查看全部页面" />
-      <Button Grid.Column="1" Content="历史记录" Command="{Binding SelectHistoryCommand}"
+      <Button Grid.Column="1" Content="对话历史" Command="{Binding SelectHistoryCommand}"
               Classes="segment-button" Classes.selected="{Binding IsHistorySelected}"
-              AutomationProperties.Name="查看历史记录" />
-      <Button Grid.Column="2" Content="清空历史" Command="{Binding RequestClearHistoryCommand}"
+              AutomationProperties.Name="查看对话历史" />
+      <Button Grid.Column="2" Content="清空未收藏" Command="{Binding RequestClearHistoryCommand}"
               Classes="danger-action" IsVisible="{Binding IsHistorySelected}"
-              HorizontalAlignment="Right" AutomationProperties.Name="请求清空浏览历史" />
+              HorizontalAlignment="Right" AutomationProperties.Name="请求清空未收藏对话" />
     </Grid>
 
     <TextBox Grid.Row="2" Text="{Binding Query, Mode=TwoWay}"
-             IsEnabled="{Binding IsAvailable}" PlaceholderText="按标题筛选"
+             PlaceholderText="按标题筛选"
              MaxWidth="820" HorizontalAlignment="Stretch" Margin="0,12,0,0"
              AutomationProperties.Name="筛选 Wiki 资料库" />
 
     <Grid Grid.Row="3" Margin="0,12,0,0">
-      <ScrollViewer VerticalScrollBarVisibility="Auto"
-                    HorizontalScrollBarVisibility="Disabled">
+      <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
         <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="8">
           <ItemsControl ItemsSource="{Binding Pages}" IsVisible="{Binding IsPagesVisible}">
             <ItemsControl.ItemTemplate>
@@ -50,8 +49,7 @@
                         AutomationProperties.Name="打开全部页面条目">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
-                    <TextBlock Grid.Column="1" Text="{Binding ModifiedText}"
-                               Classes="tag" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="{Binding ModifiedText}" Classes="tag" />
                   </Grid>
                 </Button>
               </DataTemplate>
@@ -60,48 +58,66 @@
 
           <ItemsControl ItemsSource="{Binding History}" IsVisible="{Binding IsHistoryVisible}">
             <ItemsControl.ItemTemplate>
-              <DataTemplate x:DataType="library:WikiHistoryItemViewModel">
-                <StackPanel>
-                  <TextBlock Text="{Binding DateLabel}" Classes="eyebrow"
-                             Margin="4,12,0,6" IsVisible="{Binding ShowDateHeader}" />
+              <DataTemplate x:DataType="library:ConversationHistoryItemViewModel">
+                <Grid ColumnDefinitions="*,Auto">
                   <Button Command="{Binding OpenCommand}" Classes="list-row"
-                          AutomationProperties.Name="打开历史页面">
-                    <Grid ColumnDefinitions="72,*" ColumnSpacing="12">
-                      <TextBlock Text="{Binding TimeText}" Classes="tag" VerticalAlignment="Center" />
-                      <TextBlock Grid.Column="1" Text="{Binding Title}"
-                                 FontWeight="SemiBold" TextWrapping="Wrap" />
+                          AutomationProperties.Name="打开历史对话">
+                    <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
+                      <StackPanel Spacing="3">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding Detail}" Classes="muted" />
+                      </StackPanel>
+                      <TextBlock Grid.Column="1" Text="{Binding UpdatedText}" Classes="tag"
+                                 VerticalAlignment="Center" />
                     </Grid>
                   </Button>
-                </StackPanel>
+                  <Button Grid.Column="1" Classes="icon-button" Command="{Binding DeleteCommand}"
+                          Margin="8,0,0,0" ToolTip.Tip="删除对话"
+                          AutomationProperties.Name="删除历史对话">
+                    <TextBlock Text="×" FontSize="20" />
+                  </Button>
+                </Grid>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
 
           <StackPanel IsVisible="{Binding IsEmpty}" Margin="20,54" Spacing="8"
                       HorizontalAlignment="Center">
-            <TextBlock Text="没有可显示的内容" Classes="section-title"
-                       HorizontalAlignment="Center" />
+            <TextBlock Text="没有可显示的内容" Classes="section-title" />
             <TextBlock Text="可调整筛选条件或稍后刷新。" Classes="page-subtitle" />
           </StackPanel>
-
           <Button Content="继续加载" Command="{Binding LoadMoreCommand}"
                   IsVisible="{Binding CanLoadMore}" HorizontalAlignment="Center"
-                  Margin="0,8,0,16" AutomationProperties.Name="继续加载 Wiki 资料库" />
+                  AutomationProperties.Name="继续加载 Wiki 页面" />
         </StackPanel>
       </ScrollViewer>
+
+      <Border Classes="card confirmation-card" Padding="20" VerticalAlignment="Top"
+              IsVisible="{Binding IsDeleteConfirmationVisible}"
+              MaxWidth="520" HorizontalAlignment="Center" Margin="16,18">
+        <StackPanel Spacing="12">
+          <TextBlock Text="{Binding DeleteConfirmationText}" Classes="section-title" TextWrapping="Wrap" />
+          <TextBlock Text="删除后无法从历史或收藏中打开；当前正在查看的同一对话会切换为空白新对话。"
+                     Classes="page-subtitle" TextWrapping="Wrap" />
+          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
+            <Button Content="取消" Command="{Binding CancelDeleteCommand}" Classes="toolbar-action" />
+            <Button Content="确认删除" Command="{Binding ConfirmDeleteCommand}"
+                    Classes="danger-action" AutomationProperties.Name="确认删除对话" />
+          </StackPanel>
+        </StackPanel>
+      </Border>
 
       <Border Classes="card confirmation-card" Padding="20" VerticalAlignment="Top"
               IsVisible="{Binding IsClearConfirmationVisible}"
               MaxWidth="520" HorizontalAlignment="Center" Margin="16,18">
         <StackPanel Spacing="12">
-          <TextBlock Text="确定清空全部浏览历史吗？" Classes="section-title" TextWrapping="Wrap" />
-          <TextBlock Text="此操作只删除历史记录，不会删除 Wiki 页面或收藏。"
+          <TextBlock Text="确定清空全部未收藏对话吗？" Classes="section-title" TextWrapping="Wrap" />
+          <TextBlock Text="已收藏对话会保留；此操作不会删除 Wiki 页面或 Wiki 收藏。"
                      Classes="page-subtitle" TextWrapping="Wrap" />
           <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="取消" Command="{Binding CancelClearHistoryCommand}"
-                    AutomationProperties.Name="取消清空浏览历史" />
+            <Button Content="取消" Command="{Binding CancelClearHistoryCommand}" Classes="toolbar-action" />
             <Button Content="确认清空" Command="{Binding ConfirmClearHistoryCommand}"
-                    Classes="primary-action" AutomationProperties.Name="确认清空浏览历史" />
+                    Classes="danger-action" AutomationProperties.Name="确认清空未收藏对话" />
           </StackPanel>
         </StackPanel>
       </Border>

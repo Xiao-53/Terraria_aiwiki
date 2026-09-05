@@ -41,12 +41,6 @@ public sealed record WikiAssetContent(
     string MimeType,
     DateTime? LastModified);
 
-public sealed record WikiHistoryItem(
-    int Id,
-    string WikiTitle,
-    DateTime ReadAt,
-    string DateKey);
-
 public sealed record WikiFavoriteItem(string WikiTitle, DateTime FavoritedAt);
 
 public sealed record WikiPackageImportResponse(

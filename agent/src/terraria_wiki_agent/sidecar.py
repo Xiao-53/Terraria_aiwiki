@@ -20,6 +20,7 @@ from .models import (
     WikiAgentTextDelta,
     WikiAgentToolFinished,
     WikiAgentToolStarted,
+    WikiConversationTurn,
     WikiToolConnection,
 )
 from .sidecar_protocol import (
@@ -30,6 +31,7 @@ from .sidecar_protocol import (
     CancelCommand,
     InitializeCommand,
     ShutdownCommand,
+    SidecarConversationTurn,
     SidecarProtocolError,
     encode_message,
     parse_command,
@@ -191,7 +193,7 @@ class _SidecarRuntime:
 
         self._active_request_id = command.request_id
         self._active_task = asyncio.create_task(
-            self._run_answer(command.request_id, command.question),
+            self._run_answer(command.request_id, command.question, command.history),
             name=f"sidecar-answer-{command.request_id}",
         )
 
@@ -212,7 +214,12 @@ class _SidecarRuntime:
             except asyncio.CancelledError:
                 pass
 
-    async def _run_answer(self, request_id: str, question: str) -> None:
+    async def _run_answer(
+        self,
+        request_id: str,
+        question: str,
+        history: list[SidecarConversationTurn],
+    ) -> None:
         assert self._agent is not None
         assert self._connection is not None
         deltas: list[str] = []
@@ -234,7 +241,19 @@ class _SidecarRuntime:
                 self._event(request_id, "answer_delta", delta=event.delta)
 
         try:
-            answer = await self._agent.answer(question, self._connection, on_event)
+            conversation = tuple(
+                WikiConversationTurn(
+                    user=turn.user,
+                    assistant=turn.assistant,
+                )
+                for turn in history
+            )
+            answer = await self._agent.answer(
+                question,
+                self._connection,
+                on_event,
+                history=conversation,
+            )
             if "".join(deltas) != answer.markdown:
                 raise SidecarProtocolError("invalid_outgoing_message")
             self._writer.write(

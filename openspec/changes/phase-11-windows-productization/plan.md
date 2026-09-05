@@ -8,6 +8,8 @@
 - 范围：Windows 错误恢复、内置 Python Runtime、Credential Manager、Evergreen WebView2 前置处理、版本化 self-contained 发布、普通 Windows 安装程序、portable zip、GitHub Releases 更新与发布准备、发布诊断和许可告知
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0008-use-github-releases-windows-distribution.md`、`assets/windows/README.md`
 
+> 2026-09-05 后续独立 change `ai-conversation-token-optimization` 已获授权并修改 Agent/Wiki Tool/Sidecar/Chat 契约：当前源码采用 NDJSON v2、`wiki_blocks_v1` 和本地完整会话。下文 NDJSON v1、单轮、Chat 收藏等文字保留为 Phase 11 当时的输入与历史验证，不再代表当前产品契约；现行基线见持续 specs、ADR 0010 与该 change plan。该后续 change 不重建或发布 Phase 11 制品。
+
 ## 背景与当前证据
 
 ### 已确认事实
@@ -19,7 +21,7 @@
 - AI Runtime 当前使用用户指定的外部 `python.exe`。发布物只复制 launcher、Agent 源码、`pyproject.toml` 与 `uv.lock`；设置页仍要求用户选择已安装依赖的 Python 3.12–3.14。
 - `ai-runtime.json` v2 当前明文保存 `pythonExecutable`、`apiKey` 与 provider。Host 只把 key 注入所属 Sidecar 环境且不会写入协议/日志，但磁盘 secret 尚未进入 Windows Credential Manager。
 - stdio NDJSON v1、单活动问题、取消/完成竞态、故障隔离、WikiTools 动态 loopback 与唯一 Viewer 生命周期已有自动化和真实 Windows 证据。本阶段替换 Runtime 部署、secret 来源与外层发布机制，不重写 Agent、协议或 Wiki Tool transport。
-- host settings、Chat 收藏和 Wiki 数据都位于产品二进制之外；Wiki data root 使用宿主管理的默认地址或用户更改的绝对地址，布局仍是 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。安装、升级、修复和卸载不得迁移或删除这些数据。
+- host settings、Chat 会话库（以及回退用旧收藏文件）和 Wiki 数据都位于产品二进制之外；Wiki data root 使用宿主管理的默认地址或用户更改的绝对地址，布局仍是 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`。安装、升级、修复和卸载不得迁移或删除这些数据。
 - 当前应用自己的默认配置目录是 `%LocalAppData%\Terraria AI Wiki`。若普通安装器也使用同一目录作为安装根，修复或卸载可能删除配置，因此安装器内部 ID/安装根必须采用不同且稳定的名称。
 - `assets/windows/README.md` 记录了受控资产来源和许可风险：上游没有独立 `LICENSE`；官方 Terraria Wiki 可许可的文本为 CC BY-NC-SA 4.0，图像和音频应按各文件页面判断；现有快照还含 Calamity Wiki CC BY-NC-SA 3.0 提示和 Viewer.js MIT 标头。
 - 当前 tracked 工作树没有用户已有修改；现存未跟踪治理归档、`.codex/`、历史架构和 `experiments/` 不属于本阶段，不得删除、暂存或夹带。
@@ -70,7 +72,7 @@
 8. 版本、Git tag、commit、公开仓库 URL、installer ID、制品命名、update channel、SHA-256、Runtime provenance、第三方 notices、内容署名、隐私/数据发送说明和发布 runbook 有单一事实源。
 9. 设置页不再要求普通用户选择 Python，也不显示 Python 版本或路径；AI 配置把 provider、凭据、思考强度和数据发送说明合并到唯一“模型服务”区域，并在常规设置既有区域提供版本、检查更新与安全诊断。不得增加第六个全局导航或阻塞式成功弹窗。
 10. 增加有界、隐私安全的本地诊断，只记录版本、稳定事件/错误 code、Runtime/update 状态和耗时；不记录问题/回答、Wiki HTML、API key、bearer、provider 原始响应、完整用户路径或数据库内容。
-11. 干净 Windows 11 x64 环境完成安装、首次启动、无外部 Runtime smoke、内置 Python AI smoke、更新、修复、卸载、重装和 portable 回归；全过程保留 host settings、Chat 收藏、Credential Manager secret 与外部 Wiki data root。
+11. 干净 Windows 11 x64 环境完成安装、首次启动、无外部 Runtime smoke、内置 Python AI smoke、更新、修复、卸载、重装和 portable 回归；全过程保留 host settings、Chat 会话库/旧收藏回退文件、Credential Manager secret 与外部 Wiki data root。
 12. 发布物如实标记为 unsigned，安装说明展示 GitHub tag、SHA-256 校验和与预期 Windows 警告；不能把 hash、GitHub 来源或开源说明描述成代码签名。
 13. 发布说明正确区分项目自有源码、官方 Terraria Wiki 文本、逐文件媒体、Calamity 内容、Viewer.js 和所有 .NET/Python 第三方组件的许可与署名；没有权利证据的资产不得被宣称为已清权。
 14. Windows Release build/tests、Python frozen 回归、P0 Viewer/Search/Read/数据管理 smoke、安装/更新/修复/卸载测试、目标窗口验收和发布审计均有实际证据后，Phase 11 才可完成。
@@ -291,6 +293,7 @@
 - 2026-09-05：完成本轮 AI 设置与空数据库引导修复：`SecretTextBox` 明确复用 Fluent `TextBox` 模板，AI 设置合并为唯一“模型服务”区域且不再显示 Python；数据库地址改为可复制、悬停看全值的 `PathSegmentEllipsis` 单行框，“更改文件夹”降为次级操作；空 Wiki 启动关闭 Reader 并自动进入数据管理，顶部直接显示不自动联网的首次使用说明与“下载页面与资源”主按钮。既有数据变更事件继续刷新查询消费者并重绑唯一 Viewer，未改变 Application/Core、schema、数据包或协议。
 - 2026-09-05：标准 Windows Release 开发输出完成 9 项目 build（0 warning / 0 error），40 项相关回归和 299/299 全量 .NET tests 通过。Windows 11 25H2 build 26200 使用两套隔离 host settings/data roots 实测 Light 1280×820 与 Dark 900×600：两边均创建 `Manager.db` 并直接显示数据管理；宽 Reader 分栏、窄 Reader 覆盖、路径省略、首次使用主按钮和 AI 单区布局无挤压重叠。API Key 实际控件为 300×40 DIP，UI Automation 输入返回 8 个遮蔽字符并立即启用“保存并应用”；非交互会话未能把全局键盘注入送入窗口，因此本轮不把物理键盘/剪贴板手工输入记作已重新实测。未保存密钥、下载数据、请求模型、运行 publish 或重建包。
 - 2026-09-05：用户试用要求发送后清空 Chat 编辑框、设置页临时隐藏 Wiki Reader 并在离开后恢复，以及让已保存 API Key 在输入区具有明确反馈。实现保持已提交问题的内部单轮/收藏状态，设置页只隐藏且不销毁唯一 Viewer，凭据只显示固定八位遮蔽与“已保存”而不读取真实值或泄漏长度。34 项 Chat/Settings/Presentation 定向回归和 300/300 全量 .NET tests 通过；按用户要求只更新未打包 Release 开发输出，不运行 publish/Velopack，由用户继续实际 UI 验收。连续会话与“新对话”按钮涉及现有单轮 Agent/协议/收藏契约，留作用户选择方案后的独立 change，不在本局部修复中放置无后端行为的按钮。
+- 2026-09-05：用户随后授权独立 `ai-conversation-token-optimization` change；它实现结构化 Wiki evidence、NDJSON v2、多轮、本地会话/整段收藏与对话历史，并停止持久 WikiHistory 读写。该变更只更新源码与 Release 开发输出验证，不运行 publish、Velopack、Setup、portable 或上传，因此既有 `0.11.0-local.22` 制品和上述 Phase 11 发布证据不被改写。
 
 ## 发现、偏差与决策
 

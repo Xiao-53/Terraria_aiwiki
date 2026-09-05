@@ -1,4 +1,3 @@
-using System.Globalization;
 using Terraria_Wiki.Application.Internal;
 using Terraria_Wiki.Core.Operations;
 using Terraria_Wiki.Models;
@@ -53,46 +52,6 @@ public sealed class WikiLibraryUseCases
             request.Limit);
     }
 
-    public async Task<PageSlice<WikiHistoryItem>> GetHistoryAsync(
-        PageRequest request,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        _state.RequireActiveBook();
-        var filter = NormalizeFilter(request.FilterText);
-        int total;
-        IReadOnlyList<WikiHistory> rows;
-        if (filter is null)
-        {
-            total = await _state.ContentDatabase.GetCountAsync<WikiHistory>(cancellationToken);
-            rows = await _state.ContentDatabase.GetWikiHistoryPagedAsync(
-                request.Offset,
-                request.Limit,
-                cancellationToken);
-        }
-        else
-        {
-            total = await _state.ContentDatabase.GetFilteredCountAsync<WikiHistory>(
-                "WikiTitle",
-                filter,
-                cancellationToken);
-            rows = await _state.ContentDatabase.GetFilteredPagedAsync<WikiHistory>(
-                "WikiTitle",
-                filter,
-                "ReadAt",
-                request.Offset,
-                request.Limit,
-                isDesc: true,
-                cancellationToken);
-        }
-
-        return new PageSlice<WikiHistoryItem>(
-            rows.Select(row => new WikiHistoryItem(row.Id, row.WikiTitle, row.ReadAt, row.DateKey)).ToArray(),
-            total,
-            request.Offset,
-            request.Limit);
-    }
-
     public async Task<PageSlice<WikiFavoriteItem>> GetFavoritesAsync(
         PageRequest request,
         CancellationToken cancellationToken = default)
@@ -131,38 +90,6 @@ public sealed class WikiLibraryUseCases
             total,
             request.Offset,
             request.Limit);
-    }
-
-    public async Task<bool> RecordVisitAsync(
-        string title,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(title))
-            throw new ArgumentException("A page title is required.", nameof(title));
-        return await RunWriteAsync(async active =>
-        {
-            var pageTitle = GetPageTitle(title);
-            if (string.Equals(pageTitle, active.DefaultPageTitle, StringComparison.Ordinal))
-                return false;
-
-            var now = _state.TimeProvider.GetLocalNow().DateTime;
-            await _state.ContentDatabase.SaveHistoryAsync(new WikiHistory
-            {
-                WikiTitle = pageTitle,
-                ReadAt = now,
-                DateKey = now.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture),
-            }, cancellationToken);
-            return true;
-        }, cancellationToken);
-    }
-
-    public async Task ClearHistoryAsync(CancellationToken cancellationToken = default)
-    {
-        await RunWriteAsync(async _ =>
-        {
-            await _state.ContentDatabase.DeleteItemsAsync<WikiHistory>(cancellationToken);
-            return true;
-        }, cancellationToken);
     }
 
     public async Task<bool> IsFavoriteAsync(
@@ -241,12 +168,6 @@ public sealed class WikiLibraryUseCases
         {
             _state.CoordinationGate.Release();
         }
-    }
-
-    private static string GetPageTitle(string title)
-    {
-        var hash = title.IndexOf('#');
-        return hash < 0 ? title : title[..hash];
     }
 
     private static string? NormalizeFilter(string? filter) =>

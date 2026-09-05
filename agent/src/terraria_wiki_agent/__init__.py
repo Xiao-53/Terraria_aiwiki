@@ -13,6 +13,7 @@ from .models import (
     WikiAgentToolStarted,
     WikiAgentUsage,
     WikiAnswerStatus,
+    WikiConversationTurn,
     WikiToolConnection,
 )
 
@@ -32,5 +33,6 @@ __all__ = [
     "WikiAgentToolStarted",
     "WikiAgentUsage",
     "WikiAnswerStatus",
+    "WikiConversationTurn",
     "WikiToolConnection",
 ]

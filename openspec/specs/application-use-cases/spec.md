@@ -37,15 +37,15 @@
 
 - Search 默认使用当前设置上限，也允许调用方显式指定 `1..100`；七级排序、短词、摘要与高亮语义完全沿用 Core。
 - Read 是纯查询，保留 Redirect、anchor、not found、取消和数据源不可用语义；AI 或其他调用方 Read 不写历史。
-- Presentation 需要记录访问时显式调用 library 的 `RecordVisitAsync`。
+- Application 不再公开或调用持久 Wiki 浏览历史的查询、记录或清空用例。
 - WikiAsset 通过稳定 DTO 返回文件名、字节、MIME type 和修改时间；Viewer transport 仍属于后续 Adapter。
 
 ### Library
 
 - `PageRequest` 使用零基 offset、`1..200` limit、可选 title filter；`PageSlice<T>` 同时返回当前项与过滤后的总数。
-- 页面按标题升序，历史按读取时间降序，收藏按收藏时间降序；日期分组与本地化属于 Presentation。
-- history 使用注入的 `TimeProvider`；同一页面同一日期更新既有记录；活动 Wiki 默认页不写历史；支持清空。
+- 页面按标题升序，收藏按收藏时间降序；日期与本地化属于 Presentation。
 - favorite 查询、添加与移除均通过用例；重复添加或移除保持幂等。
+- Core `WikiHistory` 模型、旧表建表和 schema 容忍只为旧数据库/数据包兼容保留；Application 与 Viewer 不读写旧行，也不主动删除旧表或数据。
 
 ### 数据生命周期与 package
 
@@ -66,7 +66,7 @@
 1. Phase 04 宿主只实现两个 Application ports 并提供 Core HTTP transport，即可组合五组用例。
 2. 设置默认、修复、合法/非法保存和活动 ID 独立更新有确定性测试。
 3. 初始化、切换、占用、取消、初始化/保存失败与回滚均保持一致活动数据源；pause lease 始终释放。
-4. Search/Read/asset 和页面/历史/收藏无需访问数据库 API；排序、分页、过滤、总数及写操作有回归。
+4. Search/Read/asset 和页面/收藏无需访问数据库 API；排序、分页、过滤、总数及写操作有回归，Application 公共表面不再暴露 WikiHistory 用例。
 5. lifecycle 和 package 使用 fake HTTP、临时 SQLite 和合成 package 覆盖成功、错误、取消与 rollback。
 6. 静态与反射检查确认 Application 的依赖和公共 API 不泄漏平台或持久化实现。
 

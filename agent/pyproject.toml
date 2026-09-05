@@ -5,7 +5,7 @@ build-backend = "hatchling.build"
 [project]
 name = "terraria-wiki-agent"
 version = "0.1.0"
-description = "Single-turn AI backend for the local Terraria Wiki"
+description = "Bounded-conversation AI backend for the local Terraria Wiki"
 readme = "README.md"
 requires-python = ">=3.12,<3.15"
 dependencies = [

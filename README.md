@@ -42,6 +42,7 @@ codex
 - Wiki Tool transport 决策：[`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`](./docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md)
 - AI Backend 决策：[`docs/adr/0005-use-pydantic-ai-openai-backend.md`](./docs/adr/0005-use-pydantic-ai-openai-backend.md)
 - Windows AI Runtime 决策：[`docs/adr/0006-use-stdio-python-sidecar.md`](./docs/adr/0006-use-stdio-python-sidecar.md)
+- 本地完整会话与有界模型历史决策：[`docs/adr/0010-use-bounded-local-ai-conversations.md`](./docs/adr/0010-use-bounded-local-ai-conversations.md)
 - 产品源码与参考仓库分离决策：[`docs/adr/0007-separate-product-source-from-reference.md`](./docs/adr/0007-separate-product-source-from-reference.md)
 - Windows GitHub Releases 分发决策：[`docs/adr/0008-use-github-releases-windows-distribution.md`](./docs/adr/0008-use-github-releases-windows-distribution.md)
 - 正在实施的 Phase 11 记录：[`openspec/changes/phase-11-windows-productization/plan.md`](./openspec/changes/phase-11-windows-productization/plan.md)
@@ -52,6 +53,7 @@ codex
 - Windows AI Runtime 能力契约：[`openspec/specs/windows-ai-runtime/spec.md`](./openspec/specs/windows-ai-runtime/spec.md)
 - Windows Presentation 能力契约：[`openspec/specs/windows-presentation/spec.md`](./openspec/specs/windows-presentation/spec.md)
 - Windows UI 规范与新页面工作流：[`.agents/skills/terraria-ui/SKILL.md`](./.agents/skills/terraria-ui/SKILL.md)
+- 正在实施的 AI 会话 Token 优化：[`openspec/changes/ai-conversation-token-optimization/plan.md`](./openspec/changes/ai-conversation-token-optimization/plan.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -123,7 +125,13 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。最新未打包源代码会在首次运行自动创建 Windows 默认数据根，空内容时直接进入数据管理页，并保留更改入口；Chat 发送后清空输入框，设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。Windows Release 构建为 0 warning/0 error，300/300 .NET tests 通过。此前的 `0.11.0-local.22` 安装与 portable 候选不含最新试用修复，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
+**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。
+
+当前独立变更已在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。真实 DeepSeek Token、答案与来源由用户在开发版使用现有 API Key 验收；本仓库验证不得自行产生付费请求。
+
+该源码的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 324/324；Python lint、format、strict mypy 通过，离线 tests 为 82 passed / 4 skipped，另有 1 项真实 C# MCP→Python 非付费跨语言测试通过。未运行 publish、Velopack、Setup、portable、更新包或上传。
+
+此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
 
 ## 工作区结构
 
@@ -152,7 +160,8 @@ terraria_aiwiki/
 │     ├─ 0006-use-stdio-python-sidecar.md # Windows AI Runtime
 │     ├─ 0007-separate-product-source-from-reference.md # 源码所有权
 │     ├─ 0008-use-github-releases-windows-distribution.md # Windows 分发
-│     └─ 0009-use-managed-default-windows-data-root.md # Windows 默认数据根
+│     ├─ 0009-use-managed-default-windows-data-root.md # Windows 默认数据根
+│     └─ 0010-use-bounded-local-ai-conversations.md # 本地会话与模型历史边界
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约

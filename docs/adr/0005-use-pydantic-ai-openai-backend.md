@@ -1,13 +1,13 @@
 # ADR 0005：AI Backend 使用 PydanticAI 与可配置 OpenAI-compatible Provider
 
-- 状态：accepted；通用 provider、跨语言链路与 DeepSeek V4 Flash 三场验收通过；Phase 07 改为可流式纯 Markdown、最终 typed answer 保持
-- 日期：2026-08-24；2026-08-26 由用户决定修订 provider 范围；2026-08-27 由 Phase 07 补充流式输出边界；2026-08-28 由用户决定取消美元费用预算
+- 状态：accepted；通用 provider、跨语言链路与 DeepSeek V4 Flash 三场验收通过；Phase 07 改为可流式纯 Markdown；2026-09-05 增加有界多轮文本上下文与 Wiki evidence
+- 日期：2026-08-24；2026-08-26 由用户决定修订 provider 范围；2026-08-27 由 Phase 07 补充流式输出边界；2026-08-28 由用户决定取消美元费用预算；最后修订 2026-09-05
 - 决策范围：Python Agent 框架、OpenAI-compatible provider 边界、证据来源、运行限位与 Runtime 分离；不包含客户端接线或打包
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`openspec/changes/archive/phase-06-ai-backend/plan.md`
 
 ## 背景
 
-Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Phase 06 需要建立最小单轮 Agent，让模型能搜索、读取多个本地页面并返回可验证来源，同时保持 Python 业务逻辑与 Windows/Android Runtime、Presentation 和 Wiki 数据实现分离。
+Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Phase 06 建立了最小 Agent，让模型能搜索、读取多个本地页面并返回可验证来源，同时保持 Python 业务逻辑与 Windows/Android Runtime、Presentation 和 Wiki 数据实现分离。后续真实请求显示完整 Wiki HTML 和原始 PydanticAI 消息图会造成不可接受的输入 Token，因此当前决策补充有界 evidence 与纯文本多轮边界。
 
 原方案固定 OpenAI Responses 与单一模型。2026-08-26 用户明确要求不依赖单一供应商，而是允许 Runtime 配置采用 OpenAI 线协议的服务，并指定 DeepSeek V4 Flash 作为首个真实验收 endpoint。候选包括自行维护 Responses/Chat 两套 tool-calling 循环、在 PydanticAI 内使用固定供应商 provider，以及复用 PydanticAI 的两种 OpenAI-compatible model classes 并提供保守兼容 profile。
 
@@ -18,8 +18,8 @@ Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Pha
 3. 远程 endpoint 只允许 HTTPS；HTTP 只允许字面 loopback 地址。API key 固定只从 `TERRARIA_AI_API_KEY` 环境变量读取，不进入 settings、URL、日志、错误或仓库。
 4. 通用 provider 使用保守兼容 profile：不声明 strict tool schema 或 required tool choice，合并系统消息并使用 `system` 角色，不假设 Chat endpoint 支持 `max_completion_tokens`。可选 reasoning effort 只在显式配置时发送。
 5. `store`、`truncation`、并行工具、reasoning、token 预计算和定价不是 OpenAI-compatible 服务的统一保证。宿主继续强制请求、成功工具调用、输出/累计 token 和时间限位以避免循环、协议超长和挂起；不再设置美元 cost limit，也不因 provider 返回的费用估算中止回答。
-6. Agent 仅提供异步单轮 typed answer。为支持 Phase 07 正文流式，模型最终输出是纯 Markdown；宿主从成功 Read structured content 派生并去重实际来源，并根据成功 Read/固定不足证据正文归一 status。模型不能声明 status 或扩充来源。旧 `answer(question, connection)` 调用保持兼容，可选异步事件回调不改变最终 typed answer。
-7. 事实工作流固定为先 Search、再 Read，可连续查询多个页面。Wiki HTML 全部视为不可信资料；无充分本地证据时返回不足，不允许使用模型记忆补全。
+6. Agent 提供异步 typed answer，并可选接收最多最近 4 轮的 user/assistant 纯文本历史。每次运行只为当前问题创建新的 PydanticAI 消息图；不得重放旧工具调用、工具结果、HTML、thinking 或 provider 原始消息。为支持 Phase 07 正文流式，模型最终输出是纯 Markdown；宿主从当前运行成功 Read 的 structured content 派生并去重实际来源，并根据成功 Read/固定不足证据正文归一 status。模型不能声明 status 或扩充来源。旧 `answer(question, connection)` 调用保持兼容，可选异步事件回调不改变最终 typed answer。
+7. 事实工作流固定为先 Search、再 Read，可连续查询多个页面。`read_wiki` 结果是章节化、有界、支持 focus/anchor/cursor 的 `wiki_blocks_v1` 纯文本证据；证据不足时允许继续读取其他块或页面。工具调用上限继续为 8，优化不得以减少必要的 Search/Read 为目标。Wiki evidence 全部视为不可信资料；无充分本地证据时返回不足，不允许使用模型记忆补全。
 8. Python Agent 是平台无关业务包。Windows/Android Runtime 分别负责 provider 配置、进程、凭据交接、生命周期与打包；Phase 06 的 C# Host 只用于真实跨语言测试，禁止生产引用。
 9. DeepSeek `deepseek-v4-flash` Responses 是首个真实 endpoint，只证明该具体组合；其他兼容服务必须分别通过工具调用、typed output、错误和用量验收后才能宣称可用。
 
@@ -43,7 +43,8 @@ Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Pha
 - “OpenAI-compatible”不是完整行为标准；工具 schema、typed output、reasoning、并行调用、错误、上下文和 usage 仍可能不兼容，必须逐 endpoint 实测。
 - Agent 不再提供美元费用预算；用户需要通过供应商余额、额度或账单限额控制真实花费。provider 可提供的费用估算仍保留在 typed usage/协议中用于兼容与诊断，但 Presentation 默认只显示 token 花费。
 - 兼容 endpoint 可能忽略 `store`、`truncation` 或并行设置；发送本地 Wiki 页面到远程服务前必须有明确的供应商数据处理披露。
-- 完整 Wiki HTML 可能超过某些服务上下文；当前只提供明确 context-limit，不在缺乏质量证据时引入转换器。
+- 模型上下文不再接收完整 Wiki HTML；结构化证据转换必须持续用代表性表格、infobox、长页、focus 和 continuation fixture 验证，避免以 Token 优化损害答案事实质量。
+- usage 同时保留 input、cached input、output、total 和可选费用；cached input 缺失按 0 归一，不得误报命中。
 - loopback MCP 是 Windows 首个 Wiki Tool transport 的既有选择，不自动成为 Android transport。
 
 ## 被否决方案
@@ -52,4 +53,4 @@ Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Pha
 - 仅提供自定义 `base_url` 而继续套用 OpenAI 默认 profile：表面通用，实际可能发送兼容服务不支持的 strict schema、required tool choice 或参数；DeepSeek 首轮即以 HTTP 错误证明此风险。
 - 自行编写 Responses 与 Chat tool-calling 循环：可完全控制协议差异，但会复制 MCP discovery/schema、typed output、重试、usage、测试替身和错误兼容，当前边界更大。
 - 在 .NET 内实现首个 Agent：会偏离已确认 Python Agent 分层，并把 provider 业务与平台 Runtime 提前耦合。
-- 预先清洗、摘要或向量化整个 Wiki：复制数据、改变事实边界并扩大 Phase；Reader 转换必须以后续真实 context/质量证据单独决策。
+- 预先摘要或向量化整个 Wiki：复制数据、改变事实边界并扩大范围；当前只在现有 Wiki Tool Adapter 中按请求转换原始页面，不建立第二份索引或数据库。

@@ -59,9 +59,9 @@ public sealed class PresentationBoundaryTests
         Assert.Matches("Content=\"下载页面与资源\"[\\s\\S]*?Classes=\"primary-action\"", management);
         Assert.Contains("AutomationProperties.Name=\"首次使用数据引导\"", management, StringComparison.Ordinal);
         Assert.Contains("查看全部页面", library, StringComparison.Ordinal);
-        Assert.Contains("查看历史记录", library, StringComparison.Ordinal);
-        Assert.Contains("确认清空浏览历史", library, StringComparison.Ordinal);
-        Assert.Contains("继续加载 Wiki 资料库", library, StringComparison.Ordinal);
+        Assert.Contains("查看对话历史", library, StringComparison.Ordinal);
+        Assert.Contains("确认清空未收藏对话", library, StringComparison.Ordinal);
+        Assert.Contains("继续加载 Wiki 页面", library, StringComparison.Ordinal);
         Assert.Contains("选择并检查 Wiki 数据包", management, StringComparison.Ordinal);
         Assert.Contains("确认危险数据操作", management, StringComparison.Ordinal);
         Assert.Contains("保存应用设置", settings, StringComparison.Ordinal);
@@ -111,7 +111,8 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("AutomationProperties.Name=\"本地 Wiki Reader\"", reader, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"收藏当前 Wiki 页面\"", reader, StringComparison.Ordinal);
         Assert.Contains("FocusAdorner=\"{x:Null}\"", chat, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.Name=\"收藏当前对话\"", chat, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"收藏整段对话\"", chat, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"新对话\"", chat, StringComparison.Ordinal);
         Assert.Contains("Text=\"Token 花费\"", chat, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.Name=\"AI Token 花费\"", chat, StringComparison.Ordinal);
         Assert.DoesNotContain("Text=\"Usage\"", chat, StringComparison.Ordinal);
@@ -123,9 +124,9 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("Classes=\"source-row\"", chat, StringComparison.Ordinal);
         Assert.Contains("HorizontalAlignment=\"Stretch\" HorizontalContentAlignment=\"Stretch\"", chat, StringComparison.Ordinal);
         Assert.Contains("Classes=\"answer-meta-card\"", chat, StringComparison.Ordinal);
-        Assert.Contains("Classes=\"answer-status\"", chat, StringComparison.Ordinal);
-        Assert.Contains("Grid.Column=\"1\" Classes=\"icon-button\"", chat, StringComparison.Ordinal);
-        Assert.Contains("<ScrollViewer Grid.Column=\"0\"", chat, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.Name=\"本轮 AI 状态\"", chat, StringComparison.Ordinal);
+        Assert.Contains("Classes=\"icon-button\"", chat, StringComparison.Ordinal);
+        Assert.Contains("<ScrollViewer VerticalScrollBarVisibility=\"Auto\"", chat, StringComparison.Ordinal);
         Assert.Contains("Width=\"12\" Height=\"12\" CornerRadius=\"2\"", chat, StringComparison.Ordinal);
         Assert.Contains("DensityStyle=\"Compact\"", app, StringComparison.Ordinal);
         Assert.Contains("HorizontalContentAlignment\" Value=\"Center\"", controls, StringComparison.Ordinal);

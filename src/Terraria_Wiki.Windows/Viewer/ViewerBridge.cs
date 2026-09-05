@@ -118,7 +118,6 @@ internal sealed class ViewerBridge
                 if (!read.IsFound || string.IsNullOrWhiteSpace(read.Title) || read.Content is null)
                     return Error(envelope.Id, "page-not-found", $"Wiki page '{data}' was not found.");
 
-                await _application.Library.RecordVisitAsync(read.Title, cancellationToken).ConfigureAwait(false);
                 var page = new ViewerPage(
                     read.Title,
                     read.Content,

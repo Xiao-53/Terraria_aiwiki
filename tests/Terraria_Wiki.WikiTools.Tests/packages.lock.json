@@ -247,6 +247,7 @@
       "terraria_wiki.wikitools": {
         "type": "Project",
         "dependencies": {
+          "HtmlAgilityPack": "[1.12.4, )",
           "ModelContextProtocol.AspNetCore": "[2.2.0, )",
           "Terraria_Wiki.Application": "[1.0.0, )"
         }

@@ -44,6 +44,7 @@ class WikiAgentUsage(_PublicModel):
     requests: int = Field(ge=0)
     tool_calls: int = Field(ge=0)
     input_tokens: int = Field(ge=0)
+    cached_input_tokens: int = Field(default=0, ge=0)
     output_tokens: int = Field(ge=0)
     total_tokens: int = Field(ge=0)
     cost_usd: Decimal | None = Field(default=None, ge=0)
@@ -55,6 +56,11 @@ class WikiAgentAnswer(_PublicModel):
     sources: tuple[WikiAgentSource, ...] = ()
     usage: WikiAgentUsage
     tool_trace: tuple[WikiAgentToolCall, ...] = ()
+
+
+class WikiConversationTurn(_PublicModel):
+    user: str = Field(min_length=1, max_length=32_768)
+    assistant: str = Field(min_length=1, max_length=32_768)
 
 
 class WikiAgentRunStarted(_PublicModel):

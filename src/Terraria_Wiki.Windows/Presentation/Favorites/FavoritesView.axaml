@@ -7,7 +7,7 @@
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
         <TextBlock Text="收藏" Classes="page-title" />
-        <TextBlock Text="保存的 AI 单轮问答与 Wiki 页面" Classes="page-subtitle" />
+        <TextBlock Text="保存的完整 AI 对话与 Wiki 页面" Classes="page-subtitle" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
               VerticalAlignment="Center" AutomationProperties.Name="刷新收藏">
@@ -52,7 +52,7 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Text="收藏一条完成的 AI 回答后会显示在这里。"
+          <TextBlock Text="在 AI 问答页收藏整段对话后会显示在这里。"
                      Classes="muted" Margin="0,8" IsVisible="{Binding !HasChatFavorites}" />
         </StackPanel>
 

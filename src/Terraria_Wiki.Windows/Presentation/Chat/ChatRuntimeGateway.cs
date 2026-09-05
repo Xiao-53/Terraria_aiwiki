@@ -24,6 +24,7 @@ internal interface IChatRuntimeGateway
     ChatAvailability Status { get; }
     Task<AiAgentAnswer> AnswerAsync(
         string question,
+        IReadOnlyList<AiConversationHistoryTurn> history,
         Func<AiRunEvent, ValueTask> onEvent,
         CancellationToken cancellationToken);
     Task CancelAsync();
@@ -46,13 +47,14 @@ internal sealed class WindowsChatRuntimeGateway : IChatRuntimeGateway, IDisposab
 
     public Task<AiAgentAnswer> AnswerAsync(
         string question,
+        IReadOnlyList<AiConversationHistoryTurn> history,
         Func<AiRunEvent, ValueTask> onEvent,
         CancellationToken cancellationToken)
     {
         var ai = _runtime.Ai;
         if (ai is null)
             throw new AiRuntimeException(_runtime.AiStatus.ErrorCode ?? "runtime_crashed");
-        return ai.AnswerAsync(question, onEvent, cancellationToken);
+        return ai.AnswerAsync(question, history, onEvent, cancellationToken);
     }
 
     public Task CancelAsync() => _runtime.Ai?.CancelAsync() ?? Task.CompletedTask;

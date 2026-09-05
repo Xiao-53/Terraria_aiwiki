@@ -6,8 +6,8 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, ConfigDict, Field, TypeAdapter, ValidationError, field_validator
 
-PROTOCOL_VERSION = 1
-RUNTIME_VERSION = "1"
+PROTOCOL_VERSION = 2
+RUNTIME_VERSION = "2"
 MAX_LINE_BYTES = 256 * 1024
 
 _REQUEST_ID = re.compile(r"^[A-Za-z0-9._:-]{1,128}$")
@@ -32,7 +32,7 @@ class SidecarWikiToolConnection(_ProtocolModel):
 
 
 class _Command(_ProtocolModel):
-    version: Literal[1]
+    version: Literal[2]
     request_id: str = Field(alias="requestId")
 
     @field_validator("request_id")
@@ -49,9 +49,15 @@ class InitializeCommand(_Command):
     wiki_tools: SidecarWikiToolConnection = Field(alias="wikiTools")
 
 
+class SidecarConversationTurn(_ProtocolModel):
+    user: str = Field(min_length=1, max_length=32_768)
+    assistant: str = Field(min_length=1, max_length=32_768)
+
+
 class AnswerCommand(_Command):
     type: Literal["answer"]
     question: str = Field(min_length=1, max_length=32_768)
+    history: list[SidecarConversationTurn] = Field(max_length=4)
 
 
 class CancelCommand(_Command):

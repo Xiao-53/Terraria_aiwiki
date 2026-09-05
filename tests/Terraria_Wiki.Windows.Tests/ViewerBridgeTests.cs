@@ -15,7 +15,7 @@ public sealed class ViewerBridgeTests
     private static readonly Uri Origin = new("http://127.0.0.1:32145/");
 
     [Fact]
-    public async Task ReadRedirectAnchorVisitHistoryAndBackUseApplicationBoundary()
+    public async Task ReadRedirectAnchorAndInMemoryBackUseApplicationBoundary()
     {
         await using var fixture = await BridgeApplicationFixture.CreateAsync();
         var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
@@ -29,10 +29,8 @@ public sealed class ViewerBridgeTests
         var pagePayload = JsonDocument.Parse(ResponseData(page));
         Assert.Equal("Target", pagePayload.RootElement.GetProperty("title").GetString());
         Assert.Contains("/src/image.png", pagePayload.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
-
-        var visits = await fixture.Application.Library.GetHistoryAsync(new PageRequest(0, 20));
-        Assert.Single(visits.Items);
-        Assert.Equal("Target", visits.Items[0].WikiTitle);
+        var legacyHistory = Assert.Single(await fixture.ReadLegacyHistoryAsync());
+        Assert.Equal("Legacy page", legacyHistory.WikiTitle);
 
         await SendAsync(bridge, "history", "SaveToTabHistory", "{\"title\":\"Home\",\"position\":42}");
         var back = await SendAsync(bridge, "back", "WikiBackAsync", "");
@@ -172,16 +170,30 @@ public sealed class ViewerBridgeTests
 
 internal sealed class BridgeApplicationFixture : IAsyncDisposable
 {
-    private BridgeApplicationFixture(TestDirectory directory, WikiApplication application, TestExternalUriLauncher externalUris)
+    private BridgeApplicationFixture(
+        TestDirectory directory,
+        WikiApplication application,
+        TestExternalUriLauncher externalUris,
+        string contentDatabasePath)
     {
         Directory = directory;
         Application = application;
         ExternalUris = externalUris;
+        ContentDatabasePath = contentDatabasePath;
     }
 
     public TestDirectory Directory { get; }
     public WikiApplication Application { get; }
     public TestExternalUriLauncher ExternalUris { get; }
+    public string ContentDatabasePath { get; }
+
+    public async Task<IReadOnlyList<WikiHistory>> ReadLegacyHistoryAsync()
+    {
+        var content = new ContentDbService(ContentDatabasePath);
+        await content.Init();
+        try { return await content.GetWikiHistoryPagedAsync(0, 20); }
+        finally { await content.CloseConnection(); }
+    }
 
     public static async Task<BridgeApplicationFixture> CreateAsync()
     {
@@ -202,13 +214,20 @@ internal sealed class BridgeApplicationFixture : IAsyncDisposable
         await content.SaveItemAsync(new WikiRedirect { FromName = "Alias", ToTarget = "Target#Section" });
         await content.SaveItemAsync(new WikiAsset { FileName = "image.png", Data = [1, 2, 3, 4], MimeType = "image/png" });
         await content.SaveItemAsync(new WikiAsset { FileName = "sound.ogg", Data = "OggS"u8.ToArray(), MimeType = "audio/ogg" });
+        await content.SaveHistoryAsync(new WikiHistory
+        {
+            WikiTitle = "Legacy page",
+            ReadAt = new DateTime(2026, 8, 1, 0, 0, 0, DateTimeKind.Utc),
+            DateKey = "2026-08-01",
+        });
         await content.CloseConnection();
         await manager.CloseConnection();
 
         var settings = new HostSettingsStore(System.IO.Path.Combine(temp.Path, "settings", "host-settings.json"));
         var application = new WikiApplication(temp.Path, settings, new NoopConsumerCoordinator(), new RejectingWikiTransport());
         await application.ActiveWiki.InitializeAsync();
-        return new BridgeApplicationFixture(temp, application, new TestExternalUriLauncher());
+        return new BridgeApplicationFixture(
+            temp, application, new TestExternalUriLauncher(), paths.ContentDatabasePath);
     }
 
     public async ValueTask DisposeAsync()

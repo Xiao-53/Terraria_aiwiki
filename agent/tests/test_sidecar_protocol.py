@@ -27,7 +27,7 @@ from terraria_wiki_agent.sidecar_protocol import (
 from .fakes import ScriptedModel, fake_toolset_factory, read_response, search_response
 
 _INITIALIZE = {
-    "version": 1,
+    "version": 2,
     "type": "initialize",
     "requestId": "initialize-1",
     "provider": {
@@ -76,7 +76,7 @@ def test_protocol_rejects_unknown_messages_fields_and_line_shapes() -> None:
     for payload in (
         {**_INITIALIZE, "unknown": True},
         {**_INITIALIZE, "type": "surprise"},
-        {**_INITIALIZE, "version": 2},
+        {**_INITIALIZE, "version": 1},
         [],
     ):
         with pytest.raises(SidecarProtocolError) as error:
@@ -104,10 +104,13 @@ def test_sidecar_streams_safe_events_and_completed_answer(
         await runtime.handle(
             _command(
                 {
-                    "version": 1,
+                    "version": 2,
                     "type": "answer",
                     "requestId": "answer-1",
                     "question": "月铸镐怎么制作？",
+                    "history": [
+                        {"user": "上一问", "assistant": "上一答"},
+                    ],
                 }
             )
         )
@@ -163,10 +166,11 @@ def test_concurrent_answer_is_busy_and_cancel_targets_the_active_run(
         await runtime.handle(
             _command(
                 {
-                    "version": 1,
+                    "version": 2,
                     "type": "answer",
                     "requestId": "answer-active",
                     "question": "等待",
+                    "history": [],
                 }
             )
         )
@@ -174,10 +178,11 @@ def test_concurrent_answer_is_busy_and_cancel_targets_the_active_run(
         await runtime.handle(
             _command(
                 {
-                    "version": 1,
+                    "version": 2,
                     "type": "answer",
                     "requestId": "answer-busy",
                     "question": "并发",
+                    "history": [],
                 }
             )
         )
@@ -185,7 +190,7 @@ def test_concurrent_answer_is_busy_and_cancel_targets_the_active_run(
         await runtime.handle(
             _command(
                 {
-                    "version": 1,
+                    "version": 2,
                     "type": "cancel",
                     "requestId": "cancel-1",
                     "targetRequestId": "answer-active",
@@ -226,10 +231,11 @@ def test_duplicate_id_and_illegal_order_are_fatal(monkeypatch: pytest.MonkeyPatc
         await runtime.handle(
             _command(
                 {
-                    "version": 1,
+                    "version": 2,
                     "type": "answer",
                     "requestId": "answer-before-ready",
                     "question": "问题",
+                    "history": [],
                 }
             )
         )
@@ -242,7 +248,7 @@ def test_duplicate_id_and_illegal_order_are_fatal(monkeypatch: pytest.MonkeyPatc
 def test_run_sidecar_shutdown_and_unexpected_eof(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setenv("TERRARIA_AI_API_KEY", "test-only-key")
     shutdown = {
-        "version": 1,
+        "version": 2,
         "type": "shutdown",
         "requestId": "shutdown-1",
     }
@@ -260,7 +266,7 @@ def test_run_sidecar_shutdown_and_unexpected_eof(monkeypatch: pytest.MonkeyPatch
 def test_launcher_uses_stdout_only_for_protocol(monkeypatch: pytest.MonkeyPatch) -> None:
     launcher = Path(__file__).parents[1] / "sidecar_launcher.py"
     shutdown = {
-        "version": 1,
+        "version": 2,
         "type": "shutdown",
         "requestId": "shutdown-1",
     }

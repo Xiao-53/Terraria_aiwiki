@@ -16,7 +16,8 @@ public sealed class WikiToolBoundaryTests
         Assert.Contains("../Terraria_Wiki.Application/Terraria_Wiki.Application.csproj", project, StringComparison.Ordinal);
         Assert.DoesNotContain("Terraria_Wiki.Core.csproj", project, StringComparison.Ordinal);
         Assert.Contains("ModelContextProtocol.AspNetCore\" Version=\"2.2.0\"", project, StringComparison.Ordinal);
-        Assert.Single(Regex.Matches(project, "<PackageReference "));
+        Assert.Contains("HtmlAgilityPack\" Version=\"1.12.4\"", project, StringComparison.Ordinal);
+        Assert.Equal(2, Regex.Matches(project, "<PackageReference ").Count);
     }
 
     [Fact]

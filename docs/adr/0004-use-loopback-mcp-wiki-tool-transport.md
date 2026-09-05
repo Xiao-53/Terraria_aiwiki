@@ -1,7 +1,7 @@
 # ADR 0004：首个 Wiki Tool transport 使用受限无状态 loopback MCP
 
-- 状态：accepted；Phase 05 Windows portable solution 验证通过
-- 日期：2026-08-24
+- 状态：accepted；Phase 05 Windows portable solution 验证通过；2026-09-05 增加有界 Wiki evidence adapter
+- 日期：2026-08-24；最后修订 2026-09-05
 - 决策范围：首个 C# Wiki Tool Adapter transport、鉴权与生命周期；不外推 Android，不包含 Python/Windows Host 接线
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/changes/archive/phase-05-ai-adapter/plan.md`
 
@@ -17,7 +17,7 @@ Phase 03 已建立稳定的 `WikiQueryUseCases.SearchAsync` / `ReadAsync`，Phas
 2. 使用 MCP Streamable HTTP 的显式无状态模式，只映射 `/mcp`；只注册 `search_wiki` 与 `read_wiki`，不注册 resources、prompts、OAuth、legacy SSE 或额外工具。
 3. Kestrel 精确绑定 IPv4 `127.0.0.1:0`。每次启动生成 256-bit 临时 bearer token，只存内存；Host 必须精确等于实际 `127.0.0.1:<port>`，token 使用固定时间比较，不提供 CORS。
 4. server 是可嵌入 runtime，不新增独立产品 Host。Phase 05 不修改 `Terraria_Wiki.Windows`；Windows Client、Python Runtime 与 server 的启动/退出组合留 Phase 07。
-5. Adapter 只调用 `WikiQueryUseCases`，Search/Read structured output 忠实映射 Application；不转换或截断 HTML，不生成来源 URL，不记录 history。
+5. Adapter 只调用 `WikiQueryUseCases`。Search 继续忠实映射 Application；Read 在 Adapter 内把 Application 的完整 HTML 转成 `wiki_blocks_v1` 章节化纯文本证据，支持 `focus`、页面 fragment `anchor` 和 `cursor` continuation。单次 `blocks.text` 合计不超过 16384 个 Unicode 字符，章节目录最多 64 项/4096 字符；超限必须返回 continuation，不能把截断误报为 complete。工具结果不得包含 HTML、脚本、隐藏/导航/媒体节点，也不生成来源 URL或记录 history。Application 与 Viewer 的完整 HTML 契约不变。
 6. `WikiToolConsumerCoordinator` 作为 Application consumer port：pause 关闭新调用准入、取消并排空在途调用，lease 释放后恢复；server 未启动时 pause 是安全空操作。
 7. 本决策不外推 Android。Android Phase 必须根据设备内 Runtime、网络权限、功耗、打包和目标设备实测独立决定 transport，不能把 ASP.NET/loopback 假设写进共用逻辑。
 
@@ -41,7 +41,7 @@ Phase 03 已建立稳定的 `WikiQueryUseCases.SearchAsync` / `ReadAsync`，Phas
 
 - Windows Runtime 运行期间将存在一个仅 loopback 可达的 HTTP listener，Host/token/端口释放和 SDK schema 必须持续回归。
 - 官方 SDK 是新的固定依赖；2.2.0 之后的升级可能改变 schema 或协议行为，不能使用浮动版本。
-- 完整 HTML 可能占用较多 Agent context；本阶段不猜测截断规则，Phase 06 必须用真实 Agent 质量证据决定是否新增 Reader 转换边界。
+- Evidence 转换器成为独立可回归边界：必须保留标题层级、段落、列表、定义、代码、表格列名和 infobox 语义，并持续验证排序、去重、大小上限、cursor 和不泄漏 HTML。它不替代 Search，也不限制 Agent 继续读取其他块或页面。
 - token 是本机进程间临时凭据，不是远程用户身份体系；不得借此扩大为远程 MCP 服务。
 
 ## 被否决方案

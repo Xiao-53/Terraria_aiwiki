@@ -7,10 +7,28 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class AiSidecarProtocolTests
 {
     [Fact]
+    public void AnswerCommandCarriesOnlyBoundedPlainTextHistory()
+    {
+        var line = AiSidecarProtocol.CreateAnswer(
+            "answer-1",
+            "当前问题",
+            [new AiConversationHistoryTurn("上一问", "上一答")]);
+        using var document = JsonDocument.Parse(line.AsMemory(0, line.Length - 1));
+
+        Assert.Equal(2, document.RootElement.GetProperty("version").GetInt32());
+        Assert.Equal("当前问题", document.RootElement.GetProperty("question").GetString());
+        var turn = Assert.Single(document.RootElement.GetProperty("history").EnumerateArray());
+        Assert.Equal(["assistant", "user"], turn.EnumerateObject().Select(item => item.Name).Order());
+        Assert.Equal("上一问", turn.GetProperty("user").GetString());
+        Assert.Equal("上一答", turn.GetProperty("assistant").GetString());
+        Assert.DoesNotContain("tool", Encoding.UTF8.GetString(line), StringComparison.OrdinalIgnoreCase);
+    }
+
+    [Fact]
     public void ParsesCompletedTypedAnswerAndRejectsUnknownFields()
     {
         const string json = """
-            {"version":1,"type":"completed","requestId":"answer-1","answer":{"status":"answered","markdown":"answer","sources":[{"requested_title":"Alias","resolved_title":"Page","anchor":"Part","last_modified":"2026-08-27T00:00:00Z"}],"usage":{"requests":3,"tool_calls":2,"input_tokens":10,"output_tokens":4,"total_tokens":14,"cost_usd":"0.001"},"tool_trace":[{"name":"search_wiki","status":"succeeded"},{"name":"read_wiki","status":"succeeded"}]}}
+            {"version":2,"type":"completed","requestId":"answer-1","answer":{"status":"answered","markdown":"answer","sources":[{"requested_title":"Alias","resolved_title":"Page","anchor":"Part","last_modified":"2026-08-27T00:00:00Z"}],"usage":{"requests":3,"tool_calls":2,"input_tokens":10,"cached_input_tokens":4,"output_tokens":4,"total_tokens":14,"cost_usd":"0.001"},"tool_trace":[{"name":"search_wiki","status":"succeeded"},{"name":"read_wiki","status":"succeeded"}]}}
             """;
 
         var message = AiSidecarProtocol.Parse(json);
@@ -18,6 +36,7 @@ public sealed class AiSidecarProtocolTests
         Assert.Equal(AiSidecarEventKind.Completed, message.Kind);
         Assert.Equal("answer", message.Answer!.Markdown);
         Assert.Equal("Page", message.Answer.Sources.Single().ResolvedTitle);
+        Assert.Equal(4, message.Answer.Usage.CachedInputTokens);
         Assert.Equal(0.001m, message.Answer.Usage.CostUsd);
 
         var unknown = json.Replace("\"answer\":{", "\"unknown\":true,\"answer\":{");
@@ -26,10 +45,10 @@ public sealed class AiSidecarProtocolTests
     }
 
     [Theory]
-    [InlineData("{\"version\":1,\"type\":\"tool_started\",\"requestId\":\"x\",\"name\":\"shell\"}")]
-    [InlineData("{\"version\":1,\"type\":\"answer_delta\",\"requestId\":\"x\",\"delta\":\"\"}")]
-    [InlineData("{\"version\":2,\"type\":\"run_started\",\"requestId\":\"x\"}")]
-    [InlineData("{\"version\":1,\"type\":\"unknown\",\"requestId\":\"x\"}")]
+    [InlineData("{\"version\":2,\"type\":\"tool_started\",\"requestId\":\"x\",\"name\":\"shell\"}")]
+    [InlineData("{\"version\":2,\"type\":\"answer_delta\",\"requestId\":\"x\",\"delta\":\"\"}")]
+    [InlineData("{\"version\":1,\"type\":\"run_started\",\"requestId\":\"x\"}")]
+    [InlineData("{\"version\":2,\"type\":\"unknown\",\"requestId\":\"x\"}")]
     public void RejectsInvalidEvents(string json)
     {
         var error = Assert.Throws<AiRuntimeException>(() => AiSidecarProtocol.Parse(json));

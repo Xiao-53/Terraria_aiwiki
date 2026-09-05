@@ -367,7 +367,7 @@
             <Border Classes="card" Padding="16">
               <StackPanel Spacing="4">
                 <TextBlock Text="连接说明" FontWeight="SemiBold" />
-                <TextBlock Text="提问时读取的本地 Wiki 内容会发送给所选远程模型服务。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
+                <TextBlock Text="当前问题、最多最近 4 轮纯文本和当前读取的 Wiki 证据块会发送给所选远程模型；完整本地历史不会自动上传。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
             </Border>

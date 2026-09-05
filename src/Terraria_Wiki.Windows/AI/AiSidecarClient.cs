@@ -111,10 +111,17 @@ internal sealed class AiSidecarClient : IAsyncDisposable
 
     public async Task<AiAgentAnswer> AnswerAsync(
         string question,
+        IReadOnlyList<AiConversationHistoryTurn> history,
         Func<AiRunEvent, ValueTask>? onEvent = null,
         CancellationToken cancellationToken = default)
     {
         if (string.IsNullOrWhiteSpace(question) || question.Length > 32_768)
+            throw new AiRuntimeException("invalid_input");
+        ArgumentNullException.ThrowIfNull(history);
+        if (history.Count > 4 || history.Any(turn => string.IsNullOrWhiteSpace(turn.User)
+            || turn.User.Length > 32_768
+            || string.IsNullOrWhiteSpace(turn.Assistant)
+            || turn.Assistant.Length > 32_768))
             throw new AiRuntimeException("invalid_input");
         ThrowIfUnavailable();
 
@@ -143,7 +150,7 @@ internal sealed class AiSidecarClient : IAsyncDisposable
         try
         {
             await _connection.WriteAsync(
-                AiSidecarProtocol.CreateAnswer(requestId, question),
+                AiSidecarProtocol.CreateAnswer(requestId, question, history),
                 _lifetime.Token).ConfigureAwait(false);
             while (true)
             {
@@ -270,6 +277,12 @@ internal sealed class AiSidecarClient : IAsyncDisposable
             completion.TrySetResult();
         }
     }
+
+    public Task<AiAgentAnswer> AnswerAsync(
+        string question,
+        Func<AiRunEvent, ValueTask>? onEvent = null,
+        CancellationToken cancellationToken = default) =>
+        AnswerAsync(question, [], onEvent, cancellationToken);
 
     public async Task CancelActiveAsync()
     {
@@ -470,7 +483,7 @@ internal sealed class AiSidecarClient : IAsyncDisposable
     {
         if (ready.Kind != AiSidecarEventKind.Ready
             || ready.RequestId != requestId
-            || ready.RuntimeVersion != "1"
+            || ready.RuntimeVersion != "2"
             || ready.PydanticAiVersion != "2.31.0"
             || !System.Version.TryParse(ready.PythonVersion, out var python)
             || python.Major != 3

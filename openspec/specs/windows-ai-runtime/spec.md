@@ -1,6 +1,6 @@
 # Windows AI Runtime 能力契约
 
-- 状态：implemented；Phase 11 内置 Runtime、Credential Manager 与 v3 迁移已通过 Windows 回归
+- 状态：implemented；Phase 11 内置 Runtime、Credential Manager 与 v3 迁移已通过 Windows 回归；2026-09-05 已升级 NDJSON v2/受限历史
 - 适用范围：Avalonia Windows Host、Wiki Tool lifecycle、内置 Python Sidecar、AI 配置与 Presentation Runtime 边界；不外推 Android
 - 来源：Master Architecture v0.6、Phase 07/11、ADR 0003–0006、AI Backend 与 Wiki Tools 能力契约
 
@@ -14,7 +14,7 @@
 - v3 文档字段固定为 `version` 与 `provider`。provider 只含 `baseUrl`、`model`、`api` 与可空 `reasoningEffort`；未知字段、版本和非法 provider 值必须拒绝。Python 路径和 API key 不进入 v3。
 - Windows 设置页可以读取并显式保存同一 v3 文件。当前 UI 只提供 `DeepSeek 官方 API` 与 `自定义 OpenAI-compatible` 两种选择：DeepSeek 预设固定 `https://api.deepseek.com` 与 Responses API，并提供 `deepseek-v4-flash` / `deepseek-v4-pro`；自定义项要求用户显式填写 endpoint、model 与 Responses / Chat Completions。provider 类型是 UI 预设，不写入 schema；不能严格识别为该官方组合的既有配置一律作为自定义项显示。
 - 思考强度 UI 固定为服务默认、关闭、低、高、最大，分别保存为 `null`、`none`、`low`、`high`、`max`。自定义兼容服务可以忽略或拒绝该参数，必须按 endpoint 分别验证，不能因 UI 可选择而宣称通用支持。
-- Host 只从安装目录 `AgentRuntime\python\python.exe` 定位内置 CPython。Phase 11 固定 Python 3.14.7 x64 embeddable、官方 URL/SHA-256、uv 0.12.9 与 `uv.lock` 生产依赖，并在 Sidecar 握手中继续验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 1。运行期不下载、不调用 pip/uv，也不允许用户改用外部 Python。
+- Host 只从安装目录 `AgentRuntime\python\python.exe` 定位内置 CPython。Phase 11 固定 Python 3.14.7 x64 embeddable、官方 URL/SHA-256、uv 0.12.9 与 `uv.lock` 生产依赖，并在 Sidecar 握手中验证 `pydantic-ai-slim==2.31.0` 与 Runtime protocol 2。运行期不下载、不调用 pip/uv，也不允许用户改用外部 Python。
 - API key 只保存为当前 Windows 用户 generic Credential，固定 target 为 `TerrariaAIWiki.Windows/AI/APIKey`，UTF-8 blob 不超过 Credential Manager 的 2560-byte 上限。设置页不读取或回显已有真实值与长度，以固定遮蔽标记明确表示凭据已保存：空底层输入保留、新输入替换，显式清除会删除凭据并停用 AI，但保留 provider 配置。
 - v2 首次读取执行可重试迁移：先严格验证 provider/key，再写 Credential Manager，最后 durable 写入并原子替换 v3；任一步失败都保留旧文件并恢复先前凭据。Host 只把读取到的 key 写入所属 Sidecar 的 `TERRARIA_AI_API_KEY` 进程环境；key 不进入参数、NDJSON、UI、诊断、Git 或 smoke 结果。
 
@@ -32,14 +32,16 @@
 }
 ```
 
-## stdio NDJSON v1
+## stdio NDJSON v2
 
 - Windows 以内置 `python.exe -I -B -u -X utf8 <published-launcher>` 启动唯一所属 Sidecar；`-B` 禁止安装目录产生 bytecode，不使用 shell，不在参数中传 provider、MCP connection 或 secret。
 - Windows 命令固定为 `initialize`、`answer`、`cancel`、`shutdown`；Python 事件固定为 `ready`、`run_started`、`tool_started`、`tool_finished`、`answer_delta`、`completed`、`cancelled`、`failed`、`fatal`。
-- 每条消息固定含 `version: 1`、`type` 与 `requestId`。字段集合、类型、枚举、顺序与 request ID 必须严格验证；UTF-8 NDJSON 单行连换行不得超过 256 KiB。
+- 每条消息固定含 `version: 2`、`type` 与 `requestId`。字段集合、类型、枚举、顺序与 request ID 必须严格验证；UTF-8 NDJSON 单行连换行不得超过 256 KiB。v1/v2 二进制不得混用。
 - initialize 是第一条且唯一初始化命令；MCP endpoint 与 bearer 只在该 stdin 消息传入。重复 ID、未知消息/字段、非法顺序、未换行 EOF、超长行、非法 UTF-8 或非协议 stdout 都使当前 Sidecar fatal。
 - 一次只允许一个活动 answer。宿主与 Sidecar 都拒绝并发问题为 `runtime_busy`；cancel 必须指向当前活动 ID。取消排空终态后，同一 Sidecar 可接受下一次独立问题。
+- `answer` 固定包含当前 `question` 与 `history`；history 最多 4 项，每项只能含非空 `user` / `assistant` 纯文本。Host 从当前会话最近的已回答/证据不足终态构造，不发送失败、取消、pending、来源、工具轨迹、HTML、thinking 或原始 provider 消息。
 - `completed.answer` 是完整 `WikiAgentAnswer`。此前所有 `answer_delta` 的顺序拼接必须精确等于 `answer.markdown`；工具 started/finished 必须配对且工具事件不能出现在首个正文增量之后。
+- `completed.answer.usage` 包含 `cached_input_tokens`，且必须在 `0..input_tokens`；零表示未命中或 provider 不提供，不推算账单节省。
 - stdout 只允许协议 writer。stderr 被异步、有界读取以避免阻塞，但不直接显示或持久化；工具参数、工具返回、模型 thinking、原始 HTML 与底层异常不得出现在事件中。
 
 ## 生命周期与恢复
@@ -55,8 +57,8 @@
 
 ## Presentation Runtime 边界与故障隔离
 
-- Phase 08 Presentation 提供单轮问题、发送、停止、重试 AI、Search/Read 工具状态、安全流式 Markdown、可信来源与 usage；具体布局、Markdown allowlist 和共享 Reader 行为由 `openspec/specs/windows-presentation/spec.md` 约束。
-- 每次发送前清除上次正文、工具状态、来源与 usage；问题之间不传递、不显示为会话历史，也不持久化。
+- Presentation 提供有界多轮问题、发送、停止、重试 AI、Search/Read 工具状态、安全流式 Markdown、可信来源与 usage；具体布局、会话持久化、Markdown allowlist 和共享 Reader 行为由 `openspec/specs/windows-presentation/spec.md` 约束。
+- 每次发送只携带 Host 选择的最近 4 轮纯文本；本地完整 transcript 与当前运行的状态由 Presentation/Host 管理，Sidecar 不持久化会话。
 - 缺少配置、key、Python、锁定依赖或 provider 不可用时，只把 AI 面板置为 Disabled/Failed；离线 Search、Viewer 与已有数据能力继续可操作。
 - 向用户显示的 Runtime 错误只来自固定安全 code/message。provider 原始错误、stderr、路径、bearer、HTML、工具参数和响应不进入 UI。
 
@@ -72,6 +74,6 @@
 
 ## 非目标与变更规则
 
-本能力不包含多轮、运行期 Python/依赖安装、Provider/模型在线发现、API key 联网校验、Reader/HTML 精简、商业签名、Android、Vector/Embedding 或 Wiki 数据格式变化。
+本能力不包含会话持久化实现、运行期 Python/依赖安装、Provider/模型在线发现、API key 联网校验、Reader HTML 精简、商业签名、Android、Vector/Embedding 或 Wiki 数据格式变化。
 
 协议版本、消息字段/顺序、配置 schema、Python/依赖范围、secret 边界、进程终止策略或启动退出顺序变化时必须更新本 spec 与 ADR 0006。Android Runtime 必须另行决定，不能继承 Windows stdio、路径、loopback 或打包假设。

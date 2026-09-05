@@ -3,6 +3,7 @@ using Terraria_Wiki.Models;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Chat;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
 using Terraria_Wiki.Windows.Presentation.Library;
@@ -46,7 +47,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _disposed;
 
     public ShellViewModel(
-        IChatFavoriteStore? chatFavoriteStore = null,
+        IChatConversationStore? chatConversationStore = null,
         Func<CancellationToken, Task<string?>>? pickImportPackage = null,
         Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
         Func<ApplicationPreferences, Task>? applyPreferences = null,
@@ -60,17 +61,22 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         ProductDiagnostics? productDiagnostics = null)
     {
         Reader = new ReaderPaneViewModel();
+        var conversationStore = chatConversationStore ?? new MemoryChatConversationStore();
         Chat = new ChatViewModel(
             new SafeMarkdownParser(),
             OpenSourceAsync,
             OpenWikiReader,
-            ToggleChatFavoriteAsync);
+            conversationStore);
         Wiki = new WikiViewModel(OpenSearchResultAsync);
         Favorites = new FavoritesViewModel(
-            chatFavoriteStore ?? new MemoryChatFavoriteStore(),
-            OpenChatFavoriteAsync,
+            conversationStore,
+            OpenChatConversationAsync,
             OpenFavoriteWikiAsync);
-        Library = new WikiLibraryViewModel(OpenLibraryWikiAsync);
+        Library = new WikiLibraryViewModel(
+            conversationStore,
+            OpenLibraryWikiAsync,
+            OpenChatConversationAsync,
+            Chat.MarkConversationDeleted);
         Management = new WikiManagementViewModel(
             pickImportPackage,
             exportPackage,
@@ -85,7 +91,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             applyUpdateAndRestart,
             openExternalUri,
             productDiagnostics);
-        Favorites.ChatFavoriteRemoved += Chat.MarkFavoriteRemoved;
+        Chat.ConversationChanged += OnConversationChanged;
+        Favorites.ConversationFavoriteChanged += OnConversationFavoriteChanged;
         NavigateChatCommand = new RelayCommand(_ => NavigateChat());
         NavigateFavoritesCommand = new RelayCommand(_ => NavigateFavorites());
         NavigateLibraryCommand = new RelayCommand(_ => NavigateLibrary());
@@ -361,7 +368,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         if (_disposed)
             return;
         _disposed = true;
-        Favorites.ChatFavoriteRemoved -= Chat.MarkFavoriteRemoved;
+        Chat.ConversationChanged -= OnConversationChanged;
+        Favorites.ConversationFavoriteChanged -= OnConversationFavoriteChanged;
         Chat.Dispose();
         Wiki.Dispose();
         Library.Dispose();
@@ -382,14 +390,25 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         await Reader.OpenAsync(new ReaderPageRequest(result.Title));
     }
 
-    private async Task<bool> ToggleChatFavoriteAsync(ChatFavoriteRecord record, bool isFavorite) =>
-        await Favorites.ToggleChatAsync(record, isFavorite);
-
-    private Task OpenChatFavoriteAsync(ChatFavoriteRecord record)
+    private Task OpenChatConversationAsync(ChatConversation conversation)
     {
-        if (Chat.LoadFavorite(record))
+        if (Chat.LoadConversation(conversation))
             NavigateChat();
         return Task.CompletedTask;
+    }
+
+    private void OnConversationChanged(Guid? id)
+    {
+        _ = Favorites.RefreshAsync();
+        if (IsLibrarySelected)
+            _ = Library.RefreshAsync();
+    }
+
+    private void OnConversationFavoriteChanged(Guid id, bool isFavorite)
+    {
+        Chat.SetFavoriteState(id, isFavorite);
+        if (IsLibrarySelected)
+            _ = Library.RefreshAsync();
     }
 
     private async Task OpenFavoriteWikiAsync(string title)

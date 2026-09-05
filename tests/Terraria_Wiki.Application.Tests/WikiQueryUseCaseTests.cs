@@ -83,8 +83,6 @@ public sealed class WikiQueryUseCaseTests
         var direct = await fixture.Application.Query.ReadAsync("Sword#Stats");
         var redirect = await fixture.Application.Query.ReadAsync("Blade");
         var missing = await fixture.Application.Query.ReadAsync("Missing");
-        var history = await fixture.Application.Library.GetHistoryAsync(new PageRequest(0, 20));
-
         Assert.True(direct.IsFound);
         Assert.Equal("Stats", direct.Anchor);
         Assert.Equal("Sword", direct.Title);
@@ -94,7 +92,6 @@ public sealed class WikiQueryUseCaseTests
         Assert.Equal("Sword", redirect.RedirectTargetTitle);
         Assert.Equal("Crafting", redirect.Anchor);
         Assert.False(missing.IsFound);
-        Assert.Empty(history.Items);
     }
 
     [Fact]

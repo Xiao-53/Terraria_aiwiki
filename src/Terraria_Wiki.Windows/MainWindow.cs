@@ -9,6 +9,7 @@ using Avalonia.Threading;
 using Terraria_Wiki.Application;
 using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Hosting;
+using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Management;
 using Terraria_Wiki.Windows.Presentation.Shell;
@@ -65,7 +66,7 @@ internal sealed partial class MainWindow : Window
             : new ProductDiagnostics(_diagnosticsDirectory);
         _diagnostics.Write(ProductDiagnosticEvent.ApplicationStarted);
         _shellViewModel = new ShellViewModel(
-            CreateChatFavoriteStore(_chatFavoritesPath),
+            CreateChatConversationStore(_chatFavoritesPath),
             PickImportPackageAsync,
             ExportPackageAsync,
             ApplyPreferencesAsync,
@@ -88,17 +89,18 @@ internal sealed partial class MainWindow : Window
         Closing += OnClosing;
     }
 
-    private static IChatFavoriteStore CreateChatFavoriteStore(string? filePath)
+    private static IChatConversationStore CreateChatConversationStore(string? legacyFavoritesPath)
     {
         try
         {
-            return filePath is null
-                ? ChatFavoriteStore.CreateDefault()
-                : new ChatFavoriteStore(filePath);
+            if (legacyFavoritesPath is null)
+                return ChatConversationStore.CreateDefault();
+            var directory = Path.Combine(Path.GetDirectoryName(legacyFavoritesPath)!, "conversations");
+            return new ChatConversationStore(directory, legacyFavoritesPath);
         }
         catch
         {
-            return new MemoryChatFavoriteStore();
+            return new MemoryChatConversationStore();
         }
     }
 

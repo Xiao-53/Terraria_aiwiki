@@ -1,6 +1,6 @@
 # Wiki Tools 能力契约
 
-- 状态：confirmed baseline；Phase 07 Windows Runtime lifecycle 已接入并通过无外网/发布 smoke
+- 状态：confirmed baseline；2026-09-05 `read_wiki` 已改为有界纯文本 evidence blocks
 - 适用范围：Wiki Tool Adapter、AI Backend、Windows Runtime lifecycle；Android transport 另行决定
 - 来源：Master Architecture v0.6、Wiki Search / Read 边界、Phase 05 AI Adapter、ADR 0004
 
@@ -44,15 +44,21 @@
 输入：
 
 - `title`：必填非空页面标题，可包含 `#anchor`。
+- `focus`：可选问题或主题，用于优先返回相关章节；中文匹配必须支持 bigram。
+- `cursor`：可选非负 continuation 游标；继续读取时调用方保持相同 title/focus，并使用上次 `next_cursor`。
 
 输出固定包含：
 
 - `requested_title`、`requested_page_title`；
 - `status`：`found` 或 `not_found`；
-- `is_found`、`title`、`content`、`last_modified`；
+- `is_found`、`title`、`last_modified`；
+- `content_format`：found 固定为 `wiki_blocks_v1`，not-found 为 null；
+- `blocks`：有序 `{ section_path, kind, text }`，kind 只允许 `heading`、`paragraph`、`list_item`、`definition`、`table_row`、`code`；
+- `included_characters`、`original_characters`、`is_complete`、`next_cursor`；
+- `available_sections`：最多 64 项且文本合计最多 4096 字符；
 - `is_redirect`、`redirect_from_title`、`redirect_target_title`、`redirect_target_anchor`、`anchor`。
 
-这些字段逐项映射现有 `WikiReadResponse`。`content` 是完整原始存储 HTML，不转换、不提取 Reader 文本、不截断；not-found 是成功的结构化查询结果。Read 不写 history。
+Adapter 仍通过现有 `WikiReadResponse` 取得完整存储 HTML，但只在 WikiTools 内使用锁定的 HtmlAgilityPack 1.12.4 转换。模型工具结果不得包含完整 HTML、标签、属性、脚本、注释、隐藏/导航或媒体节点；Application 与 Viewer 仍获得原始完整 HTML。标题层级、段落、列表、定义、代码、带列名的表格行和 infobox 语义必须保留。每次全部 `blocks.text` 合计最多 16384 个 Unicode scalar（与 Python `len` 对有效 Unicode 字符串的计数一致），分块不得切断 surrogate pair；超出时返回非空 `next_cursor`，不得把截断误报为 complete。首次排序是显式 anchor → 页面标题/导语 → focus 命中章节 → 其余正文；not-found 是成功结构化结果。Read 不写任何持久 Wiki 浏览历史。
 
 ## 错误与取消
 
@@ -75,7 +81,7 @@
 ## 非目标
 
 - Python/PydanticAI、模型 API、Search → Read → Answer 质量规则和来源生成；
-- 页面 HTML 转换、摘要管线、token/context 截断和 Reader 模式；
+- Reader HTML 转换、模型摘要管线和向量检索；
 - Vector Search、Embedding Retrieval、Vector Database 或第二套 Wiki 数据；
 - Windows UI、Python Sidecar 协议与安装器；Android transport/Runtime 验证。
 
@@ -84,11 +90,12 @@
 1. 官方 C# MCP client 可对动态 endpoint 完成 initialize/协商、list tools、Search 和 Read。
 2. 工具集合、名称、输入 schema、output schema、annotations 和 structured JSON 字段固定。
 3. Search 与直接 Application 调用在七级顺序、limit、Redirect、摘要、匹配类型和 UTF-16 highlights 上逐项一致。
-4. Read 覆盖直接页面、Redirect、显式/Redirect anchor、not-found、完整 HTML、修改时间和不写 history。
-5. 缺失/错误 token、错误 Host、非法参数、未知工具、数据源不可用和内部异常均安全拒绝。
-6. 并发、调用方取消、pause/release、重复 stop/dispose、token 轮换、在途清理和端口释放有自动化回归。
-7. 静态/反射门确认 Adapter project 不引用 Core project，且不访问 SQLite、Core service、持久化模型、MAUI、Avalonia、Windows API 或 Python。
-8. Windows 组合 consumer 在数据操作前同时排空 Viewer 与 WikiTools，失败时逆序释放已取得 lease；Sidecar 崩溃/重试会停止旧 server 并轮换端口/token。
+4. Read 覆盖直接页面、Redirect、显式/Redirect anchor、not-found、修改时间、focus/cursor 和不写 history；工具结果不含原始 HTML。
+5. 长页相关章节位于开头/中间/末尾时可由 focus/anchor 找到；continuation 无重复遗漏，单次 blocks 和章节目录均不越界，表格/infobox 保留列语义。
+6. 缺失/错误 token、错误 Host、非法参数、未知工具、数据源不可用和内部异常均安全拒绝。
+7. 并发、调用方取消、pause/release、重复 stop/dispose、token 轮换、在途清理和端口释放有自动化回归。
+8. 静态/反射门确认 Adapter project 不引用 Core project，且不访问 SQLite、Core service、持久化模型、MAUI、Avalonia、Windows API 或 Python。
+9. Windows 组合 consumer 在数据操作前同时排空 Viewer 与 WikiTools，失败时逆序释放已取得 lease；Sidecar 崩溃/重试会停止旧 server 并轮换端口/token。
 
 ## 变更规则
 
