@@ -438,6 +438,7 @@ public sealed class PresentationFlowTests
         Assert.False(chat.IsStreamingAnswer);
         Assert.False(chat.IsToolTraceVisible);
         Assert.Equal("AI 正在回答…", chat.ComposerPlaceholder);
+        Assert.True(chat.IsQuestionReadOnly);
         Assert.False(chat.CanStartNewConversation);
         var activeId = chat.CurrentConversationId;
         chat.StartNewConversation();
@@ -667,6 +668,23 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
+    public void ComposerAcceptsDraftBeforeRuntimeIsReadyButCannotSendIt()
+    {
+        using var chat = new ChatViewModel(
+            new SafeMarkdownParser(),
+            _ => Task.CompletedTask,
+            () => { });
+
+        Assert.True(chat.CanEditQuestion);
+        Assert.False(chat.IsQuestionReadOnly);
+
+        chat.Question = "Runtime 启动期间的草稿";
+
+        Assert.Equal("Runtime 启动期间的草稿", chat.Question);
+        Assert.False(chat.CanSend);
+    }
+
+    [Fact]
     public async Task DisabledAiCanRetryWithoutLeavingChatAndWikiActionRemainsAvailable()
     {
         var openedWiki = false;
@@ -682,12 +700,13 @@ public sealed class PresentationFlowTests
 
         Assert.True(chat.IsAiUnavailable);
         Assert.True(chat.CanRetry);
-        Assert.True(chat.IsQuestionReadOnly);
+        Assert.False(chat.IsQuestionReadOnly);
+        chat.Question = "可再次提问";
+        Assert.False(chat.CanSend);
         chat.OpenWikiCommand.Execute(null);
         Assert.True(openedWiki);
 
         await chat.RetryAsync();
-        chat.Question = "可再次提问";
         Assert.False(chat.IsAiUnavailable);
         Assert.True(chat.CanSend);
         Assert.False(chat.IsQuestionReadOnly);

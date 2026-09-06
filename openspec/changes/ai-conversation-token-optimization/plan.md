@@ -4,7 +4,7 @@
 - Phase：无；独立非 Phase 变更
 - 执行环境：WSL2 Codex CLI 负责实施与平台无关检查；Windows 11 x64 负责 .NET/Avalonia 构建、运行与人工验收
 - 创建日期：2026-09-05
-- 最后更新：2026-09-05
+- 最后更新：2026-09-06
 - 范围：Wiki Tools 读取结构、Python Agent 多轮上下文、Windows Sidecar 协议、Chat/收藏/对话历史、本地会话持久化、旧 Wiki 浏览历史下线
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0010-use-bounded-local-ai-conversations.md`
 
@@ -224,7 +224,8 @@
 - 2026-09-05：资料库第二页已替换为对话历史；Application 和 Viewer 已停止 WikiHistory 查询/写入，旧表/行与 Core schema 兼容保留，Reader 内存返回/侧键链路未删除。受影响 specs、ADR 0001/0004/0005/0006、ADR 0010、README、项目基线及 Phase 11 说明已同步。
 - 2026-09-05：最终 Python `ruff`/format/strict mypy 通过，离线 pytest 82 passed / 4 skipped；真实 C# MCP→Python 非付费测试另行通过 1/1。内置 CPython 的 Application→WikiTools→Sidecar 离线链路首次冷启动受 Defender 扫描超过 15 秒，未改代码直接重跑通过（1/1，13 秒）。
 - 2026-09-05：Windows dotnet Release solution build 9 项目 0 warning / 0 error；对同一输出执行全量测试 324/324（Core 92、Application 52、WikiTools 37、Windows 143）。开发输出中的 Agent/Sidecar 源与工作区逐字一致，EXE 和内置 CPython 均存在。
-- 下一步：提交本 change 并停止；用户按交付步骤执行真实问题和窗口验收。禁止的 publish/Velopack/Setup/portable/update/upload 均未运行。
+- 2026-09-06：人工启动发现 Chat 输入框在 Runtime 尚未 Ready 时被错误设为只读；修复为启动中/未配置/失败时可编辑并保留草稿、仅发送禁用，回答期间仍只读，补充 Presentation 行为回归与持续契约。定向测试 3/3、Windows Release build 0 warning / 0 error、全量测试 325/325 通过。
+- 下一步：用户继续按交付步骤执行真实问题和窗口验收。禁止的 publish/Velopack/Setup/portable/update/upload 均未运行。
 
 ## 发现、偏差与决策
 
@@ -239,6 +240,7 @@
 - 对话历史带筛选时，“清空未收藏”仍会删除筛选外记录；实现必须从 store 取得完整待删 ID 后通知 Chat，不能只根据当前可见列表重置当前会话。
 - 内置 CPython 首次冷启动可能受 Windows Defender 扫描影响接近 15 秒握手门槛；同一未修改输出重跑 13 秒通过。本 change 不扩大为 Runtime timeout 调整，最终手工验收需如实观察首次 AI 启动状态。
 - .NET `string.Length` 与 Python `len` 对补充平面字符的计数不同；evidence 计数与分块已统一为 Unicode scalar，并新增 emoji 回归，避免 C# 合法结果被 Python 误判或切断 surrogate pair。
+- Chat 的草稿编辑能力不能与 Runtime Ready 混为同一状态；启动中或故障时应允许用户录入草稿，只有发送命令需要 Ready，回答期间才将 composer 设为只读。
 
 ## 验证结果
 
@@ -248,6 +250,7 @@
 - Windows 最终定向/全量覆盖 WikiTools 37、Application 52、Core 92、Windows 143；solution 合计 324/324，包含完整 200 收藏压力、会话迁移/损坏/删除、历史截断、Unicode scalar 分块、协议 v2、Viewer 不写旧 history 和 UI 静态边界。
 - 使用 Release 输出中的内置 CPython 3.14.7 执行真实 Application→WikiTools→Python Sidecar 离线 fixture，第二次通过 1/1；第一次冷启动握手超时已如实记录，未修改用户数据或调用远程模型。
 - Windows Release solution build 为 0 warning / 0 error，同一输出的全量 tests 为 324/324。开发输出已包含逐字一致的最新 Agent/Sidecar 源、应用 EXE 与内置 CPython。
+- 2026-09-06 输入修复定向 Presentation 测试 3/3；Windows Release solution build 再次为 0 warning / 0 error，全量 tests 为 325/325（Core 92、Application 52、WikiTools 37、Windows 144）。
 - 实际窗口与真实 provider 尚未执行；不得据此宣称最终 Token 门槛已通过。它们按用户明确要求留给现有 API Key 的人工验收。
 
 ## 完成摘要

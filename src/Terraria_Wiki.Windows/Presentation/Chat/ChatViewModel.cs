@@ -362,7 +362,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     public bool IsSendVisible => !IsAnswering;
     public bool IsStopVisible => IsAnswering;
     public string ComposerPlaceholder => IsAnswering ? "AI 正在回答…" : "向 AI 提问…";
-    public bool CanEditQuestion => _availability == ChatAvailabilityState.Ready && !IsAnswering;
+    public bool CanEditQuestion => !IsAnswering;
     public bool IsQuestionReadOnly => !CanEditQuestion;
     public bool CanSend => _availability == ChatAvailabilityState.Ready
                            && !IsAnswering && !string.IsNullOrWhiteSpace(Question)
