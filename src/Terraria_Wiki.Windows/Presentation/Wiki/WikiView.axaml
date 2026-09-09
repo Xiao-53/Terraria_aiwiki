@@ -7,7 +7,6 @@
     <Grid RowDefinitions="Auto,Auto,*" Width="360">
       <StackPanel Spacing="4">
         <TextBlock Text="Wiki 阅读" Classes="page-title" />
-        <TextBlock Text="搜索结果在共享 Reader 中打开。" Classes="page-subtitle" TextWrapping="Wrap" />
       </StackPanel>
       <TextBox Grid.Row="1" Text="{Binding Query, Mode=TwoWay}"
                IsEnabled="{Binding IsAvailable}"

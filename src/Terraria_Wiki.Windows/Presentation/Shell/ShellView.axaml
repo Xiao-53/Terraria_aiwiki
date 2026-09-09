@@ -117,8 +117,6 @@
         <StackPanel VerticalAlignment="Center" Spacing="0">
           <TextBlock Text="Terraria AI Wiki" FontSize="20" LineHeight="26"
                      FontWeight="SemiBold" />
-          <TextBlock Text="离线知识与 AI 助手" FontSize="11" LineHeight="14"
-                     Classes="muted" />
         </StackPanel>
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                     VerticalAlignment="Center" MaxWidth="560">

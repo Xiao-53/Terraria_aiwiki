@@ -7,7 +7,6 @@
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
         <TextBlock Text="设置" Classes="page-title" />
-        <TextBlock Text="管理应用偏好与 AI 服务连接" Classes="page-subtitle" />
       </StackPanel>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
@@ -83,7 +82,6 @@
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="应用主题" FontWeight="SemiBold" />
-                <TextBlock Text="跟随系统，或固定使用浅色/深色。" Classes="muted" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding AppThemeIndex, Mode=TwoWay}"
                         IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="应用主题">
@@ -95,7 +93,6 @@
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="Wiki 内容主题" FontWeight="SemiBold" />
-                <TextBlock Text="跟随应用明暗主题，或保留 Wiki 原始样式。" Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding ContentThemeIndex, Mode=TwoWay}"
                         IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="Wiki 内容主题">
@@ -111,7 +108,6 @@
               <Grid Classes="setting-row" ColumnDefinitions="*,Auto" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="鼠标侧键返回" FontWeight="SemiBold" />
-                  <TextBlock Text="允许 Reader 使用鼠标侧键返回上一页。" Classes="muted" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                             VerticalAlignment="Center" HorizontalAlignment="Right">
@@ -125,7 +121,6 @@
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="最大搜索结果" FontWeight="SemiBold" />
-                  <TextBlock Text="手动搜索与 Application 默认查询上限。" Classes="muted" />
                 </StackPanel>
                 <NumericUpDown Grid.Column="1" Value="{Binding SearchLimit, Mode=TwoWay}"
                                Minimum="1" Maximum="100" Increment="1" FormatString="0"
@@ -214,8 +209,6 @@
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="运行环境" FontWeight="SemiBold" />
-                  <TextBlock Text="用于核对 Windows 与 Evergreen WebView2 状态。"
-                             Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                   <SelectableTextBlock Text="{Binding Diagnostics.WindowsStatus}"
@@ -244,7 +237,6 @@
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="提供商" FontWeight="SemiBold" />
-                <TextBlock Text="{Binding Ai.ProviderDescription}" Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ProviderIndex, Mode=TwoWay}"
                         IsEnabled="{Binding Ai.IsAvailable}"
@@ -259,7 +251,6 @@
                   IsVisible="{Binding Ai.IsDeepSeek}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="DeepSeek 模型" FontWeight="SemiBold" />
-                <TextBlock Text="使用官方 Responses API；默认选择 V4 Flash。" Classes="muted" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.DeepSeekModelIndex, Mode=TwoWay}"
                         IsEnabled="{Binding Ai.IsAvailable}"
@@ -273,7 +264,6 @@
                   IsVisible="{Binding Ai.IsDeepSeek}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="官方服务地址" FontWeight="SemiBold" />
-                <TextBlock Text="预设地址不可编辑，避免误接入非官方域名。" Classes="muted" />
               </StackPanel>
               <SelectableTextBlock Grid.Column="1" Text="https://api.deepseek.com"
                                    VerticalAlignment="Center" TextWrapping="Wrap"
@@ -306,7 +296,6 @@
                   IsVisible="{Binding Ai.IsCustomProvider}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="API 格式" FontWeight="SemiBold" />
-                <TextBlock Text="不同兼容服务支持范围不同，需要分别验证。" Classes="muted" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.CustomApiIndex, Mode=TwoWay}"
                         IsEnabled="{Binding Ai.IsAvailable}" AutomationProperties.Name="自定义 API 格式">

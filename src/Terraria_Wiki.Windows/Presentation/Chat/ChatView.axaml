@@ -9,7 +9,6 @@
           HorizontalAlignment="Stretch">
       <StackPanel Spacing="3">
         <TextBlock Text="AI 问答" Classes="page-title" />
-        <TextBlock Text="完整对话保存在本机；模型只参考最近 4 轮文本。" Classes="page-subtitle" />
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
         <Button Classes="icon-button" Command="{Binding ToggleFavoriteCommand}"

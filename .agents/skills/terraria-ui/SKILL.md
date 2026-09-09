@@ -31,6 +31,7 @@ description: "Design, implement, or review new and materially changed Avalonia W
 ## 强制视觉护栏
 
 - 页面 XAML 不写 hex 颜色；使用 `DynamicResource` 语义 token。
+- 常驻说明必须提供会改变操作或决定的新信息；默认不在自解释的页面/分区标题下添加副标题，不重复可见按钮、选项、状态或内部实现。保留必要的输入约束、安全/隐私、数据影响、恢复方式和异步反馈。
 - 不让显著或重复操作无意继承突兀的默认灰色按钮；从现有语义按钮 class 中选择，并实际检查结果。
 - 不用大量独立灰卡、圆角药丸或嵌套卡片分割本可连续阅读的内容；列表优先留白、分组和轻量分隔线。
 - 可交互控件必须覆盖适用的 `:pointerover`、`:pressed`、`:focus-visible`、`:disabled`，选中控件还要有非纯颜色提示。

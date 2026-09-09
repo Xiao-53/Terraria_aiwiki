@@ -7,7 +7,6 @@
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
         <TextBlock Text="Wiki 资料库" Classes="page-title" />
-        <TextBlock Text="浏览本地 Wiki 页面与保存在本机的 AI 对话" Classes="page-subtitle" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
               VerticalAlignment="Center" AutomationProperties.Name="刷新 Wiki 资料库">
