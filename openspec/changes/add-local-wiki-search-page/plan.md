@@ -1,11 +1,11 @@
-# 新增全宽本地 Wiki 浏览搜索页面
+# 新增参考图风格的全宽本地 Wiki 搜索页面
 
 - 状态：draft；等待用户批准后实施
 - Phase：无；独立 Windows Presentation 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑、计划维护与静态检查；Windows 11 x64 负责 .NET/Avalonia 构建、测试与真实窗口验收
 - 创建日期：2026-09-09
 - 最后更新：2026-09-09
-- 范围：Windows Avalonia 左侧 Wiki 导航、全宽本地 Wiki 搜索/浏览页面、唯一 Viewer 布局编排、Presentation 回归与持续文档
+- 范围：新增 Windows Avalonia 左侧 Wiki 入口及参考图风格的全宽搜索/阅读页面；仅增加必要 Presentation 接线，复用原搜索和唯一 Viewer。当前授权仅修订本计划。
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/wiki-query-boundary/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`
 
 ## 背景与当前证据
@@ -24,12 +24,18 @@
 
 当前 Git 恢复基线为 `3641997`。本计划替换该提交中的第一版 draft；第一版错误地把 Wiki 页面定义为搜索列表与右侧 Reader 分栏，现已由用户明确否决。
 
+2026-09-09 本次修订依据：用户提供 `C:\Users\Xiao\Desktop\Snipaste_2026-09-09_19-56-45.png`，明确要求“按照类似图片的效果添加一个 wiki 本地搜索页面，搜索逻辑不要重写，不要动其余实现与功能”。该图片是视觉参考，不作为新功能清单；可见结构为左侧窄导航、顶部左侧返回/主页/收藏与标题、右侧搜索框、下方 Terraria 横幅和大块连续内容区域。截图中的置顶等按钮不构成新增功能授权。截图是会话附件，不是构建依赖；下面的结构说明作为持久验收依据。
+
+最终视觉依据为用户随后提供的 `C:\Users\Xiao\Desktop\Snipaste_2026-09-09_20-03-15.png`：有数据时直接展示完整本地 Wiki 首页，包含原站横幅、欢迎区、推荐资源包、游戏简介及后续内容。前一张“请先下载数据”仅代表空库情形；不得把它做成正常首页，也不以原生横幅加留白替代真实首页内容。
+
+补充源码证据：`WikiViewModel.Query` 已驱动 180 ms 防抖，`SearchCommand` 已支持立即查询；`SearchCoreAsync` 已处理取消、请求身份、结果映射和安全错误。新页面直接绑定这些能力，不改造查询流程。当前 `IsEmpty` 不能独立区分失败/不可用与零结果，因此新视图优先直接展示现有 `StatusMessage`，不再叠加硬编码“没有找到结果”。现有 `assets/windows/Viewer/Web/Terraria_Wiki_zh/index.html` 已提供 Logo/站点样式及动态正文容器；首页内容由本地数据提供，并非写死在该模板。`MainWindow.cs` 已使用活动 Wiki 的 `DefaultPageTitle` 设置首页，`Reader.OpenAsync` 是既有阅读入口；`SetHomePageAsync` 只设置 Reader 元信息，不能当作实际导航。实施时从现有活动 Wiki 配置取首页身份，经现有打开路径导航，不硬编码“首页”或另建查询接口。
+
 ## 目标与完成定义
 
 1. 左侧导航新增独立“Wiki”入口，保持现有五个入口的位置、命令和业务功能不变。
 2. 选择 Wiki 后，右侧整个工作区进入本地 Wiki 模式；不显示 AI/收藏/资料库等主页面，也不显示普通页面的左右 Reader 分栏。
-3. Wiki 模式提供本地搜索框和全宽结果列表；输入词条或关键词后只通过现有 Application Search 查询当前活动 Wiki。
-4. 选择结果后，Wiki 正文在同一个全宽工作区内打开，不在结果列表右侧另开 Reader；搜索结果与正文是同一 Wiki 页面内的两个状态。
+3. Wiki 模式采用参考图的“顶部工具栏与右侧搜索框 → 品牌横幅 → 全宽内容区”。搜索框在首页、结果和阅读状态均可访问，直接绑定现有 Query/SearchCommand，只通过现有 Application Search 查询当前活动 Wiki。
+4. 初次进入 Wiki 时通过唯一 Viewer 展示当前活动 Wiki 的本地首页；输入搜索后切到全宽结果，选择结果后在同一区域显示正文。首页、结果和正文为三个页面展示状态，不另开 Reader 分栏。
 5. Wiki 正文继续使用唯一 NativeWebView、现有页面/资源/内部链接、收藏、返回和本地 Viewer transport，不创建第二个 Viewer。
 6. 用户可以从正文回到当前搜索结果或重新搜索；切换到其他左侧导航后，对应页面恢复进入 Wiki 前的正常布局和 Reader 状态。
 7. 右上“打开 Wiki”在非 Wiki 页面继续只打开共享 Reader，1100 DIP 宽窄行为、Chat 状态、活动回答、收藏、资料库、数据管理和设置均不改变。
@@ -57,19 +63,22 @@
 非目标：
 
 - 不采用“搜索结果在左、Reader 在右”的 Wiki 页面布局。
-- 不修改其他五个页面的 XAML、ViewModel、用户流程或可见文案，除非编译证明 Shell 接线必须做最小适配。
+- 不修改其他五个页面的 XAML、ViewModel、用户流程或可见文案；必要接线只限 Shell 和 Wiki 页面。编译问题不作为扩大范围的理由。
 - 不改变非 Wiki 页面右上“打开 Wiki”、宽屏分栏、窄屏覆盖、关闭、Esc 或设置页隐藏行为。
 - 不合并或删除“Wiki 资料库”；它仍负责全部页面和对话历史，不承担正文全文检索页面。
 - 不修改搜索排序/匹配、FTS5、SQLite schema、数据包、同步、下载、Application 公共接口或 Viewer 内容协议。
 - 不新增第二个 Reader/WebView/Viewer session，不移动 Viewer backend，不升级依赖。
 - 不增加在线搜索、查询历史、建议服务、UI 框架、图标包、Android 或其他平台实现。
+- 不重写或抽取 `WikiViewModel` 搜索流程，不改 `SearchCoreAsync`、180 ms 防抖、取消/请求身份判断、结果映射、查询参数和数据源重置逻辑；不添加第二份搜索状态机、客户端过滤/排序或分页。
+- 不照搬截图中的置顶、旧浏览历史、同步和主题切换入口，不更换现有 Shell 外观、默认启动页面或空库启动引导。
+- 不清理共享样式、修复相邻历史问题、重新打包或实施其他 change。
 
 ## P0 / 兼容性影响
 
 - 手动搜索与离线阅读是 P0。Search 继续使用 `WikiQueryUseCases.SearchAsync`，正文继续使用现有 Application/Viewer 边界。
 - Wiki 模式只改变 Presentation 布局和状态，不改变数据、页面身份、Redirect、资源或内存返回栈语义。
 - 同一个 `ReaderHost` 在普通页面保持现有分栏/覆盖位置，在 Wiki 页面占满工作区；不得复制或把 NativeWebView 放入第二个 visual parent。
-- 进入 Wiki 前记录普通页面 Reader 状态，离开时恢复，避免新页面影响 Chat、收藏等既有行为。
+- 进入 Wiki 前仅保存恢复布局所需的 Reader 开关/展示状态；离开后按原导航规则恢复。共享 Viewer 继续保留最近实际阅读内容及原内存返回栈，不承诺恢复独立的旧正文、滚动位置或历史快照，不新建页面缓存或第二套返回栈。
 - 活动数据源变化继续取消搜索并清空旧结果；AI、资料库和 Viewer 仍读取同一数据。
 - 无数据迁移和不可逆操作；回退单独 Presentation 提交即可恢复现状。
 
@@ -83,25 +92,41 @@
 
 ### 2. 全宽 Wiki 页面状态
 
-- Wiki 搜索态：隐藏普通 `MainSurface`、Reader splitter 和 overlay；`WikiView` 跨越整个工作区，显示搜索栏、状态和全宽结果列表。
+- Wiki 首页态：同一个 ReaderHost 占满工作区，使用现有活动 Wiki 的 DefaultPageTitle 与阅读入口显示真实本地首页及原站横幅/正文/资源。只在必要时导航，不因布局更新反复打开首页。
+- Wiki 搜索态：在现有工作区内让 `WikiView` 占满可用宽度；普通 Reader splitter 和 overlay 不显示。若 WikiView 仍在 `MainSurface` 内，不隐藏它的父级；只切换互斥子视图和 Grid 占位。
 - Wiki 阅读态：搜索结果退出可见区域，同一个 `ReaderHost` 跨越整个工作区显示所选页面；不保留左右分栏。
-- Wiki 阅读头部提供返回搜索/重新搜索的真实入口，同时保留页面内部返回和收藏；不得通过覆盖 NativeWebView 的浮层实现，以避开原生 WebView airspace 问题。
+- Wiki 专用工具栏置于 Shell 内的独立布局行，保留搜索和“返回搜索”入口；工具栏不能覆盖 NativeWebView。现有 Reader 头部、返回/收藏命令和状态条原样复用，不为像素级复刻修改共享 ReaderView。
 - 从 Wiki 切换到其他 rail 入口时恢复进入前的普通 Reader 状态和现有响应式列；Chat 活动回答不取消。
 - 非 Wiki 页面继续使用当前 `MainSurface + GridSplitter + ReaderHost` 布局，右上“打开 Wiki”命令与可见行为不变。
 
 ### 3. 搜索行为
 
-- 保留现有 180 ms 防抖、CancellationToken、请求身份检查、Search DTO 和匹配文案。
-- 用最小内部状态区分初始、搜索中、结果、无结果、不可用、失败和阅读正文，避免错误状态同时显示“没有找到结果”。
-- 清空输入回到搜索初始态；选中结果进入阅读态；从阅读态返回时保留查询和结果，用户可继续选择或修改搜索。
+- 原样复用现有 180 ms 防抖、CancellationToken、请求身份检查、Search DTO 和匹配文案；搜索图标及 Enter 直接调用现有 SearchCommand，不另写事件处理查询路径。
+- 页面只消费 Query、IsAvailable、IsSearching、HasResults、Results 和 StatusMessage。状态提示独占一行，不覆盖结果；不再用 IsEmpty 叠加通用零结果文案。Shell 只增加首页/结果区域与正文区域的显示编排，不接管搜索内部状态。
+- 清空输入后由 Shell 切回本地首页；搜索结果清理由 Query 既有逻辑完成。选中结果进入阅读态；从阅读态返回搜索时保留查询和结果，用户可继续选择或修改搜索。
+- 阅读中修改非空查询时切回现有结果区，仍由 Query 原 setter 发起搜索；返回搜索不额外查询。“主页”清空查询并经 Reader.OpenAsync 打开活动 Wiki 的 DefaultPageTitle；不调用在线接口，也不改共享返回栈语义。
 - 搜索结果展示标题、匹配类型、可选 Redirect 和纯文本摘要；不改变 Core highlight/排序语义。
 
 ### 4. 视觉与响应式
 
-- 搜索态采用 24 DIP 页面边距、完整可用宽度和连续列表，不使用固定 360 DIP、嵌套卡片或逐项阴影卡。
-- 页面标题使用“本地 Wiki”，不增加重复副标题；搜索字段有永久标签、placeholder、焦点和 Automation Name。
+- 参考图布局（只在 Wiki 选中时出现，保留应用现有外层 Shell）：
+
+  ```text
+  现有左侧导航 │ Wiki 页内工具栏：主页 / 返回搜索 · Terraria Wiki    [搜索本地 Wiki…  搜索]
+               ├──────────────────────────────────────────────────────────────────
+               │ 首页：唯一 Viewer 显示原站横幅与本地首页正文
+               │       欢迎区 → 推荐资源包 → 游戏简介 → 其余已有内容
+               │ 结果：全宽连续列表，标题 / 匹配类型 / Redirect / 摘要
+               │ 正文：原 Reader 头部（返回 / 收藏）+ 唯一 WebView + 原状态条
+  ```
+
+- 工具栏左侧标题“Terraria Wiki”，右侧紧凑圆角搜索输入和搜索图标，placeholder 为“输入关键词搜索…”；提供可见“本地搜索”标签及 Automation Name。主页/返回搜索与正文内“返回上一页”语义分开；首页无正文时不放无效收藏按钮。既有 Reader 收藏仍在其原头部。
+- 首页横幅、欢迎区、推荐资源包、游戏简介和页面链接全部来自现有 Viewer 模板与本地首页 HTML；不在 Avalonia 中重画或硬编码这些版块，不修改 HTML/CSS/JS/图片。实际首页版本随用户已有数据而定，截图文字不是固定数据契约。
+- 搜索结果使用原生全宽列表；首页和正文使用同一个 WebView。原站横幅是否出现在正文、尺寸、滚动和主题表现全部沿用现有 Viewer，不另加或隐藏网页装饰。不同活动 Wiki 继续使用各自首页与站点资源，不强行套中文 Terraria 内容。
+- 有首页数据时直接显示完整首页；仅在已有宿主状态明确表示空库时提示“请先下载或导入数据”，通过现有导航进入数据管理。缺少单独首页、零搜索结果、初始化中和数据源不可用沿用现有错误/状态，不伪造欢迎内容、不自动下载、不改首次启动引导。
+- 搜索内容区采用 24 DIP 内边距、完整可用宽度和连续列表，去除 WikiView 的固定 360 DIP 宽度；不新增卡片阵列、重复说明或推荐词条。
 - 结果和正文都使用整个工作区；900×600 时不退回普通 Reader 覆盖层，也不依赖水平滚动。
-- 只使用现有语义 token/style。若旧 `wiki-search-pane` 改造后无引用，才做同范围清理。
+- 900×600 时原生工具栏可换行，搜索框独占下一行，主操作不隐藏。首页/正文沿用原 Viewer 响应式和主题同步，不为截图修改网页尺寸或样式；原生控件使用现有 Light/Dark 语义 token/style，新页特有布局样式仅作用于 Wiki 页。
 
 ### 5. 文档与测试
 
@@ -124,9 +149,9 @@
 - **MODIFY IF REQUIRED** `src/Terraria_Wiki.Windows/Presentation/Shell/ShellView.axaml.cs`：只扩展现有布局计算，使单一 ReaderHost 在 Wiki/普通模式间切换位置，不重建控件。
 - **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Shell/ShellViewModel.cs`：增加 Wiki 导航、搜索/阅读模式和普通 Reader 状态保存/恢复。
 - **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Wiki/WikiView.axaml`：实现全宽搜索页和结果列表，不承载第二个 Viewer。
-- **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Wiki/WikiViewModel.cs`：增加最小搜索/阅读状态和返回搜索命令，保留查询实现。
-- **MODIFY IF REQUIRED** `src/Terraria_Wiki.Windows/Presentation/Reader/ReaderView.axaml`：只在 Wiki 全宽阅读态显示“返回搜索/重新搜索”入口；普通 Reader 头部行为不变。
-- **MODIFY IF PROVEN UNUSED** `src/Terraria_Wiki.Windows/Presentation/Styles/Controls.axaml`：清理旧固定搜索卡 selector，或增加可复用且完整交互态的最小语义 class。
+- **KEEP** `src/Terraria_Wiki.Windows/Presentation/Wiki/WikiViewModel.cs`：Query、SearchCommand、搜索流程和结果映射原样复用；页内导航状态放在 Shell 的 Wiki 专属接线中。
+- **KEEP** `src/Terraria_Wiki.Windows/Presentation/Reader/ReaderView.axaml`、`ReaderPaneViewModel.cs` 与共享 `Styles/Controls.axaml`、`Styles/ThemeResources.axaml`：复用现有控件、命令和 token，不调整通用行为或清理样式。
+- **KEEP** `src/Terraria_Wiki.Windows/Terraria_Wiki.Windows.csproj` 与 `assets/windows/`：首页及横幅由现有 Viewer 加载，不新增资源引用、依赖或构建/发布修改。
 - **MODIFY** `tests/Terraria_Wiki.Windows.Tests/PresentationFlowTests.cs`：覆盖 Wiki 导航、全宽搜索/阅读切换、结果返回和普通 Reader 状态恢复。
 - **MODIFY** `tests/Terraria_Wiki.Windows.Tests/PresentationBoundaryTests.cs`：覆盖六入口、唯一 Viewer、Wiki 全宽布局和其他页面边界。
 - **MODIFY** `openspec/specs/windows-presentation/spec.md`、`README.md`、`openspec/project.md`：同步持续契约与当前状态。
@@ -136,7 +161,7 @@
 
 - [ ] 用户批准修订计划后将状态改为 `in-progress`，确认 Git 状态和恢复点。
 - [ ] 接入左侧 Wiki 导航和 Shell 状态；先用行为测试锁定其他五个入口及普通 Reader 状态不变。
-- [ ] 把现有 `WikiView` 改为全宽搜索态，补齐异步/错误/空状态和可访问性。
+- [ ] 接入参考图风格的 Wiki 工具栏、现有 Viewer 本地首页和全宽结果区；直接绑定现有搜索与状态属性，补齐可访问性，不修改搜索 ViewModel 或重画首页内容。
 - [ ] 接通搜索结果到全宽单一 ReaderHost，并实现返回搜索且保留查询结果。
 - [ ] 实现 Wiki/普通页面布局切换；验证同一个 NativeWebView 不重建、不重挂第二父级。
 - [ ] 更新 Presentation flow/boundary 回归与持续文档。
@@ -150,6 +175,7 @@
 - `git diff --check`；核对只修改计划内文件。
 - 确认源码仍只有一个 `<NativeWebView` 和一个 `new ViewerWebViewSession(`。
 - 确认 Presentation 不新增 SQLite/Core 数据服务、在线 Wiki、第二 transport 或依赖。
+- 对照实施前 diff，确认 WikiViewModel、Application/Core、ReaderView/ReaderPaneViewModel、其他五个页面、共享样式、csproj 和 Viewer 资产均无修改。
 - 检查 Wiki XAML 无 raw hex，导航/搜索/返回操作有 Automation Name，交互 style 状态完整。
 - 对比持续 spec，确认普通页面顶部按钮、Reader 宽窄阈值和设置页行为未被改写。
 
@@ -158,6 +184,7 @@
 - Windows .NET 10 Release build：9 个项目，要求 0 warning / 0 error，并编译 Avalonia XAML。
 - 定向运行 `PresentationFlowTests`、`PresentationBoundaryTests`，再运行全量 .NET tests；不发 AI 请求、不下载 Wiki、不修改真实数据。
 - 1280×820 与 900×600、Light/Dark：点击 Wiki rail 后搜索页占满工作区；选择结果后正文仍占满工作区，没有左右分栏或覆盖 Reader。
+- 使用已含首页的本地测试数据，对照最新参考图验收顶部搜索位置、原站横幅与完整首页内容；欢迎区、推荐资源包、游戏简介按本地 HTML 实际呈现，链接沿用既有处理。检查初次进入和主页按钮、首页→搜索→正文→返回搜索、窄窗搜索框换行、Enter/Tab、焦点，以及空库/首页缺失时的真实状态；不为获得截图数据自动下载 Wiki。
 - 标题、Redirect、正文、无结果和快速连续输入；验证结果排序沿用 Application、旧请求不覆盖新结果、错误安全。
 - 从正文返回搜索保留查询/结果；内部链接、Viewer 返回、收藏和状态条可用。
 - 分别从 Chat、收藏、资料库、数据管理进入/退出 Wiki，确认原页面状态与 Reader 开关恢复；设置页和顶部“打开 Wiki”行为不变。
@@ -184,21 +211,26 @@
 - 2026-09-09：用户以实机截图指出当前没有 Wiki 入口，并否决“左搜索 + 右 Reader”方向。
 - 2026-09-09：用户最终澄清：新增左侧 Wiki 导航；该页面全宽完成本地搜索与正文浏览；其他页面和功能全部不动。
 - 2026-09-09：重写本计划为全宽 Wiki 搜索/阅读模式；下一步等待用户批准，不实施源码。
+- 2026-09-09：按用户新参考图补充工具栏、右侧搜索、首页横幅、连续内容区和窄窗布局；收紧为搜索 ViewModel、共享 Reader 与其他页面实现全部 KEEP，仅修订此 plan。实施仍未开始。
+- 2026-09-09：用户进一步以 20:03:15 截图确认有数据首页效果；最终方案改为现有 Viewer 的完整本地 Wiki 首页，取消原生横幅/留白首页和新增图片资源引用。新增入口、首页/搜索/正文编排仍为唯一实施范围。
 
 ## 发现、偏差与决策
 
 - 发现：搜索、结果模型和 Viewer 均已存在；主要工作是新导航和单 Viewer 的两种 Shell 布局，而不是后端开发。
-- 决策：Wiki 页面内部使用“全宽搜索态 ↔ 全宽阅读态”，不使用搜索/Reader 分栏。
+- 决策：Wiki 页面内部使用“本地首页 ↔ 全宽搜索结果 ↔ 全宽正文”，首页与正文复用唯一 Viewer，不使用搜索/Reader 分栏。
 - 决策：普通页面继续采用既有共享 Reader 分栏/覆盖；新布局只在 `ShellSection.Wiki` 生效。
 - 决策：保持一个 ReaderHost/NativeWebView/Viewer session，通过同父级布局切换复用。
 - 决策：不触碰其他五个页面的功能与视觉，不进入相邻重构。
+- 决策：本次使用 terraria-ui 的语义 token、轻量列表、状态/键盘及 Windows 验收要求；用户参考图决定 Wiki 首页横幅与工具栏形态。Skill 中旧 `terraria-wiki-offline/src/` 路径按根治理规则解析为当前根级 `src/`，不恢复旧 checkout。
+- 发现：Local Viewer spec 仍记有 `RecordVisitAsync`，与当前项目基线所述旧浏览历史停止读写不一致；本计划不恢复历史写入，也不顺带修订该独立文档问题。
 
 ## 验证结果
 
 - 规划基线 Windows Release build 已通过 9 个项目、0 warning / 0 error；该证据不包含计划中的新功能。
-- `terraria-ui` Skill validator 已通过。
+- 旧计划记载 `terraria-ui` Skill validator 已通过；本轮未运行该 validator，不将其视为本次修订或新页面的验证。
 - 当前静态证据确认：Wiki 搜索实现存在但无导航；Shell/Reader 只有一个 NativeWebView/Viewer session。
 - 修订计划尚未实施，没有新 Wiki 页面或目标窗口通过结果。
+- 本轮仅核对计划、截图、现有搜索/Reader 接线和资产清单；不运行应用、不发搜索/AI/下载请求，不构建或打包。文档差异与 `git diff --check` 在修订后检查。
 
 ## 完成摘要
 
