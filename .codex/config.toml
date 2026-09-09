@@ -5,13 +5,7 @@ approval_policy = "on-request"
 approvals_reviewer = "auto_review"
 
 [features]
-multi_agent = true
-multi_agent_v2 = false
-
-[agents]
-max_concurrent_threads_per_session = 4
-default_subagent_model = "gpt-5.6-luna"
-default_subagent_reasoning_effort = "max"
+multi_agent = false
 
 [sandbox_workspace_write]
 network_access = true
