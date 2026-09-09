@@ -1,0 +1,54 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net10.0-windows10.0.17763.0</TargetFramework>
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+    <AssemblyName>Phase00.HostSpike</AssemblyName>
+    <RootNamespace>Phase00.HostSpike</RootNamespace>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="Avalonia" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Desktop" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Themes.Fluent" Version="12.1.1" />
+    <PackageReference Include="Avalonia.Controls.WebView" Version="12.0.1" />
+  </ItemGroup>
+  <ItemGroup>
+    <ProjectReference Include="../Phase00.Probes/Phase00.Probes.csproj" />
+  </ItemGroup>
+
+  <Target Name="CopyViewerAssetsAfterBuild" AfterTargets="Build">
+    <PropertyGroup><_ViewerOutDir>$(OutDir)ViewerAssets</_ViewerOutDir></PropertyGroup>
+    <ItemGroup>
+      <_ViewerFiles Include="$(ViewerSourceRoot)\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(_ViewerOutDir)\Web" />
+    <Copy SourceFiles="@(_ViewerFiles)"
+          DestinationFiles="@(_ViewerFiles->'$(_ViewerOutDir)\Web\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <MakeDir Directories="$(_ViewerOutDir)\_common" />
+    <Copy SourceFiles="$(ViewerBridgeSource)"
+          DestinationFiles="$(_ViewerOutDir)\_common\iframe-bridge.js"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\assets\index.html"
+          DestinationFiles="$(_ViewerOutDir)\index.html"
+          SkipUnchangedFiles="true" />
+  </Target>
+  <Target Name="CopyViewerAssetsAfterPublish" AfterTargets="Publish">
+    <PropertyGroup><_ViewerOutDir>$(PublishDir)ViewerAssets</_ViewerOutDir></PropertyGroup>
+    <ItemGroup>
+      <_ViewerFiles Include="$(ViewerSourceRoot)\**\*" />
+    </ItemGroup>
+    <MakeDir Directories="$(_ViewerOutDir)\Web" />
+    <Copy SourceFiles="@(_ViewerFiles)"
+          DestinationFiles="@(_ViewerFiles->'$(_ViewerOutDir)\Web\%(RecursiveDir)%(Filename)%(Extension)')"
+          SkipUnchangedFiles="true" />
+    <MakeDir Directories="$(_ViewerOutDir)\_common" />
+    <Copy SourceFiles="$(ViewerBridgeSource)"
+          DestinationFiles="$(_ViewerOutDir)\_common\iframe-bridge.js"
+          SkipUnchangedFiles="true" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\assets\index.html"
+          DestinationFiles="$(_ViewerOutDir)\index.html"
+          SkipUnchangedFiles="true" />
+  </Target>
+</Project>

@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Phase 00 Viewer Host</title>
+  <style>html,body,iframe{margin:0;width:100%;height:100%;border:0;overflow:hidden}body{background:#202124}</style>
+  <script src="/_common/iframe-bridge.js"></script>
+</head>
+<body>
+  <iframe id="wiki-frame" title="Terraria Wiki" src="/wiki/Terraria_Wiki_zh/index.html"></iframe>
+  <script>
+    // The old bridge deliberately uses postMessage('*') for a MAUI Blazor
+    // host. This disposable outer page narrows the experiment to one
+    // same-origin frame and forwards only the existing request/response
+    // envelope to NativeWebView. Invalid source/origin messages never reach
+    // the host and therefore cannot be counted as a successful bridge call.
+    (() => {
+      const frame = document.getElementById('wiki-frame');
+      const origin = window.location.origin;
+      window.addEventListener('message', event => {
+        if (event.origin !== origin || event.source !== frame.contentWindow) return;
+        if (!event.data || typeof event.data !== 'object') return;
+        if (event.data.type !== 'req' && event.data.type !== 'res') return;
+        if (!window.chrome?.webview?.postMessage) return;
+        window.chrome.webview.postMessage(JSON.stringify({
+          source: 'phase00-viewer',
+          origin,
+          envelope: event.data
+        }));
+      });
+    })();
+  </script>
+</body>
+</html>

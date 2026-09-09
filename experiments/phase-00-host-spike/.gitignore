@@ -1,0 +1,13 @@
+artifacts/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userprefs
+*.nupkg
+*.snupkg
+*.pkg
+*.db
+*.db-shm
+*.db-wal
+smoke-*.json

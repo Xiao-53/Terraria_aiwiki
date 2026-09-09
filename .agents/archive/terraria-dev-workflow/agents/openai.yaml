@@ -1,0 +1,7 @@
+interface:
+  display_name: "Terraria Dev Workflow"
+  short_description: "Delegate substantial Terraria coding to Luna max"
+  default_prompt: "Use $terraria-dev-workflow to delegate and review this substantial Terraria code implementation."
+
+policy:
+  allow_implicit_invocation: true
