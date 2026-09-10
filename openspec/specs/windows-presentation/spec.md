@@ -66,7 +66,7 @@
 - AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
 - AI 配置与 Credential Manager 不依赖 Wiki 数据库 Runtime 才可编辑。没有有效数据根时 API Key 输入、provider 载入与保存仍可用；保存成功后明确提示 AI 将在选定有效数据根后启动，不把暂时无法重启误报成凭据保存失败。
 - 常规页同级“关于与更新”区域显示应用版本、安装/portable 形态、Windows/WebView2 状态、unsigned 告知和有界诊断。只有用户点击后才检查公开 GitHub stable Releases；检查、可用、下载、取消、待重启、失败与禁用均为页内状态，失败不影响离线功能。
-- 启动错误只显示当前适用的恢复动作：数据根失败自动进入数据管理页并使用页内选择/重选，WebView2 缺失提供 Microsoft 官方获取入口，其他失败保留重试；不得让无关按钮暗示错误恢复方式。
+- 启动错误只显示当前适用的恢复动作：数据根或数据兼容失败自动进入数据管理页并使用页内选择/重选，WebView2 缺失提供 Microsoft 官方获取入口，Viewer 静态资产、loopback bind、导航或 DOM Ready 失败明确归为 Viewer 阶段并保留重试，其他失败保留通用重试；不得让无关按钮暗示错误恢复方式。`data-directory-conflict` 必须说明检测到两套 Wiki 数据且均未修改，不显示完整目录、文件大小、记录数量或底层异常。
 
 ## 安全 Markdown
 

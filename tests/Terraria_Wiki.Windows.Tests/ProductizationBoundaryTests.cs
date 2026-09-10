@@ -43,8 +43,15 @@ public sealed class ProductizationBoundaryTests
         try
         {
             var diagnostics = new ProductDiagnostics(root, maxLogBytes: 512);
+            diagnostics.Write(ProductDiagnosticEvent.StartupFailed, "webview2-missing/secret value");
             for (var index = 0; index < 20; index++)
-                diagnostics.Write(ProductDiagnosticEvent.StartupFailed, "webview2-missing/secret value");
+            {
+                diagnostics.Write(ProductDiagnosticEvent.StartupFailed, "data-directory-conflict");
+                diagnostics.WriteStartupStage(
+                    WindowsStartupStage.CompatibilityPreparation,
+                    elapsedMilliseconds: 120 + index,
+                    durationMilliseconds: 2);
+            }
 
             Assert.NotNull(diagnostics.LogPath);
             Assert.NotNull(diagnostics.PreviousLogPath);
@@ -55,8 +62,10 @@ public sealed class ProductizationBoundaryTests
             var content = File.ReadAllText(diagnostics.LogPath!)
                 + File.ReadAllText(diagnostics.PreviousLogPath!);
             Assert.DoesNotContain("secret value", content, StringComparison.Ordinal);
-            Assert.DoesNotContain("/", content, StringComparison.Ordinal);
-            Assert.Contains("webview2-missingsecretvalue", content, StringComparison.Ordinal);
+            Assert.DoesNotContain("webview2-missing/secret", content, StringComparison.Ordinal);
+            Assert.Contains("data-directory-conflict", content, StringComparison.Ordinal);
+            Assert.Contains("compatibility-preparation", content, StringComparison.Ordinal);
+            Assert.Contains("durationMilliseconds", content, StringComparison.Ordinal);
         }
         finally
         {

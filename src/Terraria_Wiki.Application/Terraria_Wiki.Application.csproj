@@ -13,5 +13,6 @@
 
   <ItemGroup>
     <InternalsVisibleTo Include="Terraria_Wiki.Application.Tests" />
+    <InternalsVisibleTo Include="Terraria_Wiki.Windows" />
   </ItemGroup>
 </Project>

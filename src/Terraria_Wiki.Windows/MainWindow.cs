@@ -35,6 +35,7 @@ internal sealed partial class MainWindow : Window
     private readonly Stopwatch _lifecycle = Stopwatch.StartNew();
     private readonly WindowsLifecycleTimings _timings = new();
     private readonly long _processStartOffsetMilliseconds;
+    private readonly long _windowConstructedMilliseconds;
     private readonly ShellViewModel _shellViewModel;
     private readonly ShellView _shellView;
     private readonly IProductUpdateService _productUpdateService;
@@ -46,9 +47,11 @@ internal sealed partial class MainWindow : Window
     private bool _isRestarting;
     private WindowsSmokeResult? _smokeResult;
     private Task _aiStartupTask = Task.CompletedTask;
+    private long _viewerNavigationStartedMilliseconds;
 
     public MainWindow(string[] arguments)
     {
+        WindowsStartupClock.MarkManagedEntry();
         _arguments = arguments ?? [];
         _runtimeArguments = _arguments.ToArray();
         _smokeLogPath = ParseOption(_arguments, "--smoke-log");
@@ -87,6 +90,17 @@ internal sealed partial class MainWindow : Window
 
         Opened += OnOpened;
         Closing += OnClosing;
+
+        var managedEntry = WindowsStartupClock.ManagedEntryMilliseconds;
+        RecordStartupStage(
+            WindowsStartupStage.ManagedEntry,
+            managedEntry,
+            managedEntry);
+        _windowConstructedMilliseconds = ElapsedFromProcessStart();
+        RecordStartupStage(
+            WindowsStartupStage.WindowConstructed,
+            _windowConstructedMilliseconds,
+            Math.Max(0, _windowConstructedMilliseconds - managedEntry));
     }
 
     private static IChatConversationStore CreateChatConversationStore(string? legacyFavoritesPath)
@@ -104,7 +118,15 @@ internal sealed partial class MainWindow : Window
         }
     }
 
-    private async void OnOpened(object? sender, EventArgs args) => await StartAsync();
+    private async void OnOpened(object? sender, EventArgs args)
+    {
+        var opened = ElapsedFromProcessStart();
+        RecordStartupStage(
+            WindowsStartupStage.WindowOpened,
+            opened,
+            Math.Max(0, opened - _windowConstructedMilliseconds));
+        await StartAsync();
+    }
 
     private async void OnRetryStartupRequested(object? sender, EventArgs args) => await RetryStartupAsync();
 
@@ -147,11 +169,16 @@ internal sealed partial class MainWindow : Window
             var runtime = await WindowsClientRuntime.CreateAsync(
                 _runtimeArguments,
                 IsDarkTheme,
+                timing => RecordStartupStage(timing.Stage, timing.DurationMilliseconds),
                 _lifetime.Token);
             _runtime = runtime;
             _shellViewModel.SetWebView2Status(runtime.WebView2);
             _diagnostics.Write(ProductDiagnosticEvent.RuntimeReady, runtime.WebView2.Version);
             _timings.RuntimeReadyMilliseconds = ElapsedFromProcessStart();
+            RecordStartupStage(
+                WindowsStartupStage.RuntimeReady,
+                _timings.RuntimeReadyMilliseconds,
+                0);
             runtime.Viewer.StatusChanged += OnViewerStatusChanged;
             RequestedThemeVariant = runtime.Preferences.AppTheme switch
             {
@@ -160,7 +187,20 @@ internal sealed partial class MainWindow : Window
                 _ => ThemeVariant.Default,
             };
 
-            await runtime.Viewer.EnableAsync(_lifetime.Token);
+            var viewerTimer = Stopwatch.StartNew();
+            try
+            {
+                await runtime.Viewer.EnableAsync(_lifetime.Token);
+            }
+            catch (Exception exception) when (exception is not OperationCanceledException)
+            {
+                throw WrapViewerServerFailure(exception);
+            }
+            finally
+            {
+                viewerTimer.Stop();
+                RecordStartupStage(WindowsStartupStage.ViewerServer, viewerTimer.ElapsedMilliseconds);
+            }
             _timings.ViewerServerReadyMilliseconds = ElapsedFromProcessStart();
 
             var session = new ViewerWebViewSession(_shellView.WebView, runtime.Bridge);
@@ -184,9 +224,41 @@ internal sealed partial class MainWindow : Window
             }
 
             _shellViewModel.Reader.SetStatus("正在载入本地 Wiki 首页…");
-            session.Navigate(ready.BaseUri);
+            var navigationTimer = Stopwatch.StartNew();
+            try
+            {
+                session.Navigate(ready.BaseUri);
+                _viewerNavigationStartedMilliseconds = ElapsedFromProcessStart();
+                RecordStartupStage(
+                    WindowsStartupStage.ViewerNavigationStarted,
+                    _viewerNavigationStartedMilliseconds,
+                    navigationTimer.ElapsedMilliseconds);
+            }
+            catch (Exception exception)
+            {
+                throw new WindowsClientStartupException(
+                    "viewer-navigation-failed",
+                    "The local Viewer could not begin navigation.",
+                    exception);
+            }
 
-            await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), _lifetime.Token);
+            var domTimer = Stopwatch.StartNew();
+            try
+            {
+                await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), _lifetime.Token);
+            }
+            catch (TimeoutException exception)
+            {
+                throw new WindowsClientStartupException(
+                    "viewer-dom-ready-timeout",
+                    "The local Viewer did not become interactive in time.",
+                    exception);
+            }
+            finally
+            {
+                domTimer.Stop();
+                RecordStartupStage(WindowsStartupStage.ViewerDomReady, domTimer.ElapsedMilliseconds);
+            }
             _timings.ViewerReadyMilliseconds = ElapsedFromProcessStart();
             await _shellViewModel.Reader.SetHomePageAsync(activeWiki.DefaultPageTitle);
             _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
@@ -281,6 +353,10 @@ internal sealed partial class MainWindow : Window
     private void OnViewerNavigationCompleted(object? sender, WebViewNavigationCompletedEventArgs args)
     {
         _timings.ViewerNavigationCompletedMilliseconds = ElapsedFromProcessStart();
+        RecordStartupStage(
+            WindowsStartupStage.ViewerNavigationCompleted,
+            _timings.ViewerNavigationCompletedMilliseconds,
+            Math.Max(0, _timings.ViewerNavigationCompletedMilliseconds - _viewerNavigationStartedMilliseconds));
         _shellViewModel.Reader.SetStatus("正在准备本地 Wiki 内容…");
     }
 
@@ -306,45 +382,75 @@ internal sealed partial class MainWindow : Window
 
     private void ShowStartupError(Exception exception)
     {
-        var recovery = exception switch
-        {
-            WindowsClientStartupException { Code: "webview2-missing" } => StartupRecoveryKind.InstallWebView2,
-            DataRootResolutionException => StartupRecoveryKind.SelectDataRoot,
-            ApplicationUseCaseException { Code: "initialization-failed" or "no-wikis" } =>
-                StartupRecoveryKind.SelectDataRoot,
-            _ => StartupRecoveryKind.Retry,
-        };
-        var message = exception switch
-        {
-            HostMountException mount => mount.Message,
-            DataRootResolutionException dataRoot => dataRoot.Message,
-            HostSettingsException settings => settings.Message,
-            WindowsClientStartupException { Code: "webview2-missing" } =>
-                "未检测到 Microsoft Edge WebView2 Runtime；请从 Microsoft 官方页面安装或修复 Evergreen Runtime。",
-            WindowsClientStartupException startup => startup.Message,
-            ApplicationUseCaseException application => application.Message,
-            _ => "应用启动失败。",
-        };
+        var presentation = ClassifyStartupFailure(exception);
         _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
-        if (recovery == StartupRecoveryKind.SelectDataRoot)
+        if (presentation.Recovery == StartupRecoveryKind.SelectDataRoot)
         {
-            var dataRootMessage = exception switch
-            {
-                DataRootResolutionException { Code: "data-root-required" } =>
-                    "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。",
-                DataRootResolutionException { Code: "default-data-root-unavailable" } =>
-                    "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他空文件夹或已有数据库文件夹。",
-                _ =>
-                    "Wiki 数据库无法初始化。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。",
-            };
-            _shellViewModel.ShowDataRootRecovery(dataRootMessage);
+            _shellViewModel.ShowDataRootRecovery(presentation.Message);
             return;
         }
         _shellViewModel.SetStartupStatus(
-            message + " 处理后点击“重试”。",
+            presentation.Message + " 处理后点击“重试”。",
             isError: true,
-            recovery);
+            presentation.Recovery);
     }
+
+    internal static StartupFailurePresentation ClassifyStartupFailure(Exception exception) => exception switch
+    {
+        WindowsClientStartupException { Code: "webview2-missing" } => new(
+            StartupRecoveryKind.InstallWebView2,
+            "未检测到 Microsoft Edge WebView2 Runtime；请从 Microsoft 官方页面安装或修复 Evergreen Runtime。"),
+        DataRootResolutionException { Code: "data-root-required" } => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。"),
+        DataRootResolutionException { Code: "default-data-root-unavailable" } => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他空文件夹或已有数据库文件夹。"),
+        DataRootResolutionException => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "Wiki 数据文件夹不可用。请在数据管理页面选择空文件夹或包含有效 Manager.db 的文件夹。"),
+        ApplicationUseCaseException { Code: "data-directory-conflict" } => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "检测到旧目录与目标目录中同时存在 Wiki 数据；应用未修改任何一套数据。请在数据管理页面选择已准备好的有效数据文件夹。"),
+        ApplicationUseCaseException { Code: "database-family-conflict" } => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "检测到相互冲突的 Wiki 数据库文件；应用未修改这些文件。请在数据管理页面选择已准备好的有效数据文件夹。"),
+        ApplicationUseCaseException => new(
+            StartupRecoveryKind.SelectDataRoot,
+            "Wiki 数据库无法初始化。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。"),
+        WindowsClientStartupException { Code: "viewer-assets-missing" } => new(
+            StartupRecoveryKind.Retry,
+            "本地 Viewer 静态资源缺失，请修复应用文件。"),
+        WindowsClientStartupException { Code: "viewer-bind-failed" } => new(
+            StartupRecoveryKind.Retry,
+            "本地 Viewer 无法绑定 loopback 端口。"),
+        WindowsClientStartupException { Code: "viewer-navigation-failed" } => new(
+            StartupRecoveryKind.Retry,
+            "本地 Viewer 无法开始页面导航。"),
+        WindowsClientStartupException { Code: "viewer-dom-ready-timeout" } => new(
+            StartupRecoveryKind.Retry,
+            "本地 Viewer 页面未能在时限内就绪。"),
+        WindowsClientStartupException startup => new(StartupRecoveryKind.Retry, startup.Message),
+        HostMountException mount => new(StartupRecoveryKind.Retry, mount.Message),
+        HostSettingsException settings => new(StartupRecoveryKind.Retry, settings.Message),
+        _ => new(StartupRecoveryKind.Retry, "应用启动失败。"),
+    };
+
+    internal static WindowsClientStartupException WrapViewerServerFailure(Exception exception) => exception switch
+    {
+        DirectoryNotFoundException or FileNotFoundException => new WindowsClientStartupException(
+            "viewer-assets-missing",
+            "The local Viewer assets are unavailable.",
+            exception),
+        ViewerServerStartException => new WindowsClientStartupException(
+            "viewer-bind-failed",
+            "The local Viewer could not bind its loopback endpoint.",
+            exception),
+        _ => new WindowsClientStartupException(
+            "viewer-server-start-failed",
+            "The local Viewer server could not start.",
+            exception),
+    };
 
     private static string GetSafeErrorCode(Exception exception) => exception switch
     {
@@ -353,8 +459,25 @@ internal sealed partial class MainWindow : Window
         HostSettingsException settings => settings.Code,
         HostMountException mount => mount.Code,
         ApplicationUseCaseException application => application.Code,
-        _ => exception.GetType().Name,
+        _ => "unknown-startup-error",
     };
+
+    private void RecordStartupStage(
+        WindowsStartupStage stage,
+        long durationMilliseconds)
+    {
+        var elapsed = ElapsedFromProcessStart();
+        RecordStartupStage(stage, elapsed, durationMilliseconds);
+    }
+
+    private void RecordStartupStage(
+        WindowsStartupStage stage,
+        long elapsedMilliseconds,
+        long durationMilliseconds)
+    {
+        _timings.RecordStartupStage(stage, elapsedMilliseconds, durationMilliseconds);
+        _diagnostics.WriteStartupStage(stage, elapsedMilliseconds, durationMilliseconds);
+    }
 
     private async Task RunSmokeAsync()
     {
@@ -934,6 +1057,10 @@ internal sealed record WindowsUpdateSmokeResult(
 
 internal sealed class WindowsLifecycleTimings
 {
+    private readonly object _startupStageGate = new();
+
+    [JsonPropertyName("startup_stages")]
+    public List<WindowsStartupStageTiming> StartupStages { get; } = [];
     [JsonPropertyName("runtime_ready_ms")]
     public long RuntimeReadyMilliseconds { get; set; }
     [JsonPropertyName("viewer_server_ready_ms")]
@@ -978,7 +1105,25 @@ internal sealed class WindowsLifecycleTimings
     public long RuntimeDisposeMilliseconds { get; set; }
     [JsonPropertyName("close_total_ms")]
     public long CloseTotalMilliseconds { get; set; }
+
+    internal void RecordStartupStage(
+        WindowsStartupStage stage,
+        long elapsedMilliseconds,
+        long durationMilliseconds)
+    {
+        lock (_startupStageGate)
+        {
+            StartupStages.Add(new WindowsStartupStageTiming(
+                WindowsStartupClock.Name(stage),
+                Math.Max(0, elapsedMilliseconds),
+                Math.Max(0, durationMilliseconds)));
+        }
+    }
 }
+
+internal sealed record StartupFailurePresentation(
+    StartupRecoveryKind Recovery,
+    string Message);
 
 internal sealed record WindowsAiSmokeResult(
     bool Success,

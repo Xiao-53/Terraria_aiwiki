@@ -1,3 +1,4 @@
+using System.Security.Cryptography;
 using Terraria_Wiki.Core.Compatibility;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Services;
@@ -261,6 +262,145 @@ public sealed class ActiveWikiTests
 
         Assert.Contains("data-wiki=\"Sword\"", read.Content);
     }
+
+    [Fact]
+    public async Task InitializationPreservesCompatibilityCodeAndDoesNotModifyConflictingDataFamilies()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
+        await fixture.State.ManagerDatabase.Init();
+        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
+        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
+        await CreateContentDatabaseAsync(
+            Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName),
+            "legacy-content");
+        await CreateContentDatabaseAsync(
+            Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName),
+            "current-content");
+        File.WriteAllBytes(Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName) + "-wal", [1, 2, 3]);
+        File.WriteAllBytes(Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName) + "-shm", [4, 5, 6]);
+        await fixture.State.ManagerDatabase.CloseConnection();
+        var before = SnapshotProtectedFiles(fixture.Root);
+
+        var error = await Assert.ThrowsAsync<ApplicationUseCaseException>(
+            () => fixture.Application.ActiveWiki.InitializeAsync());
+
+        Assert.Equal("data-directory-conflict", error.Code);
+        Assert.DoesNotContain(fixture.Root, error.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(before, SnapshotProtectedFiles(fixture.Root));
+    }
+
+    [Fact]
+    public async Task InitializationUsesSavedStatisticsSnapshotUntilExplicitRefresh()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
+        await fixture.State.ManagerDatabase.Init();
+        var book = (await fixture.State.ManagerDatabase.GetItemsAsync<WikiBook>()).Single(item => item.Id == 1);
+        book.PageCount = 9001;
+        book.RedirectCount = 9002;
+        book.ResourceCount = 9003;
+        book.DataSize = 9004;
+        await fixture.State.ManagerDatabase.SaveItemAsync(book);
+        await CreateContentDatabaseAsync(
+            Path.Combine(fixture.Root, book.DataFolder, LegacyWikiCompatibility.CurrentDatabaseName),
+            "current-content");
+        var timings = new List<ApplicationStartupTiming>();
+
+        var initialized = await fixture.Application.ActiveWiki.InitializeAsync(timings.Add);
+
+        Assert.Equal(9001, initialized.PageCount);
+        Assert.Equal(9002, initialized.RedirectCount);
+        Assert.Equal(9003, initialized.ResourceCount);
+        Assert.Equal(9004, initialized.DataSize);
+        Assert.Equal(
+            [
+                ApplicationStartupStage.DataLayoutPreflight,
+                ApplicationStartupStage.ManagerInitializationAndRecovery,
+                ApplicationStartupStage.Settings,
+                ApplicationStartupStage.CompatibilityPreparation,
+                ApplicationStartupStage.ContentInitialization,
+                ApplicationStartupStage.StatisticsSnapshot,
+            ],
+            timings.Select(timing => timing.Stage));
+        Assert.Equal(0, timings.Single(timing => timing.Stage == ApplicationStartupStage.StatisticsSnapshot).DurationMilliseconds);
+
+        var refreshed = await fixture.Application.Data.GetStatisticsAsync();
+
+        Assert.Equal(2, refreshed.PageCount);
+        Assert.Equal(0, refreshed.RedirectCount);
+        Assert.Equal(0, refreshed.ResourceCount);
+        Assert.NotEqual(9004, refreshed.DataSize);
+    }
+
+    [Fact]
+    public async Task PendingImportForAnyRegisteredWikiRunsBeforeConflictFastFailure()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
+        await fixture.State.ManagerDatabase.Init();
+        await fixture.State.ManagerDatabase.CloseConnection();
+        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
+        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
+        Directory.CreateDirectory(legacyDirectory);
+        Directory.CreateDirectory(currentDirectory);
+        File.WriteAllBytes(Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName), [1]);
+        File.WriteAllBytes(Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName), [2]);
+        var stagingRoot = Path.Combine(fixture.Root, "Temp");
+        Directory.CreateDirectory(stagingRoot);
+        await File.WriteAllTextAsync(Path.Combine(stagingRoot, "import-2.journal.json"), "{}");
+        var timings = new List<ApplicationStartupTiming>();
+
+        var error = await Assert.ThrowsAsync<ApplicationUseCaseException>(
+            () => fixture.Application.ActiveWiki.InitializeAsync(timings.Add));
+
+        Assert.Equal("initialization-failed", error.Code);
+        Assert.Contains(
+            timings,
+            timing => timing.Stage == ApplicationStartupStage.ManagerInitializationAndRecovery);
+        Assert.DoesNotContain(
+            timings,
+            timing => timing.Stage == ApplicationStartupStage.CompatibilityPreparation);
+    }
+
+    private static async Task CreateContentDatabaseAsync(string path, string contentValue)
+    {
+        var database = new ContentDbService(path);
+        try
+        {
+            var book = CreateBookOne();
+            await database.Init(seedBook: book);
+            await database.SaveItemAsync(new WikiPage
+            {
+                Title = "Distinct Page",
+                Content = contentValue,
+                LastModified = DateTime.UnixEpoch,
+            });
+        }
+        finally
+        {
+            await database.CloseConnection();
+        }
+    }
+
+    private static string[] SnapshotProtectedFiles(string root) => Directory
+        .EnumerateFiles(root, "*", SearchOption.AllDirectories)
+        .Where(path =>
+        {
+            var name = Path.GetFileName(path);
+            return string.Equals(name, "Manager.db", StringComparison.Ordinal)
+                || name.StartsWith(LegacyWikiCompatibility.LegacyDatabaseName, StringComparison.Ordinal)
+                || name.StartsWith(LegacyWikiCompatibility.CurrentDatabaseName, StringComparison.Ordinal);
+        })
+        .OrderBy(path => path, StringComparer.Ordinal)
+        .Select(path =>
+        {
+            var relative = Path.GetRelativePath(root, path);
+            using var stream = new FileStream(
+                path,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.ReadWrite | FileShare.Delete);
+            return $"{relative}|{stream.Length}|{Convert.ToHexString(SHA256.HashData(stream))}";
+        })
+        .ToArray();
 
     private static WikiBook CreateBookOne() => new()
     {

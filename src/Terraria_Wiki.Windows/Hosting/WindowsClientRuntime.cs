@@ -63,9 +63,19 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
     public static async Task<WindowsClientRuntime> CreateAsync(
         IReadOnlyList<string> arguments,
         Func<bool> isDarkTheme,
+        Action<WindowsStartupStageMeasurement>? startupObserver = null,
         CancellationToken cancellationToken = default)
     {
-        var webView2 = WebView2RuntimeProbe.Probe();
+        var stageTimer = Stopwatch.StartNew();
+        WebView2RuntimeStatus webView2;
+        try
+        {
+            webView2 = WebView2RuntimeProbe.Probe();
+        }
+        finally
+        {
+            ReportStartupStage(startupObserver, WindowsStartupStage.WebView2Probe, stageTimer.ElapsedMilliseconds);
+        }
         if (!webView2.Available)
             throw new WindowsClientStartupException("webview2-missing", webView2.Error ?? "WebView2 Runtime is unavailable.");
 
@@ -77,13 +87,23 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         ApplicationPreferences? loadedPreferences = null;
         try
         {
-            guard.AcquireSingleInstance();
-            var settingsPath = ParseHostSettingsPath(arguments);
-            var settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
-            var resolution = await new DataRootResolver(settings)
-                .ResolveAsync(arguments, cancellationToken)
-                .ConfigureAwait(false);
-            guard.AcquireDataRoot(resolution.Path);
+            DataRootResolution resolution;
+            HostSettingsStore settings;
+            stageTimer.Restart();
+            try
+            {
+                guard.AcquireSingleInstance();
+                var settingsPath = ParseHostSettingsPath(arguments);
+                settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
+                resolution = await new DataRootResolver(settings)
+                    .ResolveAsync(arguments, cancellationToken)
+                    .ConfigureAwait(false);
+                guard.AcquireDataRoot(resolution.Path);
+            }
+            finally
+            {
+                ReportStartupStage(startupObserver, WindowsStartupStage.DataRootAndLocks, stageTimer.ElapsedMilliseconds);
+            }
 
             httpClient = new HttpClient { Timeout = TimeSpan.FromMinutes(2) };
             var dataSource = new ApplicationViewerDataSource(() =>
@@ -103,8 +123,23 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
                 new HttpClientWikiHttpTransport(httpClient));
             viewer.SetActiveWikiProvider(application.ActiveWiki.GetActiveAsync);
 
-            await application.ActiveWiki.InitializeAsync(cancellationToken).ConfigureAwait(false);
-            var preferences = await application.Settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            await application.ActiveWiki.InitializeAsync(
+                    timing => ReportStartupStage(
+                        startupObserver,
+                        MapStartupStage(timing.Stage),
+                        timing.DurationMilliseconds),
+                    cancellationToken)
+                .ConfigureAwait(false);
+            stageTimer.Restart();
+            ApplicationPreferences preferences;
+            try
+            {
+                preferences = await application.Settings.GetAsync(cancellationToken).ConfigureAwait(false);
+            }
+            finally
+            {
+                ReportStartupStage(startupObserver, WindowsStartupStage.RuntimePreferences, stageTimer.ElapsedMilliseconds);
+            }
             loadedPreferences = preferences;
             var bridge = new ViewerBridge(
                 application,
@@ -355,6 +390,28 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             value = Path.GetFullPath(arguments[index]);
         }
         return value;
+    }
+
+    private static WindowsStartupStage MapStartupStage(ApplicationStartupStage stage) => stage switch
+    {
+        ApplicationStartupStage.DataLayoutPreflight => WindowsStartupStage.DataLayoutPreflight,
+        ApplicationStartupStage.ManagerInitializationAndRecovery => WindowsStartupStage.ManagerInitializationAndRecovery,
+        ApplicationStartupStage.Settings => WindowsStartupStage.Settings,
+        ApplicationStartupStage.CompatibilityPreparation => WindowsStartupStage.CompatibilityPreparation,
+        ApplicationStartupStage.ContentInitialization => WindowsStartupStage.ContentInitialization,
+        ApplicationStartupStage.StatisticsSnapshot => WindowsStartupStage.StatisticsSnapshot,
+        _ => throw new ArgumentOutOfRangeException(nameof(stage), stage, null),
+    };
+
+    private static void ReportStartupStage(
+        Action<WindowsStartupStageMeasurement>? observer,
+        WindowsStartupStage stage,
+        long durationMilliseconds)
+    {
+        if (observer is null)
+            return;
+        try { observer(new WindowsStartupStageMeasurement(stage, durationMilliseconds)); }
+        catch { }
     }
 }
 

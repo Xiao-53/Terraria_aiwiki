@@ -1,4 +1,5 @@
 using Avalonia.Input;
+using System.Net.Sockets;
 using Terraria_Wiki.Application;
 using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
@@ -11,6 +12,8 @@ using Terraria_Wiki.Windows.Presentation.Markdown;
 using Terraria_Wiki.Windows.Presentation.Reader;
 using Terraria_Wiki.Windows.Presentation.Shell;
 using Terraria_Wiki.Windows.Presentation.Wiki;
+using Terraria_Wiki.Windows.Hosting;
+using Terraria_Wiki.Windows.Viewer;
 
 namespace Terraria_Wiki.Windows.Tests;
 
@@ -73,6 +76,29 @@ public sealed class PresentationFlowTests
         shell.Management.SetDataRoot(@"C:\WikiData");
         Assert.Equal(@"C:\WikiData", shell.Management.DataRootPath);
         Assert.Equal("更改文件夹", shell.Management.DataRootActionText);
+    }
+
+    [Fact]
+    public void StartupFailureClassificationSeparatesDataCompatibilityFromViewerFailures()
+    {
+        var conflict = MainWindow.ClassifyStartupFailure(
+            new ApplicationUseCaseException("data-directory-conflict", "unsafe path C:\\secret"));
+        var assets = MainWindow.ClassifyStartupFailure(
+            MainWindow.WrapViewerServerFailure(new FileNotFoundException("C:\\secret\\index.html")));
+        var bind = MainWindow.ClassifyStartupFailure(
+            MainWindow.WrapViewerServerFailure(new ViewerServerStartException(0, new SocketException())));
+        var dom = MainWindow.ClassifyStartupFailure(
+            new WindowsClientStartupException("viewer-dom-ready-timeout", "unsafe detail"));
+
+        Assert.Equal(StartupRecoveryKind.SelectDataRoot, conflict.Recovery);
+        Assert.Contains("未修改", conflict.Message, StringComparison.Ordinal);
+        Assert.DoesNotContain("secret", conflict.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(StartupRecoveryKind.Retry, assets.Recovery);
+        Assert.Contains("静态资源", assets.Message, StringComparison.Ordinal);
+        Assert.Equal(StartupRecoveryKind.Retry, bind.Recovery);
+        Assert.Contains("loopback", bind.Message, StringComparison.OrdinalIgnoreCase);
+        Assert.Equal(StartupRecoveryKind.Retry, dom.Recovery);
+        Assert.Contains("页面", dom.Message, StringComparison.Ordinal);
     }
 
     [Fact]

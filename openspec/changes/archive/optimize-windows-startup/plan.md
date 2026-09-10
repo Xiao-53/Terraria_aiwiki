@@ -1,6 +1,6 @@
 # Windows 本地 Wiki 启动可靠性与首屏性能优化
 
-- 状态：draft；已合并 2026-09-10 Release 启动故障诊断，本轮只修订计划，未授权实施源码
+- 状态：archived；启动可靠性、首屏重复工作优化、Windows 分段计时与回归已完成
 - Phase：无；独立启动可靠性与性能变更，不推进 Phase 11 发布或其他 Phase
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑与静态检查；Windows 11 x64 负责 .NET 构建、测试和首屏计时
 - 创建日期：2026-09-09
@@ -134,44 +134,38 @@
 - 若这些步骤成为主要瓶颈，先补充可审查的快路径设计和旧库/缺表回归再扩大对应步骤；不以取消必要初始化换取速度。
 - `IsPageDownloaded=false` 时继续在启动 Viewer server 后进入数据管理引导，不导航占位首页；状态必须说明 Wiki 内容尚未下载，而不是声称 Viewer 无法启动。下载或导入完成后仍复用同一 Viewer/Reader 重绑定路径。
 
-待决项：当前源码各阶段真实耗时；迁移判定是否值得持久化；统计快照消费者是否全部允许延后刷新。两套真实旧数据库最终保留哪一套属于用户数据处置决定，不由本计划自动推断；本计划只保证软件准确失败、原样保留并提供安全恢复入口。这些均不阻塞计划修订，也不授权源码实施或真实数据改写。
+实施收敛：合成高基数库的兼容预检中位数为 9 ms，不值得为跳过该轻量读取新增持久标记及其失效系统；正常初始化改用 Manager 统计快照，显式统计与既有数据操作继续刷新。两套真实旧数据库最终保留哪一套仍属于用户数据处置决定，不由本 change 自动推断；本次未改写、复制、checkpoint、移动或删除真实数据库。
 
 ## 文件变更
 
-本轮仅 MODIFY 本 plan；下列为后续实施候选，不代表全部必须修改：
+实际变更如下：
 
 | 文件 | 候选动作与职责 |
 |---|---|
-| `src/Terraria_Wiki.Windows/Program.cs` | 必要时增加最早托管入口计时；Velopack hook 顺序保持不变 |
-| `src/Terraria_Wiki.Windows/MainWindow.cs` | 扩展已有启动计时和 smoke 输出，按阶段呈现数据恢复或 Viewer 故障；不改页面布局或关闭流程 |
-| `src/Terraria_Wiki.Windows/Hosting/WindowsClientRuntime.cs` | 记录 Runtime 准备的子阶段 |
-| `src/Terraria_Wiki.Windows/Hosting/ProductDiagnostics.cs` | 在既有 allowlist 内增加必要启动阶段/稳定错误；保持路径、内容和底层异常脱敏 |
-| `src/Terraria_Wiki.Application/UseCases/ActiveWikiUseCases.cs` | 保留兼容错误 code、消除首屏统计重算、收紧迁移准备调用；保留选择/恢复/回滚 |
-| `src/Terraria_Wiki.Core/Compatibility/LegacyWikiCompatibility.cs` | 复用原布局冲突与迁移判定，调整迁移专属准备顺序与快速路径，不自动处置冲突数据 |
-| `src/Terraria_Wiki.Core/Services/DatabaseService.cs` | 默认 KEEP；仅必要内部计时/连接复用候选，禁止顺带删除 schema/FTS 初始化 |
-| `src/Terraria_Wiki.Application/UseCases/WikiDataUseCases.cs`、`src/Terraria_Wiki.Core/Data/WikiDataLifecycle.cs` | 默认 KEEP；复用已有显式统计与数据变更后刷新 |
-| `src/Terraria_Wiki.Core/Packages/WikiPackageTransferService.cs` | 默认 KEEP；若持久记录方案获证实，才在现有导入事务边界做最小失效接线 |
-| `tests/Terraria_Wiki.Application.Tests/ActiveWikiTests.cs`、`WikiDataUseCaseTests.cs` | 兼容 code 传播、启动、统计快照、刷新、切换和恢复回归 |
-| `tests/Terraria_Wiki.Core.Tests/LegacyWikiCompatibilityTests.cs`、`DatabaseServiceTests.cs`、`WikiPackageTransferTests.cs` | 两目录冲突不修改、WAL、一致性、无需迁移、必要迁移及导入恢复回归 |
-| `tests/Terraria_Wiki.Windows.Tests/WindowsClientSmokeFixtureTests.cs`、`ProductizationBoundaryTests.cs` | 必要计时、故障分类、诊断脱敏和现有 smoke 证据接线 |
-| `openspec/specs/application-use-cases/spec.md` | 实施后明确兼容错误与启动统计快照/刷新语义；保留迁移前置与全部 import 恢复契约 |
-| `openspec/specs/wiki-data-compatibility/spec.md` | 实施后明确并存数据失败关闭；仅在确认持久迁移记录等持续契约变化时增加相应内容 |
-| `openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-productization/spec.md` | 实施后同步数据错误/Viewer 错误分类和诊断 allowlist；不增加页面或发布渠道 |
+| `src/Terraria_Wiki.Windows/Program.cs`、`Hosting/WindowsStartupTiming.cs` | 记录最早托管入口并定义内部 allowlist 阶段；Velopack hook 仍先于 Avalonia 启动 |
+| `src/Terraria_Wiki.Windows/MainWindow.cs` | 输出累计/阶段耗时，分类数据恢复、Viewer 资源/bind/导航/DOM Ready 故障；未改页面布局或关闭流程 |
+| `src/Terraria_Wiki.Windows/Hosting/WindowsClientRuntime.cs`、`ProductDiagnostics.cs` | 记录 Runtime 子阶段与脱敏诊断；未知错误 detail 不写日志 |
+| `src/Terraria_Wiki.Application/UseCases/ActiveWikiUseCases.cs`、项目文件 | 以内部 observer 接线计时；只读冲突快返、稳定兼容 code、Manager 统计快照和收紧后的迁移准备 |
+| `src/Terraria_Wiki.Core/Compatibility/LegacyWikiCompatibility.cs` | 只读 Manager 布局检查；WAL 一致预检确认迁移后才 checkpoint，并重新判定后沿用原安全交换 |
+| `src/Terraria_Wiki.Core/Packages/WikiPackageTransferService.cs` | 仅增加内部 pending journal 存在检查，保证任一注册 Wiki 有恢复日志时不走冲突快返 |
+| `tests/Terraria_Wiki.Application.Tests/ActiveWikiTests.cs`、`tests/Terraria_Wiki.Core.Tests/LegacyWikiCompatibilityTests.cs` | 冲突全文件 hash、稳定 code、统计快照/显式刷新、全部 import journal、WAL 快路/迁移/busy 回归 |
+| `tests/Terraria_Wiki.Windows.Tests/PresentationFlowTests.cs`、`ProductizationBoundaryTests.cs` | 恢复分类、Viewer 故障 code、诊断 allowlist/阶段/脱敏回归 |
+| `README.md`、`openspec/project.md` 与四份持续 spec | 同步已实现状态、契约与验证基线 |
 
 KEEP：其他页面、Wiki 搜索 ViewModel、Viewer 与资源、AI/Agent、配置密钥、依赖、打包。Master Architecture/P0/Phase 不变；README 仅在有实际结果时按需增加状态入口。
 
 ## 执行步骤
 
-- [ ] 获得实施授权后更新状态；检查并隔离既有改动，建立 Git 恢复点。
-- [ ] 建立仅旧目录、仅目标目录、两者并存且内容不同、空库和 WAL busy 的小型 fixture；证明当前冲突稳定复现且测试不接触真实生产库。
-- [ ] 添加最小分段计时，在 Windows 同一开发 Release 输出/隔离数据上记录修改前性能与故障阶段基线。
-- [ ] 保留兼容稳定 code，修正 Windows 数据恢复/Viewer 故障分类与诊断脱敏；证明冲突时所有数据库家族字节不变。
-- [ ] 审查计数消费者，消除正常首屏前统计重算；验证显式刷新及数据变更后更新，保存阶段证据。
-- [ ] 在原兼容实现中收紧迁移专属准备顺序；补充 WAL/无需迁移/故障恢复回归。
-- [ ] 根据预检实际耗时决定是否需要持久“检查一次”记录；先完成绑定/失效/回滚设计，再实施必要最小改动，或记录保留轻量判定的证据。
-- [ ] Windows 复测健康大库、空库和冲突 fixture；确认健康首页收益来自取消重复工作，空库不误报，冲突不启动 Viewer 或修改数据。
-- [ ] 执行相关与全量 .NET 回归、Windows Release build；更新持续契约及本计划证据。
-- [ ] 检查 diff、数据副本/临时文件、进程及 Git 状态，记录实际收益和限制，只提交本变更，不 push/打包。
+- [x] 获得实施授权后更新状态；检查并隔离既有改动，建立 Git 恢复点。
+- [x] 建立仅旧目录、仅目标目录、两者并存且内容不同、空库和 WAL busy 的小型 fixture；证明当前冲突稳定复现且测试不接触真实生产库。
+- [x] 添加最小分段计时，在 Windows 同一开发 Release 输出/隔离数据上记录修改前性能与故障阶段基线。
+- [x] 保留兼容稳定 code，修正 Windows 数据恢复/Viewer 故障分类与诊断脱敏；证明冲突时所有数据库家族字节不变。
+- [x] 审查计数消费者，消除正常首屏前统计重算；验证显式刷新及数据变更后更新，保存阶段证据。
+- [x] 在原兼容实现中收紧迁移专属准备顺序；补充 WAL/无需迁移/故障恢复回归。
+- [x] 根据预检实际耗时决定是否需要持久“检查一次”记录；先完成绑定/失效/回滚设计，再实施必要最小改动，或记录保留轻量判定的证据。
+- [x] Windows 复测健康高基数合成库、空库和冲突 fixture；确认健康首页不等待统计，空库不误报，冲突不启动 Viewer 或修改数据。
+- [x] 执行相关与全量 .NET 回归、Windows Release build；更新持续契约及本计划证据。
+- [x] 检查 diff、数据副本/临时文件、进程及 Git 状态，记录实际收益和限制，只提交本变更，不 push/打包。
 
 ## 验证与回归计划
 
@@ -213,6 +207,10 @@ KEEP：其他页面、Wiki 搜索 ViewModel、Viewer 与资源、AI/Agent、配�
 - 2026-09-09：创建本 draft，区分已确认重复工作与尚未测量的瓶颈；仅规划，未开始源码实施。
 - 2026-09-10：诊断当前 Release 的“Viewer 无法启动”：资产和 WebView2 正常，隔离 smoke 通过；真实失败来自旧/目标数据目录并存，经 Application 包装后只留下 `initialization-failed`。
 - 2026-09-10：按用户要求把启动故障可靠性、错误分类和恢复提示并入本 plan，后续与统计/迁移性能优化一同实施；仍未授权修改业务源码或真实数据库。
+- 2026-09-10：用户授权完成 plan；先以 `b229fc6` 提交计划恢复点，再实施 Core/Application/Windows 与测试改动。
+- 2026-09-10：完成修改前 5 次合成库 Windows Release 基线；随后实现统计快照、WAL 迁移准备、稳定 code、Viewer 故障分类和分段计时。
+- 2026-09-10：首次 Windows 冲突 hash 发现 Manager 因先进入写初始化而变化；将冲突检查前移为只读 Manager 布局预检，并保留任一注册 Wiki pending import journal 优先恢复。
+- 2026-09-10：完成自动化、5 次修改后普通/高基数 smoke、最终冲突 hash、全量 Release build/tests 与契约同步；所有临时 fixture 已删除。
 
 ## 发现、偏差与决策
 
@@ -224,15 +222,22 @@ KEEP：其他页面、Wiki 搜索 ViewModel、Viewer 与资源、AI/Agent、配�
 - 决策：本 change 不自动解决两套不同真实数据库的取舍；只保证冲突快速、准确、无损并可通过现有数据根入口恢复。
 - 决策：不根据一句“检查一次”预建数据库版本体系；可靠失效设计和测量收益优先于新增持久状态。
 - 当前 Application spec 要求迁移在 Content 使用前完成，本方案保持该顺序；只允许确认无需迁移的库走快路径，不绕开既有契约。
+- 发现：普通合成库前后 Runtime/DOM 中位数差异只有 +4/-6 ms，未超过测量噪声；新阶段计时显示窗口构造约 1.1 s，是该数据集的主要固定成本，本 change 不扩展为 UI/框架启动重写。
+- 决策：高基数合成库兼容预检中位数 9 ms，统计快照 0 ms；不引入持久迁移标记。真实多 GB 用户库未获复制/写入授权，不据此承诺固定秒数收益。
+- 发现：冲突检测必须先于 Manager 的 WAL/DELETE 写初始化，才能满足“Manager 与两套 Content 数据均原字节不变”；只读布局预检只在发现 legacy 数据家族时运行，普通启动为 0–2 ms。
 
 ## 验证结果
 
 - 规划阶段已读取相关源码、spec/ADR、历史 smoke 记录和测试；历史 local.22 数字不属于本轮新测量。
 - 2026-09-10 使用当前已有 Release 输出和隔离合成数据执行一次 Windows smoke：成功；Runtime Ready 1923 ms、Viewer server Ready 1936 ms、DOM Ready 2136 ms，CSS/JS/图片/音频请求与退出清理通过。该结果只证明当前 Viewer/打包输入可工作，不代表真实大库性能已优化。
 - 真实旧根仅通过 SQLite immutable/read-only 盘点 Manager 与两套 Content 数据库；未运行初始化、迁移、checkpoint、下载、重命名或删除。Manager quick check 为 `ok`，两套 Content 记录数量不同。
-- 本轮仅修改本计划；`git diff --check -- openspec/changes/optimize-windows-startup/plan.md` 已通过，候选源码与测试文件路径均已核对存在。
-- 未执行源码 build/tests、系统化修改前后性能测量、真实数据操作或任何业务源码修改；没有已实现提速结论。
+- 修改前普通合成库 5 次：Runtime Ready 中位数 1874 ms（1861–2006），DOM Ready 中位数 2058 ms（2050–2213）。修改后 5 次：Runtime Ready 中位数 1878 ms（1856–2177），DOM Ready 中位数 2052 ms（2036–2337）；差异在噪声内，无可归因回退，也不宣称该小库获得可见提速。
+- 高基数合成库含 100002 页面、100001 Redirect、100002 Asset，共约 27.6 MB；5 次 Runtime Ready 中位数 1884 ms（1859–3110），DOM Ready 中位数 2081 ms（2041–3266），兼容预检/Content 初始化/统计快照中位数分别 9/19/0 ms。5 次 Search、Viewer 资源请求和退出清理均成功。
+- Windows 冲突 fixture 使用两套内容不同的有效 Content 数据库；最终 smoke 返回 `data-directory-conflict`，Manager 与两个数据库共 3 个受保护文件的长度/SHA-256 全部不变，诊断含稳定 code 且不含数据根，Manager 初始化和 Viewer server 阶段均未开始。
+- 自动化覆盖健康 WAL 无 checkpoint、WAL 最新数据迁移、checkpoint busy、冲突 hash、稳定 code、统计陈旧不阻塞及显式刷新、任一注册 Wiki pending import 优先、空库引导和 Viewer 故障分类。定向 Core/Application/Windows tests 通过。
+- 最终 Windows Release solution build 通过 9 项目、0 warning / 0 error；全量 .NET tests 332/332（Core 95、Application 55、WikiTools 37、Windows 145）。最终普通 smoke 成功，Runtime/DOM Ready 为 2182/2345 ms，布局预检/统计快照为 2/0 ms，Search、CSS/JS/图片/音频与退出清理通过。
+- `git diff --check` 通过，无新增依赖、schema、数据包或平台；所有 `.startup-*` 与 Windows TEMP fixture 已删除，未运行真实 provider、publish、Velopack、Setup、portable、上传或真实用户数据库写操作。
 
 ## 完成摘要
 
-启动可靠性诊断已与原首屏性能计划合并，实施状态仍为 draft。后续交付必须同时证明健康路径重复工作被消除、冲突路径准确且不改数据、空库与 Viewer 故障不再混淆，并记录前后计时、兼容/恢复回归和剩余瓶颈；不能以计划完成代替优化完成。
+本 change 已完成：正常启动不再等待三张表统计，健康 WAL 数据只做轻量一致预检，真实迁移才 checkpoint 并沿用原安全交换；数据目录冲突在任何写初始化前以稳定 code 无损失败，并复用数据管理页恢复，Viewer 各故障阶段独立分类。Windows 分段计时证明普通/高基数合成数据无回退，同时确认当前约 1.1 s 固定窗口构造是剩余主要瓶颈。真实多 GB 用户库、Setup/portable/publish 和公开发行不在本次授权验证范围，未作相应完成声明。

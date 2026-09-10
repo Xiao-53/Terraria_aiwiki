@@ -26,6 +26,12 @@ public sealed record LegacyDataDirectoryMigrationResult(
 
 public sealed record LegacyAnchorMigrationResult(bool Required, int PagesProcessed, int PagesChanged);
 
+internal sealed class ExistingWikiLayout
+{
+    public int Id { get; set; }
+    public string DataFolder { get; set; } = string.Empty;
+}
+
 public static class LegacyWikiCompatibility
 {
     public const string LegacyDataFolder = "Terraria_Wiki";
@@ -39,6 +45,58 @@ public static class LegacyWikiCompatibility
         appVersion is not null
         && Version.TryParse(appVersion, out var parsed)
         && parsed < AnchorMigrationVersion;
+
+    internal static IReadOnlyList<ExistingWikiLayout> ReadExistingWikiLayouts(
+        string managerDatabasePath)
+    {
+        if (string.IsNullOrWhiteSpace(managerDatabasePath)
+            || !Path.IsPathFullyQualified(managerDatabasePath))
+        {
+            throw new ArgumentException(
+                "An absolute Manager database path is required.",
+                nameof(managerDatabasePath));
+        }
+
+        var path = Path.GetFullPath(managerDatabasePath);
+        if (!File.Exists(path))
+            return [];
+
+        using var connection = new SQLiteConnection(
+            path,
+            SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+        var hasTable = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'WikiBook';") != 0;
+        if (!hasTable)
+            return [];
+
+        var columns = connection.Query<ColumnNameRow>(
+                "SELECT name AS Name FROM pragma_table_info('WikiBook');")
+            .Select(column => column.Name)
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        if (!columns.Contains("Id") || !columns.Contains("DataFolder"))
+            return [];
+
+        return connection.Query<ExistingWikiLayout>(
+            "SELECT Id, DataFolder FROM WikiBook ORDER BY Id;");
+    }
+
+    internal static void EnsureNoLegacyDataDirectoryConflict(
+        string dataRoot,
+        string dataFolder)
+    {
+        var root = ValidateRoot(dataRoot);
+        var folder = ValidateDataFolder(dataFolder);
+        var oldDirectory = Path.Combine(root, LegacyDataFolder);
+        var newDirectory = Path.Combine(root, folder);
+        if (!string.Equals(oldDirectory, newDirectory, StringComparison.OrdinalIgnoreCase)
+            && Directory.Exists(oldDirectory)
+            && Directory.Exists(newDirectory))
+        {
+            throw Error(
+                "data-directory-conflict",
+                "Both the legacy and target Wiki data directories exist.");
+        }
+    }
 
     public static LegacyDatabaseNormalizationResult NormalizeDatabaseFamily(string dataDirectory)
     {
@@ -224,6 +282,43 @@ public static class LegacyWikiCompatibility
             defaultPageTitle,
             static (source, destination) => File.Copy(source, destination, overwrite: false),
             cancellationToken);
+
+    internal static Task<LegacyAnchorMigrationResult> PrepareAndMigrateAnchorDataSafelyAsync(
+        string databasePath,
+        string defaultPageTitle,
+        CancellationToken cancellationToken = default) =>
+        PrepareAndMigrateAnchorDataSafelyCoreAsync(
+            databasePath,
+            defaultPageTitle,
+            CheckpointDatabaseForMigrationAsync,
+            static (source, destination) => File.Copy(source, destination, overwrite: false),
+            cancellationToken);
+
+    internal static async Task<LegacyAnchorMigrationResult> PrepareAndMigrateAnchorDataSafelyCoreAsync(
+        string databasePath,
+        string defaultPageTitle,
+        Func<string, CancellationToken, Task> checkpointDatabase,
+        Action<string, string> copyDatabase,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(checkpointDatabase);
+        ArgumentNullException.ThrowIfNull(copyDatabase);
+        var target = ValidateDatabasePath(databasePath);
+
+        // Recovery always wins over the fast path. A normal WAL database can be
+        // inspected consistently by SQLite, so migration-only checkpoint work is
+        // deferred until the shared predicate confirms that a migration is needed.
+        RecoverPendingAnchorMigration(target);
+        if (!await RequiresAnchorMigrationAsync(target, defaultPageTitle, cancellationToken))
+            return new LegacyAnchorMigrationResult(false, 0, 0);
+
+        await checkpointDatabase(target, cancellationToken);
+        return await MigrateAnchorDataSafelyCoreAsync(
+            target,
+            defaultPageTitle,
+            copyDatabase,
+            cancellationToken);
+    }
 
     internal static async Task<LegacyAnchorMigrationResult> MigrateAnchorDataSafelyCoreAsync(
         string databasePath,
@@ -767,6 +862,11 @@ public static class LegacyWikiCompatibility
     private sealed class PageTitleRow
     {
         public string Title { get; set; } = string.Empty;
+    }
+
+    private sealed class ColumnNameRow
+    {
+        public string Name { get; set; } = string.Empty;
     }
 
     private enum AnchorMigrationPhase

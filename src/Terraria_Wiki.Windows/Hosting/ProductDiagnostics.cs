@@ -7,6 +7,7 @@ namespace Terraria_Wiki.Windows.Hosting;
 internal enum ProductDiagnosticEvent
 {
     ApplicationStarted,
+    StartupStageCompleted,
     RuntimeReady,
     StartupFailed,
     WebView2RecoveryOpened,
@@ -17,6 +18,50 @@ internal sealed class ProductDiagnostics
 {
     internal const long DefaultMaxLogBytes = 512 * 1024;
     private static readonly JsonSerializerOptions JsonOptions = new(JsonSerializerDefaults.Web);
+    private static readonly HashSet<string> AllowedStartupFailureCodes = new(StringComparer.Ordinal)
+    {
+        "anchor-migration-cleanup-failed",
+        "anchor-migration-commit-invalid",
+        "anchor-migration-journal-invalid",
+        "anchor-migration-rollback-failed",
+        "client-already-running",
+        "content-database-not-found",
+        "data-directory-conflict",
+        "data-directory-migration-failed",
+        "data-directory-not-found",
+        "data-directory-reparse-point",
+        "data-directory-rollback-failed",
+        "data-root-in-use",
+        "data-root-not-found",
+        "data-root-required",
+        "database-checkpoint-failed",
+        "database-family-conflict",
+        "database-family-journal-invalid",
+        "database-family-normalization-failed",
+        "database-family-rollback-failed",
+        "database-not-checkpointed",
+        "default-data-root-unavailable",
+        "duplicate-data-root-argument",
+        "duplicate-host-settings-argument",
+        "host-settings-invalid",
+        "host-settings-write-failed",
+        "initialization-failed",
+        "invalid-host-settings-argument",
+        "legacy-client-running",
+        "local-app-data-unavailable",
+        "missing-data-root-argument",
+        "missing-host-settings-argument",
+        "no-wikis",
+        "orphan-database-sidecar",
+        "unknown-startup-error",
+        "viewer-assets-missing",
+        "viewer-bind-failed",
+        "viewer-dom-ready-timeout",
+        "viewer-navigation-failed",
+        "viewer-not-ready",
+        "viewer-server-start-failed",
+        "webview2-missing",
+    };
     private readonly object _gate = new();
     private readonly long _maxLogBytes;
 
@@ -45,15 +90,43 @@ internal sealed class ProductDiagnostics
 
     public void Write(ProductDiagnosticEvent diagnosticEvent, string? componentVersion = null)
     {
+        var detail = diagnosticEvent switch
+        {
+            ProductDiagnosticEvent.RuntimeReady => SanitizeVersion(componentVersion),
+            ProductDiagnosticEvent.StartupFailed => SanitizeFailureCode(componentVersion),
+            _ => null,
+        };
+        WriteEntry(new ProductDiagnosticEntry(
+            DateTimeOffset.UtcNow,
+            ProductMetadata.Version,
+            diagnosticEvent.ToString(),
+            detail,
+            null,
+            null,
+            null));
+    }
+
+    public void WriteStartupStage(
+        WindowsStartupStage stage,
+        long elapsedMilliseconds,
+        long durationMilliseconds)
+    {
+        WriteEntry(new ProductDiagnosticEntry(
+            DateTimeOffset.UtcNow,
+            ProductMetadata.Version,
+            ProductDiagnosticEvent.StartupStageCompleted.ToString(),
+            null,
+            WindowsStartupClock.Name(stage),
+            Math.Max(0, elapsedMilliseconds),
+            Math.Max(0, durationMilliseconds)));
+    }
+
+    private void WriteEntry(ProductDiagnosticEntry entry)
+    {
         var logPath = LogPath;
         if (logPath is null)
             return;
 
-        var entry = new ProductDiagnosticEntry(
-            DateTimeOffset.UtcNow,
-            ProductMetadata.Version,
-            diagnosticEvent.ToString(),
-            SanitizeVersion(componentVersion));
         var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
         var bytes = Encoding.UTF8.GetByteCount(line);
 
@@ -84,9 +157,15 @@ internal sealed class ProductDiagnostics
         return sanitized.Length == 0 ? null : sanitized;
     }
 
+    private static string? SanitizeFailureCode(string? value) =>
+        value is not null && AllowedStartupFailureCodes.Contains(value) ? value : null;
+
     private sealed record ProductDiagnosticEntry(
         DateTimeOffset TimestampUtc,
         string ApplicationVersion,
         string Event,
-        string? ComponentVersion);
+        string? ComponentVersion,
+        string? Stage,
+        long? ElapsedMilliseconds,
+        long? DurationMilliseconds);
 }

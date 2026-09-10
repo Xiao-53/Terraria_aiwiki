@@ -239,6 +239,18 @@ public sealed class WikiPackageTransferService
             await RollBackAsync(journal, journal.PreviousBook, activeTarget, cancellationToken);
     }
 
+    internal static bool HasPendingImportJournal(string dataRoot, int wikiId)
+    {
+        if (string.IsNullOrWhiteSpace(dataRoot) || !Path.IsPathFullyQualified(dataRoot))
+            throw new ArgumentException("An absolute data root is required.", nameof(dataRoot));
+        if (wikiId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(wikiId));
+        return File.Exists(Path.Combine(
+            Path.GetFullPath(dataRoot),
+            "Temp",
+            $"import-{wikiId}.journal.json"));
+    }
+
     private async Task RollBackAsync(
         ImportJournal journal,
         WikiBook? previousBook,

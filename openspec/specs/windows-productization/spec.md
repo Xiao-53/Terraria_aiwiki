@@ -28,7 +28,7 @@
 
 ## 诊断、安全与发行门禁
 
-- 本地诊断只记录 allowlist 事件、应用版本、稳定错误 code、Windows/WebView2/Runtime/update 状态和必要耗时；不记录问题、回答、Wiki HTML、完整用户路径、API key、bearer、provider 原始响应或底层异常。
+- 本地诊断只记录 allowlist 事件、应用版本、稳定错误 code、Windows/WebView2/Runtime/update 状态和必要耗时；启动耗时按固定 allowlist 阶段记录累计毫秒与阶段毫秒，任意未知错误 detail 必须丢弃。不记录问题、回答、Wiki HTML、完整用户路径、API key、bearer、provider 原始响应或底层异常。
 - 诊断默认最多保留当前与前一文件，每个不超过 512 KiB。日志目录失败不得阻止应用启动或关闭。
 - 发行脚本必须使用 NuGet lock，验证 Velopack/CPython/uv 版本和 CPython hash，生成 payload、Python、依赖与 release manifests、notices 和 `SHA256SUMS.txt`，拒绝 test/cache/bytecode/数据库/证书私钥/开发路径或疑似 secret。
 - 公开候选必须来自干净且已验证的 commit，SemVer、tag、assembly、repository、channel 与 manifest 一致，单个 GitHub asset 小于 2 GiB。缺少项目所有者批准的软件许可证、权利证据或必要元数据时必须失败关闭，不能标为 publication-ready。

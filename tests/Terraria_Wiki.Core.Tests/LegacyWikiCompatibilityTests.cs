@@ -353,6 +353,109 @@ public sealed class LegacyWikiCompatibilityTests
         Assert.Contains("data-wiki=\"Guide\"", verify.Find<WikiPage>("Home").Content, StringComparison.Ordinal);
     }
 
+    [Fact]
+    public async Task Prepared_anchor_migration_leaves_a_healthy_wal_database_uncheckpointed()
+    {
+        using var temp = new TestDirectory();
+        var database = temp.File("data.db");
+        var content = new ContentDbService(database);
+        await content.Init(seedBook: new WikiBook
+        {
+            DefaultPageTitle = "Home",
+            DefaultPageContent = "placeholder",
+        });
+        await content.SaveItemAsync(new WikiPage
+        {
+            Title = "Home",
+            Content = "<a title=\"Guide\" data-wiki=\"Guide\">Guide</a>",
+        });
+        Assert.True(File.Exists(database + "-wal"));
+        var checkpointCount = 0;
+        var copyCount = 0;
+
+        var result = await LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyCoreAsync(
+            database,
+            "Home",
+            (_, _) =>
+            {
+                checkpointCount++;
+                return Task.CompletedTask;
+            },
+            (_, _) => copyCount++);
+
+        Assert.False(result.Required);
+        Assert.Equal(0, checkpointCount);
+        Assert.Equal(0, copyCount);
+        Assert.True(File.Exists(database + "-wal"));
+        await content.CloseConnection();
+    }
+
+    [Fact]
+    public async Task Prepared_anchor_migration_reads_latest_wal_data_then_checkpoints_and_migrates()
+    {
+        using var temp = new TestDirectory();
+        var source = temp.File("source.db");
+        var target = temp.File("target.db");
+        var content = new ContentDbService(source);
+        await content.Init(seedBook: new WikiBook
+        {
+            DefaultPageTitle = "Home",
+            DefaultPageContent = "placeholder",
+        });
+        await content.SaveItemAsync(new WikiPage
+        {
+            Title = "Home",
+            Content = "<a title=\"Guide\">Guide</a>",
+            LastModified = DateTime.UnixEpoch,
+        });
+        Assert.True(File.Exists(source + "-wal"));
+        File.Copy(source, target);
+        File.Copy(source + "-wal", target + "-wal");
+        await content.CloseConnection();
+
+        var result = await LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(target, "Home");
+
+        Assert.True(result.Required);
+        Assert.False(File.Exists(target + "-wal"));
+        Assert.False(File.Exists(target + "-shm"));
+        using var verify = new SQLiteConnection(target, SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+        Assert.Contains("data-wiki=\"Guide\"", verify.Find<WikiPage>("Home").Content, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task Prepared_anchor_migration_fails_closed_when_wal_checkpoint_is_busy()
+    {
+        using var temp = new TestDirectory();
+        var database = temp.File("data.db");
+        using var writer = new SQLiteConnection(
+            database,
+            SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.Create | SQLiteOpenFlags.FullMutex);
+        Assert.Equal("wal", writer.ExecuteScalar<string>("PRAGMA journal_mode = WAL;"));
+        writer.CreateTable<WikiPage>();
+        writer.Insert(new WikiPage
+        {
+            Title = "Home",
+            Content = "<a title=\"Guide\">Guide</a>",
+            LastModified = DateTime.UnixEpoch,
+        });
+        writer.BeginTransaction();
+        writer.Insert(new WikiPage
+        {
+            Title = "Uncommitted",
+            Content = "hold checkpoint",
+            LastModified = DateTime.UnixEpoch,
+        });
+
+        var error = await Assert.ThrowsAsync<WikiCompatibilityException>(() =>
+            LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(database, "Home"));
+
+        Assert.Equal("database-checkpoint-failed", error.Code);
+        Assert.True(File.Exists(database));
+        Assert.True(File.Exists(database + "-wal"));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(temp.Path, "*.anchor-*"));
+        writer.Rollback();
+    }
+
     [Theory]
     [InlineData("-wal")]
     [InlineData("-shm")]

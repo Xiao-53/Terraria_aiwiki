@@ -30,6 +30,9 @@
 - 初始化先打开 Manager、恢复全部已注册 Wiki 的未完成 import，再选择保存的 Wiki。
 - 保存 ID 缺失或未知时优先选择 ID 1，否则选择最小注册 ID，并把实际选择写回；无注册 Wiki 或未初始化使用稳定 Application 错误 code。
 - 打开 ContentDb 前完成已有旧目录、数据库家族和 anchor 迁移；没有现有数据库时允许 Core 初始化活动 Wiki 的默认内容。
+- Core 数据兼容错误只以安全稳定 code 穿过 Application；消息不得包含数据库完整路径或底层异常。未知兼容错误仍收敛为 `initialization-failed`。
+- 旧/目标数据库家族明显冲突且不存在任何注册 Wiki 的未完成 import journal 时，允许先只读 Manager 布局并失败关闭，避免写初始化改变用户文件；存在任一 import journal 时仍先按全部注册 Wiki 执行原恢复，再进入兼容准备。
+- 正常初始化使用 Manager 中已保存的页面、Redirect、资源数量与数据大小快照，不在首屏前重新统计 ContentDb；`Data.GetStatisticsAsync` 及下载、更新、导入、删除等数据操作继续刷新并保存真实统计。统计快照不得决定 Search/Read 是否可用，`IsPageDownloaded` 的空库语义保持独立。
 - 热切换必须在共享数据操作门闩和 `IWikiDataConsumerCoordinator` pause lease 内执行。同 ID 幂等且不 pause；未知 ID 不改变任何状态。
 - 目标初始化或设置保存失败时恢复旧 ContentDb、活动快照和旧设置；回滚失败使用独立稳定 code，不要求宿主重启。
 

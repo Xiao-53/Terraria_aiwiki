@@ -54,6 +54,7 @@ codex
 - Windows Presentation 能力契约：[`openspec/specs/windows-presentation/spec.md`](./openspec/specs/windows-presentation/spec.md)
 - Windows UI 规范与新页面工作流：[`.agents/skills/terraria-ui/SKILL.md`](./.agents/skills/terraria-ui/SKILL.md)
 - 正在实施的 AI 会话 Token 优化：[`openspec/changes/ai-conversation-token-optimization/plan.md`](./openspec/changes/ai-conversation-token-optimization/plan.md)
+- 已完成 Windows 启动可靠性与性能优化：[`openspec/changes/archive/optimize-windows-startup/plan.md`](./openspec/changes/archive/optimize-windows-startup/plan.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
 
 Master Architecture 只保留项目方向、P0、分层和 Phase 大纲。持续能力契约进入 `openspec/specs/`；SQL、具体类和文件修改、接口签名、依赖选型、详细测试步骤与打包实现必须基于真实代码进入对应的 `openspec/changes/<change-id>/plan.md`。
@@ -129,7 +130,9 @@ Migration Baseline & Host Spike
 
 当前独立变更已在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。真实 DeepSeek Token、答案与来源由用户在开发版使用现有 API Key 验收；本仓库验证不得自行产生付费请求。
 
-该源码的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 324/324；Python lint、format、strict mypy 通过，离线 tests 为 82 passed / 4 skipped，另有 1 项真实 C# MCP→Python 非付费跨语言测试通过。未运行 publish、Velopack、Setup、portable、更新包或上传。
+Windows 本地 Wiki 启动现已把旧/目标数据目录冲突前移到只读布局预检并保留稳定错误，冲突时 Manager 与两套 Content 数据库原字节不变且不会启动 Viewer；健康库启动使用 Manager 统计快照，不再在首屏前统计三张表，锚点迁移仅在轻量预检确认需要后才 checkpoint。Windows smoke 同时记录 allowlist 启动阶段的累计/阶段耗时，数据兼容错误、Viewer 资源/bind/导航/DOM Ready 错误进入不同恢复分类。
+
+该源码的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 332/332；Python lint、format、strict mypy 通过，离线 tests 为 82 passed / 4 skipped，另有 1 项真实 C# MCP→Python 非付费跨语言测试通过。未运行 publish、Velopack、Setup、portable、更新包或上传。
 
 此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
 
