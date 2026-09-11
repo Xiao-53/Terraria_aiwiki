@@ -78,7 +78,7 @@
 ## Wiki 与共享 Reader
 
 - Chat 来源必须按 `resolvedTitle#anchor` 打开；不得使用 requested title 代替已解析标题。
-- 顶部 Wiki 按钮只控制 Reader 可见性；Reader 内继续使用既有 Viewer 页面导航和搜索。原生 Wiki 搜索状态仍保持内部能力，但顶部按钮不得把主内容切换到该页面。
+- 顶部 Wiki 按钮只控制 Reader 可见性；Reader 尚未与可交互 Viewer 会话绑定时保持禁用，不能打开显示“等待本地 Viewer”的空白面板。Reader 内继续使用既有 Viewer 页面导航和搜索。原生 Wiki 搜索状态仍保持内部能力，但顶部按钮不得把主内容切换到该页面。
 - 整个 Windows Presentation 只创建一个 `NativeWebView` 和一个 `ViewerWebViewSession`。宽窄切换只改变该 Reader 的布局与可见性，不移动、复制或启动第二个 Viewer。
 - Reader 继续使用既有 Viewer 协议、内部链接、主题、内存返回行为和资源链路；Presentation 不直接访问 Core、SQLite 或 Viewer backend。
 

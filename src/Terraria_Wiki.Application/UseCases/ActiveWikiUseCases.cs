@@ -84,14 +84,24 @@ public sealed class ActiveWikiUseCases
             using var operation = await _state.OperationGate.TryAcquireAsync(cancellationToken)
                 ?? throw OperationInProgress();
 
+            LegacyDataDirectoryMigrationResult? migration;
             using (Measure(ApplicationStartupStage.CompatibilityPreparation, startupObserver))
-                await PrepareTargetAsync(selected, cancellationToken);
+                migration = await PrepareTargetAsync(selected, cancellationToken);
             var paths = WikiDataPaths.Create(_state.DataRoot, selected);
-            using (Measure(ApplicationStartupStage.ContentInitialization, startupObserver))
+            try
             {
-                await _state.ContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
-                await _state.ContentDatabase.Init(seedBook: selected, cancellationToken: cancellationToken);
+                using (Measure(ApplicationStartupStage.ContentInitialization, startupObserver))
+                {
+                    await _state.ContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
+                    await _state.ContentDatabase.Init(seedBook: selected, cancellationToken: cancellationToken);
+                }
             }
+            catch
+            {
+                LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
+                throw;
+            }
+            LegacyWikiCompatibility.CompleteLegacyDataDirectoryMigration(migration);
 
             // Manager.db is the durable startup snapshot. Fresh counts remain
             // available through Data.GetStatisticsAsync and lifecycle operations.
@@ -186,10 +196,19 @@ public sealed class ActiveWikiUseCases
             try
             {
                 await _state.ContentDatabase.CloseConnection(cancellationToken);
-                await PrepareTargetAsync(target, cancellationToken);
+                var migration = await PrepareTargetAsync(target, cancellationToken);
                 var targetPaths = WikiDataPaths.Create(_state.DataRoot, target);
-                await _state.ContentDatabase.SwitchDatabaseAsync(targetPaths.ContentDatabasePath, cancellationToken);
-                await _state.ContentDatabase.Init(seedBook: target, cancellationToken: cancellationToken);
+                try
+                {
+                    await _state.ContentDatabase.SwitchDatabaseAsync(targetPaths.ContentDatabasePath, cancellationToken);
+                    await _state.ContentDatabase.Init(seedBook: target, cancellationToken: cancellationToken);
+                }
+                catch
+                {
+                    LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
+                    throw;
+                }
+                LegacyWikiCompatibility.CompleteLegacyDataDirectoryMigration(migration);
                 target = await _state.Lifecycle.RefreshBookStatisticsAsync(target, cancellationToken);
                 await _state.SettingsStore.SaveActiveWikiIdAsync(target.Id, cancellationToken);
                 _state.ActiveBook = target;
@@ -227,7 +246,9 @@ public sealed class ActiveWikiUseCases
         }
     }
 
-    private async Task PrepareTargetAsync(WikiBook book, CancellationToken cancellationToken)
+    private async Task<LegacyDataDirectoryMigrationResult?> PrepareTargetAsync(
+        WikiBook book,
+        CancellationToken cancellationToken)
     {
         var paths = WikiDataPaths.Create(_state.DataRoot, book);
         var legacyDirectory = Path.Combine(_state.DataRoot, LegacyWikiCompatibility.LegacyDataFolder);
@@ -237,16 +258,25 @@ public sealed class ActiveWikiUseCases
         if (hasLegacyFamily || hasCurrentFamily)
         {
             var migration = LegacyWikiCompatibility.MigrateLegacyDataDirectory(_state.DataRoot, book.DataFolder);
-            await LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(
-                migration.Database.DatabasePath,
-                book.DefaultPageTitle,
-                cancellationToken);
-            return;
+            try
+            {
+                await LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(
+                    migration.Database.DatabasePath,
+                    book.DefaultPageTitle,
+                    cancellationToken);
+                return migration;
+            }
+            catch
+            {
+                LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
+                throw;
+            }
         }
 
         if (Directory.Exists(legacyDirectory) && !Directory.Exists(paths.DataDirectory))
             Directory.Move(legacyDirectory, paths.DataDirectory);
         paths.EnsureDataDirectory();
+        return null;
     }
 
     private async Task FailFastOnDataDirectoryConflictAsync(CancellationToken cancellationToken)

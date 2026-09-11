@@ -22,7 +22,11 @@ public sealed record LegacyDatabaseNormalizationResult(
 public sealed record LegacyDataDirectoryMigrationResult(
     string DataDirectory,
     bool DirectoryChanged,
-    LegacyDatabaseNormalizationResult Database);
+    LegacyDatabaseNormalizationResult Database)
+{
+    internal string? LegacyDirectory { get; init; }
+    internal string? RetiredLegacyDirectory { get; init; }
+}
 
 public sealed record LegacyAnchorMigrationResult(bool Required, int PagesProcessed, int PagesChanged);
 
@@ -90,7 +94,8 @@ public static class LegacyWikiCompatibility
         var newDirectory = Path.Combine(root, folder);
         if (!string.Equals(oldDirectory, newDirectory, StringComparison.OrdinalIgnoreCase)
             && Directory.Exists(oldDirectory)
-            && Directory.Exists(newDirectory))
+            && Directory.Exists(newDirectory)
+            && !CurrentDirectorySupersedesLegacy(oldDirectory, newDirectory))
         {
             throw Error(
                 "data-directory-conflict",
@@ -176,7 +181,39 @@ public static class LegacyWikiCompatibility
         var oldExists = Directory.Exists(oldDirectory);
         var newExists = Directory.Exists(newDirectory);
         if (oldExists && newExists)
-            throw Error("data-directory-conflict", "Both the legacy and target Wiki data directories exist.");
+        {
+            if (!CurrentDirectorySupersedesLegacy(oldDirectory, newDirectory))
+                throw Error("data-directory-conflict", "Both the legacy and target Wiki data directories exist.");
+
+            var retiredDirectory = oldDirectory + $".superseded-{Guid.NewGuid():N}";
+            Directory.Move(oldDirectory, retiredDirectory);
+            try
+            {
+                var normalized = NormalizeDatabaseFamily(newDirectory);
+                return new LegacyDataDirectoryMigrationResult(newDirectory, false, normalized)
+                {
+                    LegacyDirectory = oldDirectory,
+                    RetiredLegacyDirectory = retiredDirectory,
+                };
+            }
+            catch (Exception migrationException)
+            {
+                try
+                {
+                    if (Directory.Exists(retiredDirectory) && !Directory.Exists(oldDirectory))
+                        Directory.Move(retiredDirectory, oldDirectory);
+                }
+                catch (Exception rollbackException)
+                {
+                    throw Error(
+                        "data-directory-rollback-failed",
+                        "Superseded legacy data retirement failed and could not be rolled back.",
+                        new AggregateException(migrationException, rollbackException));
+                }
+
+                throw;
+            }
+        }
         if (!oldExists)
         {
             if (!newExists)
@@ -208,6 +245,146 @@ public static class LegacyWikiCompatibility
 
             throw Error("data-directory-migration-failed", "Legacy data-directory migration failed and was rolled back.", migrationException);
         }
+    }
+
+    internal static void CompleteLegacyDataDirectoryMigration(
+        LegacyDataDirectoryMigrationResult? migration)
+    {
+        var retiredDirectory = migration?.RetiredLegacyDirectory;
+        if (string.IsNullOrWhiteSpace(retiredDirectory) || !Directory.Exists(retiredDirectory))
+            return;
+
+        try
+        {
+            if ((File.GetAttributes(retiredDirectory) & FileAttributes.ReparsePoint) == 0)
+                Directory.Delete(retiredDirectory, recursive: true);
+        }
+        catch
+        {
+            // The target database is already proven usable. A failed best-effort
+            // cleanup must not put the application back into the conflict state.
+        }
+    }
+
+    internal static void RollbackLegacyDataDirectoryMigration(
+        LegacyDataDirectoryMigrationResult? migration)
+    {
+        var legacyDirectory = migration?.LegacyDirectory;
+        var retiredDirectory = migration?.RetiredLegacyDirectory;
+        if (string.IsNullOrWhiteSpace(legacyDirectory)
+            || string.IsNullOrWhiteSpace(retiredDirectory)
+            || !Directory.Exists(retiredDirectory))
+        {
+            return;
+        }
+
+        if (Directory.Exists(legacyDirectory))
+            throw Error(
+                "data-directory-rollback-failed",
+                "The legacy data directory reappeared before rollback completed.");
+        Directory.Move(retiredDirectory, legacyDirectory);
+    }
+
+    private static bool CurrentDirectorySupersedesLegacy(
+        string legacyDirectory,
+        string currentDirectory)
+    {
+        var legacyDatabase = Path.Combine(legacyDirectory, LegacyDatabaseName);
+        var currentDatabase = Path.Combine(currentDirectory, CurrentDatabaseName);
+        if (!File.Exists(legacyDatabase) || !File.Exists(currentDatabase))
+            return false;
+        if (HasUnsafeComparisonSidecars(legacyDatabase)
+            || HasUnsafeComparisonSidecars(currentDatabase))
+        {
+            return false;
+        }
+
+        try
+        {
+            using var legacy = new SQLiteConnection(
+                legacyDatabase,
+                SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+            using var current = new SQLiteConnection(
+                currentDatabase,
+                SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+
+            var legacyPages = ReadPageVersions(legacy);
+            var currentPages = ReadPageVersions(current);
+            var currentPageVersions = currentPages.ToDictionary(
+                row => row.Key,
+                row => row.Version,
+                StringComparer.Ordinal);
+            if (currentPages.Count < legacyPages.Count
+                || legacyPages.Any(row =>
+                    !currentPageVersions.TryGetValue(row.Key, out var version)
+                    || version < row.Version))
+            {
+                return false;
+            }
+
+            var legacyRedirects = ReadKeys(legacy, "WikiRedirect", "FromName");
+            var currentRedirects = ReadKeys(current, "WikiRedirect", "FromName");
+            if (!Covers(currentRedirects, legacyRedirects))
+                return false;
+
+            var legacyAssets = ReadKeys(legacy, "WikiAsset", "FileName");
+            var currentAssets = ReadKeys(current, "WikiAsset", "FileName");
+            if (!Covers(currentAssets, legacyAssets))
+                return false;
+
+            var legacyFavorites = ReadKeys(legacy, "WikiFavorite", "WikiTitle");
+            var currentFavorites = ReadKeys(current, "WikiFavorite", "WikiTitle");
+            if (!Covers(currentFavorites, legacyFavorites))
+                return false;
+
+            var legacyHistory = ReadHistory(legacy);
+            var currentHistory = ReadHistory(current)
+                .Select(row => (row.WikiTitle, row.ReadAt, row.DateKey))
+                .ToHashSet();
+            if (legacyHistory.Any(row =>
+                    !currentHistory.Contains((row.WikiTitle, row.ReadAt, row.DateKey))))
+                return false;
+
+            return currentPages.Count > legacyPages.Count
+                   || currentRedirects.Count > legacyRedirects.Count
+                   || currentAssets.Count > legacyAssets.Count
+                   || currentFavorites.Count > legacyFavorites.Count
+                   || currentHistory.Count > legacyHistory.Count
+                   || legacyPages.Any(row => currentPageVersions[row.Key] > row.Version);
+        }
+        catch
+        {
+            return false;
+        }
+    }
+
+    private static List<ContentVersionRow> ReadPageVersions(SQLiteConnection connection) =>
+        connection.Query<ContentVersionRow>(
+            "SELECT Title AS Key, LastModified AS Version FROM WikiPage;");
+
+    private static HashSet<string> ReadKeys(
+        SQLiteConnection connection,
+        string table,
+        string column) =>
+        connection.Query<ContentKeyRow>($"SELECT \"{column}\" AS Key FROM \"{table}\";")
+            .Select(row => row.Key)
+            .ToHashSet(StringComparer.Ordinal);
+
+    private static List<ContentHistoryRow> ReadHistory(SQLiteConnection connection) =>
+        connection.Query<ContentHistoryRow>(
+            "SELECT WikiTitle, ReadAt, DateKey FROM WikiHistory;");
+
+    private static bool Covers(HashSet<string> current, HashSet<string> legacy) =>
+        current.Count >= legacy.Count && legacy.IsSubsetOf(current);
+
+    private static bool HasUnsafeComparisonSidecars(string databasePath)
+    {
+        var wal = databasePath + "-wal";
+        var shm = databasePath + "-shm";
+        var hasWal = File.Exists(wal);
+        var hasShm = File.Exists(shm);
+        return hasWal != hasShm
+               || hasWal && new FileInfo(wal).Length > 0;
     }
 
     public static Task<LegacyAnchorMigrationResult> MigrateAnchorDataAsync(
@@ -867,6 +1044,24 @@ public static class LegacyWikiCompatibility
     private sealed class ColumnNameRow
     {
         public string Name { get; set; } = string.Empty;
+    }
+
+    private sealed class ContentVersionRow
+    {
+        public string Key { get; set; } = string.Empty;
+        public long Version { get; set; }
+    }
+
+    private sealed class ContentKeyRow
+    {
+        public string Key { get; set; } = string.Empty;
+    }
+
+    private sealed class ContentHistoryRow
+    {
+        public string WikiTitle { get; set; } = string.Empty;
+        public long ReadAt { get; set; }
+        public string DateKey { get; set; } = string.Empty;
     }
 
     private enum AnchorMigrationPhase

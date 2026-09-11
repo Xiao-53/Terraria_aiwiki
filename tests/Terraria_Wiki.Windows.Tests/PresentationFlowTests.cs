@@ -118,6 +118,27 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
+    public void WikiPreviewCannotOpenBeforeReaderIsReady()
+    {
+        using var shell = new ShellViewModel();
+        shell.CloseReader();
+
+        Assert.False(shell.CanOpenWikiReader);
+        Assert.False(shell.OpenWikiReaderCommand.CanExecute(null));
+
+        shell.OpenWikiReader();
+
+        Assert.Equal(ReaderPaneState.Closed, shell.ReaderState);
+
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
+
+        Assert.True(shell.CanOpenWikiReader);
+        Assert.True(shell.OpenWikiReaderCommand.CanExecute(null));
+        shell.OpenWikiReaderCommand.Execute(null);
+        Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
+    }
+
+    [Fact]
     public void WikiPreviewOpensReaderWithoutReplacingTheSelectedMainPage()
     {
         using var shell = new ShellViewModel();
@@ -136,6 +157,7 @@ public sealed class PresentationFlowTests
         Assert.True(shell.IsReaderVisible);
 
         shell.CloseReader();
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
         shell.OpenWikiReader();
         Assert.Equal(ShellSection.Chat, shell.CurrentSection);
         Assert.True(shell.IsReaderVisible);
@@ -159,6 +181,7 @@ public sealed class PresentationFlowTests
     public void SettingsTemporarilyHidesReaderAndLeavingRestoresItsPreviousState()
     {
         using var shell = new ShellViewModel();
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
         shell.OpenWikiReader();
 
         Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
@@ -190,6 +213,7 @@ public sealed class PresentationFlowTests
     public void ReaderUsesInlineAndOverlayModesAtExactThresholdAndEscapeClosesOverlay()
     {
         using var shell = new ShellViewModel();
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
         shell.OpenWikiReader();
 
         shell.SetViewportWidth(1100);

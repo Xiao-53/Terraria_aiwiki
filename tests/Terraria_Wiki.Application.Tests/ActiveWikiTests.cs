@@ -290,6 +290,44 @@ public sealed class ActiveWikiTests
     }
 
     [Fact]
+    public async Task InitializationRetiresLegacyDirectoryWhenCurrentDatabaseCoversIt()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
+        await fixture.State.ManagerDatabase.Init();
+        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
+        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
+        var legacyPath = Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName);
+        var currentPath = Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName);
+        await CreateContentDatabaseAsync(legacyPath, "legacy-content");
+        await CreateContentDatabaseAsync(currentPath, "current-content");
+        var current = new ContentDbService(currentPath);
+        try
+        {
+            await current.Init(seedBook: CreateBookOne());
+            await current.SaveItemAsync(new WikiPage
+            {
+                Title = "New Page",
+                Content = "new-content",
+                LastModified = DateTime.UnixEpoch.AddDays(1),
+            });
+        }
+        finally
+        {
+            await current.CloseConnection();
+        }
+        await fixture.State.ManagerDatabase.CloseConnection();
+
+        var active = await fixture.Application.ActiveWiki.InitializeAsync();
+
+        Assert.Equal(1, active.Id);
+        Assert.False(Directory.Exists(legacyDirectory));
+        Assert.Empty(Directory.EnumerateDirectories(
+            fixture.Root,
+            LegacyWikiCompatibility.LegacyDataFolder + ".superseded-*"));
+        Assert.Equal("new-content", (await fixture.Application.Query.ReadAsync("New Page")).Content);
+    }
+
+    [Fact]
     public async Task InitializationUsesSavedStatisticsSnapshotUntilExplicitRefresh()
     {
         await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);

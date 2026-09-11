@@ -98,7 +98,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         NavigateLibraryCommand = new RelayCommand(_ => NavigateLibrary());
         NavigateManagementCommand = new RelayCommand(_ => NavigateManagement());
         NavigateSettingsCommand = new RelayCommand(_ => NavigateSettings());
-        OpenWikiReaderCommand = new RelayCommand(_ => OpenWikiReader());
+        OpenWikiReaderCommand = new RelayCommand(_ => OpenWikiReader(), _ => CanOpenWikiReader);
         CloseReaderCommand = new RelayCommand(_ => CloseReader(), _ => IsReaderVisible);
         RetryStartupCommand = new RelayCommand(
             _ => RetryStartupRequested?.Invoke(this, EventArgs.Empty),
@@ -106,6 +106,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         GetWebView2Command = new RelayCommand(
             _ => GetWebView2Requested?.Invoke(this, EventArgs.Empty),
             _ => CanGetWebView2);
+        Reader.PropertyChanged += OnReaderPropertyChanged;
     }
 
     public event EventHandler? RetryStartupRequested;
@@ -200,6 +201,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public bool CanRetryStartup => HasStartupError && StartupRecovery != StartupRecoveryKind.SelectDataRoot;
     public bool CanGetWebView2 => HasStartupError && StartupRecovery == StartupRecoveryKind.InstallWebView2;
+    public bool CanOpenWikiReader => Reader.IsReady;
 
     public bool IsChatSelected => CurrentSection == ShellSection.Chat;
     public bool IsFavoritesSelected => CurrentSection == ShellSection.Favorites;
@@ -359,7 +361,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             _ = Library.RefreshAsync();
     }
 
-    public void OpenWikiReader() => ReaderState = ReaderPaneState.Wiki;
+    public void OpenWikiReader()
+    {
+        if (CanOpenWikiReader)
+            ReaderState = ReaderPaneState.Wiki;
+    }
 
     public void CloseReader() => ReaderState = ReaderPaneState.Closed;
 
@@ -368,6 +374,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         if (_disposed)
             return;
         _disposed = true;
+        Reader.PropertyChanged -= OnReaderPropertyChanged;
         Chat.ConversationChanged -= OnConversationChanged;
         Favorites.ConversationFavoriteChanged -= OnConversationFavoriteChanged;
         Chat.Dispose();
@@ -430,5 +437,13 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(IsReaderInlineVisible));
         OnPropertyChanged(nameof(CanCloseReader));
         CloseReaderCommand.NotifyCanExecuteChanged();
+    }
+
+    private void OnReaderPropertyChanged(object? sender, System.ComponentModel.PropertyChangedEventArgs args)
+    {
+        if (!string.Equals(args.PropertyName, nameof(ReaderPaneViewModel.IsReady), StringComparison.Ordinal))
+            return;
+        OnPropertyChanged(nameof(CanOpenWikiReader));
+        OpenWikiReaderCommand.NotifyCanExecuteChanged();
     }
 }

@@ -256,6 +256,73 @@ public sealed class LegacyWikiCompatibilityTests
     }
 
     [Fact]
+    public void RetiresLegacyDirectoryOnlyWhenCurrentDatabaseIsAProvenSuperset()
+    {
+        using var temp = new TestDirectory();
+        var legacyDirectory = temp.File(LegacyWikiCompatibility.LegacyDataFolder);
+        var currentDirectory = temp.File("Terraria_Wiki_zh");
+        var legacyDatabase = Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName);
+        var currentDatabase = Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName);
+        CreateComparableContentDatabase(legacyDatabase, includeNewerContent: false);
+        CreateComparableContentDatabase(currentDatabase, includeNewerContent: true);
+
+        LegacyWikiCompatibility.EnsureNoLegacyDataDirectoryConflict(temp.Path, "Terraria_Wiki_zh");
+        var migration = LegacyWikiCompatibility.MigrateLegacyDataDirectory(temp.Path, "Terraria_Wiki_zh");
+
+        Assert.False(Directory.Exists(legacyDirectory));
+        Assert.NotNull(migration.RetiredLegacyDirectory);
+        Assert.True(Directory.Exists(migration.RetiredLegacyDirectory));
+        Assert.Equal(currentDatabase, migration.Database.DatabasePath);
+
+        LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
+
+        Assert.True(Directory.Exists(legacyDirectory));
+        Assert.False(Directory.Exists(migration.RetiredLegacyDirectory));
+
+        migration = LegacyWikiCompatibility.MigrateLegacyDataDirectory(temp.Path, "Terraria_Wiki_zh");
+        LegacyWikiCompatibility.CompleteLegacyDataDirectoryMigration(migration);
+
+        Assert.False(Directory.Exists(legacyDirectory));
+        Assert.False(Directory.Exists(migration.RetiredLegacyDirectory));
+        Assert.True(File.Exists(currentDatabase));
+    }
+
+    [Fact]
+    public void RejectsRetirementWhenCurrentDatabaseDoesNotCoverLegacyPages()
+    {
+        using var temp = new TestDirectory();
+        var legacyDirectory = temp.File(LegacyWikiCompatibility.LegacyDataFolder);
+        var currentDirectory = temp.File("Terraria_Wiki_zh");
+        var legacyDatabase = Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName);
+        var currentDatabase = Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName);
+        CreateComparableContentDatabase(legacyDatabase, includeNewerContent: false);
+        CreateComparableContentDatabase(currentDatabase, includeNewerContent: true);
+        using (var current = new SQLiteConnection(currentDatabase))
+            current.Delete<WikiPage>("Home");
+        var before = Directory
+            .EnumerateFiles(temp.Path, "*", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => (Path.GetRelativePath(temp.Path, path), File.ReadAllBytes(path)))
+            .ToArray();
+
+        var exception = Assert.Throws<WikiCompatibilityException>(() =>
+            LegacyWikiCompatibility.MigrateLegacyDataDirectory(temp.Path, "Terraria_Wiki_zh"));
+
+        Assert.Equal("data-directory-conflict", exception.Code);
+        Assert.True(Directory.Exists(legacyDirectory));
+        Assert.True(Directory.Exists(currentDirectory));
+        var after = Directory
+            .EnumerateFiles(temp.Path, "*", SearchOption.AllDirectories)
+            .OrderBy(path => path, StringComparer.Ordinal)
+            .Select(path => (Path.GetRelativePath(temp.Path, path), File.ReadAllBytes(path)))
+            .ToArray();
+        Assert.Equal(before.Select(item => item.Item1), after.Select(item => item.Item1));
+        Assert.Equal(
+            before.Select(item => Convert.ToHexString(SHA256.HashData(item.Item2))),
+            after.Select(item => Convert.ToHexString(SHA256.HashData(item.Item2))));
+    }
+
+    [Fact]
     public async Task AnchorMigrationRunsTransactionallyAndIsIdempotent()
     {
         using var temp = new TestDirectory();
@@ -609,4 +676,52 @@ public sealed class LegacyWikiCompatibilityTests
 
     private static string Hash(byte[] bytes) =>
         Convert.ToHexString(SHA256.HashData(bytes)).ToLowerInvariant();
+
+    private static void CreateComparableContentDatabase(string path, bool includeNewerContent)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using var connection = new SQLiteConnection(path);
+        connection.CreateTable<WikiPage>();
+        connection.CreateTable<WikiRedirect>();
+        connection.CreateTable<WikiAsset>();
+        connection.CreateTable<WikiFavorite>();
+        connection.CreateTable<WikiHistory>();
+        connection.Insert(new WikiPage
+        {
+            Title = "Home",
+            Content = includeNewerContent ? "current" : "legacy",
+            LastModified = includeNewerContent ? DateTime.UnixEpoch.AddDays(1) : DateTime.UnixEpoch,
+        });
+        connection.Insert(new WikiRedirect { FromName = "Start", ToTarget = "Home" });
+        connection.Insert(new WikiAsset
+        {
+            FileName = "logo.png",
+            Data = [1],
+            MimeType = "image/png",
+            LastModified = DateTime.UnixEpoch,
+        });
+        connection.Insert(new WikiFavorite { WikiTitle = "Home", FavoritedAt = DateTime.UnixEpoch });
+        connection.Insert(new WikiHistory
+        {
+            WikiTitle = "Home",
+            ReadAt = DateTime.UnixEpoch,
+            DateKey = "1970-01-01",
+        });
+        if (!includeNewerContent)
+            return;
+        connection.Insert(new WikiPage
+        {
+            Title = "New Page",
+            Content = "new",
+            LastModified = DateTime.UnixEpoch.AddDays(1),
+        });
+        connection.Insert(new WikiRedirect { FromName = "New", ToTarget = "New Page" });
+        connection.Insert(new WikiAsset
+        {
+            FileName = "new.png",
+            Data = [2],
+            MimeType = "image/png",
+            LastModified = DateTime.UnixEpoch.AddDays(1),
+        });
+    }
 }
