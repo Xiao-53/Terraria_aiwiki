@@ -1,6 +1,6 @@
 # AI 证据流程与 Token 效率优化
 
-- 状态：in-progress；源码及非付费自动验证已完成，真实 provider Token/质量/延迟对照待用户验收或单独有限付费授权
+- 状态：completed；源码、自动回归和用户指定的新版两个五轮真实验收完成；保留两项输出质量观察，不作新旧对照或Token下降结论
 - Phase：无；独立 AI / Wiki Tools 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑和平台无关验证；Windows 11 x64 负责 .NET、真实 C# MCP→Python 离线链路与开发输出验证
 - 创建日期：2026-09-09
@@ -33,6 +33,8 @@
 这些是流程边界测试，不代表真实模型发生同样错误的频率，也不能测出真实 Token 收益。
 
 ## 目标与完成定义
+
+**2026-09-11 验收范围修订**：用户明确要求只验收优化后版本两个新会话各5轮，不测试旧版。下述原对照目标保留为历史方案；本次完成门槛改为新版真实运行、绝对Token/延迟、事实/来源/历史核对及如实记录质量问题，不要求执行被用户排除的旧版或额外重复付费测试。
 
 - 让模型收到更相关、少重复的证据与更短的必要工具说明；严格解析和完整来源元数据保留在宿主。
 - 简单定向问题优先读取需要的章节；列表、比较、多跳问题仍可取得全部必要证据，不降低工具/请求上限或 Search 结果范围。
@@ -139,6 +141,7 @@
 | `agent/tests/evidence_wire_fixture.py`、`test_evidence_wire.py` | ADD：Responses/Chat 内存 HTTP 线协议 fixture，接 fake/真实 C# MCP 验证 |
 | `tests/Terraria_Wiki.WikiTools.TestHost/WikiToolTestHost.cs` | MODIFY：增加仅测试合成版本/模式与跨页枚举资料，不读取真实数据 |
 | `evaluation.md` | ADD：固定质量 Oracle、载荷基线、真实 provider 待验收步骤 |
+| `agent/tests/manual_evidence_acceptance.py`、`test_acceptance_harness.py` | ADD：仅显式运行的Windows真实provider验收脚本及两协议离线回归；不进入产品Runtime，默认pytest不读取应用密钥或调用付费服务 |
 | `tests/Terraria_Wiki.WikiTools.Tests/WikiEvidenceFormatterTests.cs`、`WikiToolContractTests.cs` | MODIFY：定向范围、复杂表格、完整性、分页及旧调用兼容 |
 | `openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md` | MODIFY：实施时同步投影、程序流程、定向阅读与去重契约 |
 | `docs/adr/0005-use-pydantic-ai-openai-backend.md` | MODIFY：同步宿主验证后投影及运行内证据引用，不改框架/provider/历史 |
@@ -154,7 +157,7 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 - [x] 实现本次运行内重复证据投影，覆盖版本变化、并行、续页和调用配对。
 - [x] 加入 Search→Read 程序前置和证据覆盖提示，确保在正文流式发布前处理违规路径。
 - [x] 运行离线、C# MCP 跨语言、Windows build/tests，逐项比较结构收益与证据保留，不下调限位或历史；真实语义质量不由 scripted 测试代替。
-- [ ] 用户执行真实 provider 对照，或在单独有限付费授权下执行；回填 Token、质量和延迟结果。
+- [x] 按用户后续明确授权执行**仅新版两个独立五轮会话**，复用现有DeepSeek配置和密钥，不设费用上限；回填绝对Token、质量、延迟及脚本故障费用未知项，旧版对照已被用户排除。
 - [x] 更新 spec/必要 ADR、计划和验证记录，检查 diff/临时数据/进程，独立提交保存本记录及当前实现；不打包、push 或发布。
 
 ## 验证与回归计划
@@ -197,6 +200,10 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 
 ## 进度记录
 
+- 2026-09-11：用户明确授权读取应用现有 DeepSeek 配置和 Credential Manager 密钥，执行两个新会话、每个5轮的真实 provider 验收，不设费用上限；不据此扩大会话/轮数或更改原运行硬限位。密钥仅进入测试进程内存，结果只保存脱敏指标与评分。开始准备基线/优化后对照，原无付费授权的描述为此前状态。
+- 2026-09-11：用户纠正为**仅测试优化后版本，两个独立新会话各5轮，不测试旧版**。已停止基线准备，不作前后 Token 下降结论。采用当前 C# TestHost 固定合成数据便于逐项核对，测试脚本为 `agent/tests/manual_evidence_acceptance.py`，不会进入默认 pytest；严格保留应用的 DeepSeek V4 Flash / Responses / low 配置、原运行限位与真实会话历史，不因验收结论继续追加新的付费会话。
+- 2026-09-11：两次新会话各5轮有效运行完成，9回答/1正确拒答，输入202526、缓存输入108032、输出6490、合计209016 Token，耗时61.177秒。配方与模式核心事实正确，列表20/20；记录孤立尾字和协议字段/冗余说明两项输出问题。测试统计脚本先前11次启动/定位请求失败且用量未知，可能已付费，单独披露，不混入成功轮次指标。修复统计脚本并增加离线回归后完成有效会话，不再追加付费调用。
+
 - 2026-09-11：用户授权完成计划；从干净的 `09a4cf256f9e6f9f63c544b6a9c484ffdff7a58f` 创建 `optimize-ai-evidence-flow` 分支，原 master 是可恢复保存点。不使用子代理，不调用付费 provider。
 - 2026-09-11：完成 v1/v2 兼容、显式 section/父章节上下文、绑定 continuation、精确证据/目录引用、Search 步骤前置、schema 精简和两协议内存 HTTP 测试。检查发现原 formatter 会丢失图标 alt，并将数字标点归一后去重；已局部修正，并补充嵌套表格/多级表头 oracle。
 - 2026-09-11：首轮 Python 104 项离线通过、5 项 fake/真实 MCP 协议测试通过；Windows 全量 .NET 344/344。并行构建与 TestHost 一度产生 DLL 复制重试 warning，已停止交叉执行并顺序重建，0 warning/0 error。新增最后的重叠/悬空引用与真实分页验证正在执行，最终数字以末尾验证结果为准。
@@ -230,8 +237,9 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 - 固定合成序列：description 2641→47 bytes；Search 5693→4893 bytes；首 Read 6809→6507 bytes；重复 Read 6809→179 bytes；最终请求工具返回合计19311→11579 bytes。保留全部50候选、精确配方文本和四轮历史。每请求快照、单位及局限详见 `evaluation.md`，不把字节变化称为真实 Token 下降。
 - Windows Chat、BuildHistory、Core/Application、公共 models、Sidecar v2、锁文件、打包和其他 changes 对基线无差异；现有四轮/24000字符/段落边界测试通过。开发输出的 Agent 源与工作区逐字一致；真实 TestHost 测试进程已全部退出。
 - `git diff --check` 通过；无新增依赖、生产日志、原始请求留档、secret、用户数据库或临时 fixture 数据进入提交；未 publish、打包、push 或发布。
-- **未执行**真实 provider 的 Token、答案质量、遗漏、误拒答与延迟对照。现有授权明确排除此类自动付费调用，不能把离线成功记作最终产品效率/质量验收。
+- 后续获用户明确付费授权，已完成新版真实DeepSeek **10/10有效轮次**（9回答、1正确拒答），两会话分别按0/1/2/3/4轮实际历史输入；十轮流式拼接一致。固定合成资料核心事实和20项列表通过核对，两个输出质量观察详见evaluation.md。本轮未做旧版或真实用户Wiki/窗口测试，不能宣称Token相对下降。
+- 新验收包装器在首次尝试有usage属性调用错误；11次启动/定位请求用量未保存且可能已计费。仅测试脚本修复后，两协议离线统计回归通过，默认离线pytest **109 passed / 7 deselected**，未添加产品依赖或修改生产行为。真实TestHost进程已退出，密钥/配置未修改，旧版临时源文件已删除（可从Git基线恢复）。
 
 ## 完成摘要
 
-已在独立分支实现并自动验证：严格校验后精简模型证据、显式定向章节及父条件、绑定续读、运行内安全重复引用和程序强制 Search→Read；表格、图标与精确数字证据有回归保障。最近最多4轮、24000字符策略及原运行限位保持不变。所有已授权源码与非付费验证完成，并独立提交；计划保持 in-progress、不归档，唯一未关闭门槛是真实 provider 对照。用户可按 evaluation.md 自行验收，或另行给出 provider/模型、题集、重复次数和费用上限授权。
+已在独立分支实现并自动验证：严格校验后精简模型证据、显式定向章节及父条件、绑定续读、运行内安全重复引用和程序强制Search→Read；最近最多4轮、24000字符策略及原限位不变。用户后续授权并收窄为仅新版两个五轮真实验收，该范围已完成，数据与结论见evaluation.md。核心事实/完整列表/来源/流式通过本题集核对，孤立尾字和冗余协议说明作为两项表达质量观察保留；formatter过滤了本次注入指令，不能外推为模型层注入抵抗。未测试旧版，不作节费/Token下降结论；测试脚本前期11次用量未知请求可能产生额外费用，已明确披露。计划按更新后的验收范围标为completed，不打包、不push、不发布。
