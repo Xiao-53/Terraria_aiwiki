@@ -1,6 +1,6 @@
 # Wiki Tools 能力契约
 
-- 状态：confirmed baseline；2026-09-05 `read_wiki` 已改为有界纯文本 evidence blocks
+- 状态：confirmed baseline；2026-09-11 增加显式 v2 定向读取，默认 v1 兼容保留
 - 适用范围：Wiki Tool Adapter、AI Backend、Windows Runtime lifecycle；Android transport 另行决定
 - 来源：Master Architecture v0.6、Wiki Search / Read 边界、Phase 05 AI Adapter、ADR 0004
 
@@ -46,19 +46,30 @@
 - `title`：必填非空页面标题，可包含 `#anchor`。
 - `focus`：可选问题或主题，用于优先返回相关章节；中文匹配必须支持 bigram。
 - `cursor`：可选非负 continuation 游标；继续读取时调用方保持相同 title/focus，并使用上次 `next_cursor`。
+- `mode`：可选 `page` / `section`。省略时保持 `wiki_blocks_v1` 的排序及响应字段；显式指定时返回 `wiki_blocks_v2`。`page` 仍按相关性排序全页，`section` 只选择精确 anchor 对应章节、子章节及根导语/父章节限定正文。focus 始终只排序，不过滤。
+- `continuation_token`：v2 continuation 必须与 `cursor=next_cursor` 同时传入上次 `scope.continuation_token`，并保持 title/focus/mode。token 绑定页面身份、完整内容、anchor、focus 与模式；不匹配、遗漏、过期或越界均为 `invalid-arguments`。v1 不接收此 token。
 
 输出固定包含：
 
 - `requested_title`、`requested_page_title`；
 - `status`：`found` 或 `not_found`；
 - `is_found`、`title`、`last_modified`；
-- `content_format`：found 固定为 `wiki_blocks_v1`，not-found 为 null；
+- `content_format`：found 按所选协议为 `wiki_blocks_v1` 或 `wiki_blocks_v2`，not-found 为 null；
 - `blocks`：有序 `{ section_path, kind, text }`，kind 只允许 `heading`、`paragraph`、`list_item`、`definition`、`table_row`、`code`；
 - `included_characters`、`original_characters`、`is_complete`、`next_cursor`；
 - `available_sections`：最多 64 项且文本合计最多 4096 字符；
 - `is_redirect`、`redirect_from_title`、`redirect_target_title`、`redirect_target_anchor`、`anchor`。
 
-Adapter 仍通过现有 `WikiReadResponse` 取得完整存储 HTML，但只在 WikiTools 内使用锁定的 HtmlAgilityPack 1.12.4 转换。模型工具结果不得包含完整 HTML、标签、属性、脚本、注释、隐藏/导航或媒体节点；Application 与 Viewer 仍获得原始完整 HTML。标题层级、段落、列表、定义、代码、带列名的表格行和 infobox 语义必须保留。每次全部 `blocks.text` 合计最多 16384 个 Unicode scalar（与 Python `len` 对有效 Unicode 字符串的计数一致），分块不得切断 surrogate pair；超出时返回非空 `next_cursor`，不得把截断误报为 complete。首次排序是显式 anchor → 页面标题/导语 → focus 命中章节 → 其余正文；not-found 是成功结构化结果。Read 不写任何持久 Wiki 浏览历史。
+v2 found 另有 `scope`，v1 与 not-found 不含此字段：
+
+- `mode`、`selected_section`、`anchor_found`：选择模式、章节路径及精确锚点是否匹配。section 要求明确 anchor（可由 Redirect 提供）；匹配真实 id，缺少 id 时允许标题名。缺失 anchor 返回空 blocks、目录及 `anchor_found=false`，不得当作成功目标证据。
+- `page_complete`：仅 page 模式全部遍历后为 true；`is_complete` 在 v2 只表示选择范围已遍历。section 完整不等于全页完整，即使该章节恰为唯一章节。
+- `content_version`：完整 HTML 的 SHA-256 内容身份，仅用于当次证据版本比较；`continuation_token`：存在后续块时非空。
+- `sections`：`{path, anchor}` 目录，最多 64 项，path 与 anchor 文本合计最多 4096 scalar。目录有界，不保证枚举所有章节；完整列表问题应通过 page continuation 验证覆盖。可用无 anchor 的原页 title 配合 mode=page 回到全页路径。
+
+Adapter 仍通过现有 `WikiReadResponse` 取得完整存储 HTML，但只在 WikiTools 内使用锁定的 HtmlAgilityPack 1.12.4 转换。模型工具结果不得包含完整 HTML、标签、属性、脚本、注释、隐藏/导航或媒体节点；正文中的非隐藏图标仅保留 alt 纯文本语义，不保留媒体对象或 URL。Application 与 Viewer 仍获得原始完整 HTML。标题层级、段落、列表、定义、代码、带列名的表格行、嵌套表格和多级表头及 infobox 语义必须保留。同章节正文去重使用精确文本，不规范化数字、标点或否定词。每次全部 `blocks.text` 合计最多 16384 个 Unicode scalar（与 Python `len` 对有效 Unicode 字符串的计数一致），分块不得切断 surrogate pair；超出时返回非空 `next_cursor`，不得把截断误报为 complete。page 首次排序是显式 anchor → 页面标题/导语 → focus 命中章节 → 其余正文；not-found 是成功结构化结果。Read 不写任何持久 Wiki 浏览历史。
+
+Python 必须严格区分 v1/v2；旧 parser 不识别 v2 时失败关闭，不能静默把选择范围理解为全页。C#/Python 更新成套验证与回退，不修改持久数据库或会话格式。
 
 ## 错误与取消
 

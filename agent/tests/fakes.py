@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import inspect
 from collections.abc import Awaitable, Callable, Sequence
+from copy import deepcopy
 from decimal import Decimal
 from typing import Any, Self
 
@@ -155,6 +156,8 @@ def tool_definitions(names: Sequence[str] = ("search_wiki", "read_wiki")) -> lis
                     "title": {"type": "string"},
                     "focus": {"type": ["string", "null"]},
                     "cursor": {"type": ["integer", "null"]},
+                    "mode": {"type": ["string", "null"], "enum": ["page", "section", None]},
+                    "continuation_token": {"type": ["string", "null"]},
                 },
                 "required": ["title"],
             },
@@ -181,7 +184,7 @@ class FakeWikiToolset(MCPToolset):
             "http://127.0.0.1:1/mcp",
             process_tool_call=process_tool_call,
             tool_error_behavior="error",
-            include_return_schema=True,
+            include_return_schema=False,
             prefer_tasks=False,
         )
         self._handler = handler
@@ -312,7 +315,7 @@ class ScriptedModel:
         self.model = OfflineFunctionModel(self._respond)
 
     async def _respond(self, messages: list[Any], info: AgentInfo) -> ModelResponse:
-        self.messages.append(messages)
+        self.messages.append(deepcopy(messages))
         self.infos.append(info)
         index = self.calls
         self.calls += 1

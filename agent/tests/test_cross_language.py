@@ -11,11 +11,14 @@ from pathlib import Path
 from typing import Any
 
 import pytest
+from fastmcp import Client
+from fastmcp.client.transports import StreamableHttpTransport
 from pydantic_ai import ModelResponse, TextPart, ToolCallPart, models
 from pydantic_ai.models.function import AgentInfo
 from pydantic_ai.usage import RequestUsage
 
 from terraria_wiki_agent import TerrariaWikiAgent, WikiAgentSettings, WikiToolConnection
+from terraria_wiki_agent.agent import _WikiReadResponse
 
 from .fakes import OfflineFunctionModel
 
@@ -244,3 +247,45 @@ def test_three_controlled_real_provider_evaluations(
             call.name == "read_wiki" and call.status == "succeeded" for call in answer.tool_trace
         )
         assert answer.sources
+
+
+@pytest.mark.cross_language
+def test_real_v2_sections_continuation_missing_anchor_and_strict_parser():
+    if os.environ.get("TERRARIA_RUN_CROSS_LANGUAGE") != "1":
+        pytest.skip("Explicit cross-language opt-in required")
+
+    async def run():
+        async with real_test_host() as connection:
+            transport = StreamableHttpTransport(
+                connection.endpoint, headers=connection._authorization_headers()
+            )
+            async with Client(transport) as client:
+
+                async def read(args):
+                    result = await client.call_tool("read_wiki", args)
+                    return _WikiReadResponse.model_validate(result.structured_content)
+
+                recipe = await read({"title": "证据流程样本#recipe", "mode": "section"})
+                text = " ".join(block.text for block in recipe.blocks)
+                assert "专家模式" in text and "仅击败月亮领主后" in text
+                assert "12夜银锭" in text and "3棱镜核心" in text and "远古操纵机" in text
+                assert "不能制作" not in text
+                assert recipe.scope and not recipe.scope.page_complete
+                missing = await read({"title": "证据流程样本#missing", "mode": "section"})
+                assert not missing.blocks and missing.scope and not missing.scope.anchor_found
+                args = {"title": "证据流程样本#items", "mode": "section"}
+                pages = []
+                while True:
+                    page = await read(args)
+                    pages.append(page)
+                    if page.is_complete:
+                        break
+                    args.update(
+                        cursor=page.next_cursor, continuation_token=page.scope.continuation_token
+                    )
+                assert len(pages) > 1
+                text = " ".join(block.text for page in pages for block in page.blocks)
+                for index in range(20):
+                    assert text.count(f"唯一序号{index:02}") == 1
+
+    asyncio.run(run())

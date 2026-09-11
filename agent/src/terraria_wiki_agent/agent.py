@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import os
 import re
 from collections.abc import Awaitable, Callable, Sequence
@@ -36,6 +37,7 @@ from pydantic_ai.messages import (
     PartStartEvent,
     TextPart,
     TextPartDelta,
+    ToolReturnPart,
     UserPromptPart,
 )
 from pydantic_ai.models import Model
@@ -86,6 +88,18 @@ Mandatory evidence workflow:
    exactly this Markdown sentence and nothing else:
    本地 Wiki 证据不足，无法可靠回答这个问题。
 
+Evidence coverage:
+- Check every requested subquestion, version/mod/difficulty, ingredient quantity, crafting station,
+  prerequisite and conflicting condition against the current reads. History is not factual proof.
+- Prefer mode=section with a known title#anchor for targeted questions; mode=page provides the
+  catalog. A complete section is not a complete page. Missing anchors provide no target evidence.
+- For all-items lists and comparisons, verify coverage across relevant sections/pages before
+  claiming completeness. Partial page reads may suffice for a specific fact, but found is not proof.
+- Evidence groups preserve section paths. A block ref points to the exact earlier block id still
+  in this run's tool messages; it adds no new fact. Continue using the returned cursor and token.
+- available_sections lists readable sections; catalog_ref reuses the earlier catalog_id. Catalogs
+  are bounded, so use page continuation for complete enumerations beyond the listed sections.
+
 Bounded tool strategy:
 - Use as many necessary Search/Read calls as the question and evidence require, within the host's
   unchanged absolute limit of eight tool calls. Do not reduce evidence calls to save tokens.
@@ -134,6 +148,13 @@ class _WikiSearchResult(BaseModel):
     ]
     highlights: list[_WikiSearchHighlight]
 
+    @field_validator("title", "redirect_target", "summary")
+    @classmethod
+    def reject_html(cls, value: str) -> str:
+        if _HTML_TAG.search(value):
+            raise ValueError("Wiki search must be plain text")
+        return value
+
 
 class _WikiSearchResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -156,6 +177,40 @@ class _WikiEvidenceBlock(BaseModel):
         return value
 
 
+class _WikiEvidenceSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    path: str = Field(min_length=1)
+    anchor: str | None
+
+    @field_validator("path", "anchor")
+    @classmethod
+    def reject_html(cls, value: str | None) -> str | None:
+        if value is not None and _HTML_TAG.search(value):
+            raise ValueError("Wiki section must be plain text")
+        return value
+
+
+class _WikiEvidenceScope(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    mode: Literal["page", "section"]
+    selected_section: str | None
+    anchor_found: bool
+    page_complete: bool
+    content_version: str = Field(pattern=r"^[A-F0-9]{64}$")
+    continuation_token: str | None = Field(pattern=r"^[A-F0-9]{64}$")
+    sections: list[_WikiEvidenceSection] = Field(max_length=64)
+
+    @model_validator(mode="after")
+    def validate_catalog(self) -> _WikiEvidenceScope:
+        if self.selected_section is not None and _HTML_TAG.search(self.selected_section):
+            raise ValueError("Wiki scope must be plain text")
+        if sum(len(s.path) + len(s.anchor or "") for s in self.sections) > 4096:
+            raise ValueError("Wiki scope catalog is too large")
+        return self
+
+
 class _WikiReadResponse(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -164,7 +219,7 @@ class _WikiReadResponse(BaseModel):
     status: Literal["found", "not_found"]
     is_found: bool
     title: str | None
-    content_format: Literal["wiki_blocks_v1"] | None
+    content_format: Literal["wiki_blocks_v1", "wiki_blocks_v2"] | None
     blocks: list[_WikiEvidenceBlock]
     included_characters: int = Field(ge=0, le=16_384)
     original_characters: int = Field(ge=0)
@@ -177,6 +232,22 @@ class _WikiReadResponse(BaseModel):
     redirect_target_title: str | None
     redirect_target_anchor: str | None
     anchor: str | None
+    scope: _WikiEvidenceScope | None = None
+
+    @field_validator(
+        "requested_title",
+        "requested_page_title",
+        "title",
+        "anchor",
+        "redirect_from_title",
+        "redirect_target_title",
+        "redirect_target_anchor",
+    )
+    @classmethod
+    def reject_identity_html(cls, value: str | None) -> str | None:
+        if value is not None and _HTML_TAG.search(value):
+            raise ValueError("Wiki identity must be plain text")
+        return value
 
     @field_validator("available_sections")
     @classmethod
@@ -191,8 +262,15 @@ class _WikiReadResponse(BaseModel):
             if (
                 not self.is_found
                 or self.title is None
-                or self.content_format != "wiki_blocks_v1"
-                or not self.blocks
+                or self.content_format is None
+                or (
+                    not self.blocks
+                    and not (
+                        self.scope is not None
+                        and self.scope.mode == "section"
+                        and not self.scope.anchor_found
+                    )
+                )
             ):
                 raise ValueError("found Wiki reads require structured evidence")
         elif (
@@ -205,6 +283,7 @@ class _WikiReadResponse(BaseModel):
             or not self.is_complete
             or self.next_cursor is not None
             or self.available_sections
+            or self.scope is not None
         ):
             raise ValueError("not-found Wiki reads cannot contain page evidence")
         if self.included_characters != sum(len(block.text) for block in self.blocks):
@@ -213,6 +292,21 @@ class _WikiReadResponse(BaseModel):
             raise ValueError("section catalog is too large")
         if self.is_complete != (self.next_cursor is None):
             raise ValueError("continuation fields are inconsistent")
+        if (self.content_format == "wiki_blocks_v2") != (self.scope is not None):
+            raise ValueError("scope requires v2 evidence")
+        if self.scope is not None:
+            scope = self.scope
+            if self.is_complete != (scope.continuation_token is None):
+                raise ValueError("scope continuation is inconsistent")
+            if scope.page_complete != (scope.mode == "page" and self.is_complete):
+                raise ValueError("page completeness is inconsistent")
+            if scope.mode == "section":
+                if scope.anchor_found != (scope.selected_section is not None):
+                    raise ValueError("selected section is inconsistent")
+                if not scope.anchor_found and (self.blocks or not self.is_complete):
+                    raise ValueError("missing anchor cannot provide evidence")
+            elif scope.selected_section is not None:
+                raise ValueError("page mode cannot select a section")
         return self
 
 
@@ -328,6 +422,9 @@ class _RunEvidence:
     sources: list[WikiAgentSource] = field(default_factory=list)
     trace: list[WikiAgentToolCall] = field(default_factory=list)
     _source_keys: set[tuple[str, str]] = field(default_factory=set)
+    _block_ids: dict[tuple[str, ...], str] = field(default_factory=dict)
+    _search_steps: set[int] = field(default_factory=set)
+    _catalog_ids: dict[tuple[str, ...], str] = field(default_factory=dict)
 
     async def process_tool_call(
         self,
@@ -336,16 +433,36 @@ class _RunEvidence:
         name: str,
         tool_args: dict[str, Any],
     ) -> ToolResult:
-        del ctx
         if name not in _EXPECTED_TOOLS:
             raise _WikiToolUnavailable
         tool_name = cast(Literal["search_wiki", "read_wiki"], name)
         await self.emitter.emit(WikiAgentToolStarted(name=tool_name))
         try:
+            if name == "read_wiki" and not any(step < ctx.run_step for step in self._search_steps):
+                raise ModelRetry(
+                    "Call search_wiki successfully in an earlier turn before read_wiki."
+                )
             result = await call_tool(name, tool_args)
+            if name == "read_wiki":
+                read = _WikiReadResponse.model_validate(result)
+                if read.requested_title != tool_args.get("title"):
+                    raise _WikiToolUnavailable
+                if read.status == "found" and (
+                    (read.scope.mode if read.scope else None) != tool_args.get("mode")
+                ):
+                    raise _WikiToolUnavailable
             status = self._record(name, result)
+            if name == "search_wiki":
+                self._search_steps.add(ctx.run_step)
+                search = _WikiSearchResponse.model_validate(result)
+                projected: ToolResult = {
+                    "results": [item.model_dump(exclude={"highlights"}) for item in search.results]
+                }
+            else:
+                read = _WikiReadResponse.model_validate(result)
+                projected = self._project_read(ctx, read)
             await self.emitter.emit(WikiAgentToolFinished(name=tool_name, status=status))
-            return result
+            return projected
         except asyncio.CancelledError:
             raise
         except _WikiCallbackFailed:
@@ -373,8 +490,12 @@ class _RunEvidence:
             if read.status == "found"
             else WikiAgentToolCallStatus.NOT_FOUND
         )
+        if not read.blocks:
+            call_status = WikiAgentToolCallStatus.NOT_FOUND
         self.trace.append(WikiAgentToolCall(name="read_wiki", status=call_status))
         if read.status != "found":
+            return "not_found"
+        if not read.blocks:
             return "not_found"
 
         assert read.title is not None
@@ -391,6 +512,89 @@ class _RunEvidence:
             )
         )
         return "succeeded"
+
+    def _project_read(self, ctx: RunContext[Any], read: _WikiReadResponse) -> dict[str, Any]:
+        if read.status == "not_found":
+            return {"status": "not_found", "title": read.requested_title}
+        # Only complete blocks already in prior model input qualify, never sibling calls.
+        visible: dict[str, tuple[str, str, str]] = {}
+        visible_catalogs: dict[str, Any] = {}
+        for message in ctx.messages:
+            if not isinstance(message, ModelRequest):
+                continue
+            for part in message.parts:
+                if not isinstance(part, ToolReturnPart) or part.tool_name != "read_wiki":
+                    continue
+                if not isinstance(part.content, dict):
+                    continue
+                if "catalog_id" in part.content and "available_sections" in part.content:
+                    visible_catalogs[part.content["catalog_id"]] = part.content[
+                        "available_sections"
+                    ]
+                for group in part.content.get("evidence", []):
+                    for block in group["blocks"]:
+                        if "id" in block:
+                            visible[block["id"]] = (group["section"], block["kind"], block["text"])
+        version = (
+            read.scope.content_version
+            if read.scope
+            else read.last_modified.isoformat()
+            if read.last_modified
+            else None
+        )
+        groups: list[dict[str, Any]] = []
+        for block in read.blocks:
+            key = (
+                read.title or "",
+                version or "",
+                str(read.last_modified),
+                block.section_path,
+                block.kind,
+                block.text,
+            )
+            prior_id = self._block_ids.get(key) if version else None
+            if prior_id and visible.get(prior_id) == (block.section_path, block.kind, block.text):
+                projected_block = {"ref": prior_id}
+            else:
+                block_id = f"e{len(self._block_ids) + 1}"
+                # Same-batch duplicates must not overwrite an id used by a previous return.
+                if key in self._block_ids:
+                    block_id = self._block_ids[key]
+                self._block_ids[key] = block_id
+                projected_block = {"id": block_id, "kind": block.kind, "text": block.text}
+            if not groups or groups[-1]["section"] != block.section_path:
+                groups.append({"section": block.section_path, "blocks": []})
+            groups[-1]["blocks"].append(projected_block)
+        result: dict[str, Any] = {
+            "status": "found",
+            "title": read.title,
+            "anchor": read.anchor,
+            "evidence": groups,
+            "is_complete": read.is_complete,
+            "next_cursor": read.next_cursor,
+        }
+        if read.scope:
+            result["scope"] = read.scope.model_dump(exclude={"content_version", "sections"})
+            catalog: list[Any] = [section.model_dump() for section in read.scope.sections]
+        else:
+            catalog = list(read.available_sections)
+        catalog_key = (
+            read.title or "",
+            version or "",
+            str(read.last_modified),
+            json.dumps(catalog, ensure_ascii=False),
+        )
+        catalog_id = self._catalog_ids.get(catalog_key) if version else None
+        if catalog_id and visible_catalogs.get(catalog_id) == catalog:
+            result["catalog_ref"] = catalog_id
+        else:
+            result["available_sections"] = catalog
+            if catalog and version:
+                catalog_id = self._catalog_ids.setdefault(
+                    catalog_key, f"c{len(self._catalog_ids) + 1}"
+                )
+                result["catalog_id"] = catalog_id
+        return result
 
 
 type _ToolsetFactory = Callable[[WikiToolConnection, _RunEvidence, WikiAgentSettings], MCPToolset]
@@ -426,7 +630,7 @@ def _default_toolset_factory(
         tool_error_behavior="error",
         process_tool_call=evidence.process_tool_call,
         prefer_tasks=False,
-        include_return_schema=True,
+        include_return_schema=False,
         init_timeout=min(15.0, settings.timeout_seconds),
         read_timeout=settings.timeout_seconds,
     )

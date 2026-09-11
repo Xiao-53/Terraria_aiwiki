@@ -1,6 +1,8 @@
 using System.Globalization;
 using System.Net;
+using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 using System.Text.RegularExpressions;
 using HtmlAgilityPack;
 
@@ -11,7 +13,8 @@ internal sealed record WikiEvidencePage(
     int IncludedCharacters,
     bool IsComplete,
     int? NextCursor,
-    IReadOnlyList<string> AvailableSections)
+    IReadOnlyList<string> AvailableSections,
+    WikiEvidenceScope? Scope = null)
 {
     public static WikiEvidencePage Empty { get; } = new([], 0, true, null, []);
 }
@@ -39,12 +42,26 @@ internal static partial class WikiEvidenceFormatter
         string html,
         string? anchor,
         string? focus,
-        int? cursor)
+        int? cursor,
+        string? mode = null,
+        string? continuationToken = null,
+        string? requestedTitle = null)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(title);
         ArgumentNullException.ThrowIfNull(html);
         if (cursor < 0)
             throw new ArgumentOutOfRangeException(nameof(cursor));
+        if (mode is not (null or "page" or "section")
+            || (mode == "section" && string.IsNullOrWhiteSpace(anchor))
+            || (mode is null && continuationToken is not null))
+            throw new ArgumentException("Invalid evidence range.");
+
+        var contentVersion = mode is null ? null : Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(html)));
+        var binding = mode is null ? null : Convert.ToHexString(SHA256.HashData(JsonSerializer.SerializeToUtf8Bytes(
+            new[] { requestedTitle ?? title, title, contentVersion, anchor, focus, mode })));
+        if (mode is not null && ((cursor > 0 && continuationToken is null)
+            || (continuationToken is not null && continuationToken != binding)))
+            throw new ArgumentException("Invalid evidence continuation.");
 
         var document = new HtmlDocument();
         document.LoadHtml(html);
@@ -72,7 +89,7 @@ internal static partial class WikiEvidenceFormatter
                     sectionStack.RemoveAt(sectionStack.Count - 1);
                 var parent = sectionStack[^1];
                 var path = parent.IsRoot ? $"{title} > {text}" : $"{parent.Path} > {text}";
-                var section = new Section(text, path, NodeAnchor(node), false, level);
+                var section = new Section(text, path, NodeAnchor(node), false, level, parent);
                 sections.Add(section);
                 sectionStack.Add(section);
                 AddBlock(section, "heading", text, seen, deduplicate: false);
@@ -99,12 +116,24 @@ internal static partial class WikiEvidenceFormatter
 
         root.Blocks.Insert(0, new WikiEvidenceBlock(title, "heading", title));
         var availableSections = BuildSectionCatalog(sections.Skip(1));
-        var ordered = OrderSections(sections, anchor, focus)
+        var match = sections.Skip(1).FirstOrDefault(section =>
+            string.Equals(section.Anchor, anchor, StringComparison.Ordinal)
+            || (section.Anchor is null && string.Equals(section.Name, anchor, StringComparison.Ordinal)));
+        IEnumerable<Section> chosen = OrderSections(sections, anchor, focus);
+        if (mode == "section")
+        {
+            var ancestors = new HashSet<Section>();
+            for (var parent = match?.Parent; parent is not null; parent = parent.Parent)
+                ancestors.Add(parent);
+            chosen = match is null ? [] : sections.Where(section => ancestors.Contains(section)
+                || IsWithin(section, match));
+        }
+        var ordered = chosen
             .SelectMany(section => section.Blocks)
             .SelectMany(SplitBlock)
             .ToArray();
         var start = cursor ?? 0;
-        if (start > ordered.Length)
+        if (start > ordered.Length || (start > 0 && start == ordered.Length))
             throw new ArgumentOutOfRangeException(nameof(cursor));
 
         var page = new List<WikiEvidenceBlock>();
@@ -122,7 +151,39 @@ internal static partial class WikiEvidenceFormatter
         }
 
         var complete = next >= ordered.Length;
-        return new WikiEvidencePage(page, characters, complete, complete ? null : next, availableSections);
+        WikiEvidenceScope? scope = mode is null ? null : new(
+            mode,
+            mode == "section" ? match?.Path : null,
+            string.IsNullOrWhiteSpace(anchor) || match is not null,
+            mode == "page" && complete,
+            contentVersion!,
+            complete ? null : binding,
+            BuildAnchorCatalog(sections.Skip(1)));
+        return new WikiEvidencePage(page, characters, complete, complete ? null : next, availableSections, scope);
+    }
+
+    private static bool IsWithin(Section section, Section target)
+    {
+        for (Section? current = section; current is not null; current = current.Parent)
+            if (ReferenceEquals(current, target))
+                return true;
+        return false;
+    }
+
+    private static IReadOnlyList<WikiEvidenceSection> BuildAnchorCatalog(IEnumerable<Section> sections)
+    {
+        var result = new List<WikiEvidenceSection>();
+        var characters = 0;
+        foreach (var section in sections)
+        {
+            var anchor = section.Anchor ?? section.Name;
+            var size = CharacterCount(section.Path) + CharacterCount(anchor);
+            if (result.Count >= MaxSections || characters + size > MaxSectionCharacters)
+                break;
+            result.Add(new(section.Path, anchor));
+            characters += size;
+        }
+        return result;
     }
 
     private static IEnumerable<Section> OrderSections(
@@ -243,11 +304,13 @@ internal static partial class WikiEvidenceFormatter
 
     private static IEnumerable<string> ExtractTableRows(HtmlNode table)
     {
-        var rows = table.SelectNodes(".//tr")?.AsEnumerable() ?? Enumerable.Empty<HtmlNode>();
+        var rows = table.SelectNodes(".//tr")?.Where(row => ReferenceEquals(row.Ancestors("table").First(), table))
+                   ?? Enumerable.Empty<HtmlNode>();
         var grid = new Dictionary<(int Row, int Column), TableCell>();
         var headers = new Dictionary<int, string>();
         var output = new List<string>();
         var rowIndex = 0;
+        var previousWasHeader = false;
         foreach (var row in rows)
         {
             var cells = row.ChildNodes.Where(node => node.Name is "th" or "td").ToArray();
@@ -282,13 +345,16 @@ internal static partial class WikiEvidenceFormatter
             if (values.All(value => value.Header))
             {
                 foreach (var value in values.Where(value => value.Value.Length > 0))
-                    headers[value.Column] = value.Value;
+                    headers[value.Column] = previousWasHeader && headers.TryGetValue(value.Column, out var parent)
+                        && parent != value.Value ? $"{parent} / {value.Value}" : value.Value;
+                previousWasHeader = true;
                 var labels = values.Select(value => value.Value).Where(value => value.Length > 0).Distinct().ToArray();
                 if (labels.Length > 0)
                     output.Add("表头: " + string.Join(" | ", labels));
             }
             else
             {
+                previousWasHeader = false;
                 var rowHeaders = values.Where(value => value.Header && value.Value.Length > 0).ToArray();
                 var data = values.Where(value => !value.Header && value.Value.Length > 0).ToArray();
                 var useRowHeader = rowHeaders.Length > 0
@@ -321,7 +387,7 @@ internal static partial class WikiEvidenceFormatter
     {
         if (text.Length == 0)
             return;
-        var key = $"{NormalizeKey(section.Path)}|{kind}|{NormalizeKey(text)}";
+        var key = $"{section.Path}|{kind}|{text}";
         if (deduplicate && (key.Length == 0 || !seen.Add(key)))
             return;
         section.Blocks.Add(new WikiEvidenceBlock(section.Path, kind, text));
@@ -345,17 +411,25 @@ internal static partial class WikiEvidenceFormatter
 
     private static void RemoveUnsafeAndNonContentNodes(HtmlNode root)
     {
-        foreach (var node in root.DescendantsAndSelf().Where(ShouldRemove).ToArray())
+        // Keep icon semantics only inside content; hidden ancestors are still removed below.
+        foreach (var icon in root.Descendants("img").ToArray())
+        {
+            var alt = icon.GetAttributeValue("alt", "");
+            if (!ShouldRemove(icon, preserveImage: true) && !string.IsNullOrWhiteSpace(alt)
+                && icon.Ancestors().Any(node => BlockTags.Contains(node.Name)))
+                icon.ParentNode.ReplaceChild(root.OwnerDocument.CreateTextNode(WebUtility.HtmlEncode(alt)), icon);
+        }
+        foreach (var node in root.DescendantsAndSelf().Where(node => ShouldRemove(node)).ToArray())
             node.Remove();
     }
 
-    private static bool ShouldRemove(HtmlNode node)
+    private static bool ShouldRemove(HtmlNode node, bool preserveImage = false)
     {
         if (node.NodeType == HtmlNodeType.Comment)
             return true;
         if (node.NodeType != HtmlNodeType.Element)
             return false;
-        if (RemovedTags.Contains(node.Name)
+        if ((RemovedTags.Contains(node.Name) && !(preserveImage && node.Name == "img"))
             || node.Attributes.Contains("hidden")
             || node.GetAttributeValue("aria-hidden", "false").Equals("true", StringComparison.OrdinalIgnoreCase)
             || node.GetAttributeValue("role", "").Equals("navigation", StringComparison.OrdinalIgnoreCase))
@@ -377,6 +451,11 @@ internal static partial class WikiEvidenceFormatter
 
     private static void AppendText(HtmlNode node, StringBuilder builder)
     {
+        if (node.Name == "table")
+        {
+            builder.Append(string.Join(" ; ", ExtractTableRows(node)));
+            return;
+        }
         if (node.NodeType == HtmlNodeType.Text)
         {
             builder.Append(node.InnerText);
@@ -432,13 +511,15 @@ internal static partial class WikiEvidenceFormatter
         string path,
         string? anchor,
         bool isRoot,
-        int level)
+        int level,
+        Section? parent = null)
     {
         public string Name { get; } = name;
         public string Path { get; } = path;
         public string? Anchor { get; } = anchor;
         public bool IsRoot { get; } = isRoot;
         public int Level { get; } = level;
+        public Section? Parent { get; } = parent;
         public List<WikiEvidenceBlock> Blocks { get; } = [];
 
         public bool MatchesAnchor(string normalizedAnchor) =>

@@ -34,6 +34,21 @@ internal sealed record WikiReadToolResponse(
     [property: JsonPropertyName("redirect_from_title")] string? RedirectFromTitle,
     [property: JsonPropertyName("redirect_target_title")] string? RedirectTargetTitle,
     [property: JsonPropertyName("redirect_target_anchor")] string? RedirectTargetAnchor,
+    [property: JsonPropertyName("anchor")] string? Anchor,
+    [property: JsonPropertyName("scope"), JsonIgnore(Condition = JsonIgnoreCondition.WhenWritingNull)]
+    WikiEvidenceScope? Scope = null);
+
+internal sealed record WikiEvidenceScope(
+    [property: JsonPropertyName("mode")] string Mode,
+    [property: JsonPropertyName("selected_section")] string? SelectedSection,
+    [property: JsonPropertyName("anchor_found")] bool AnchorFound,
+    [property: JsonPropertyName("page_complete")] bool PageComplete,
+    [property: JsonPropertyName("content_version")] string ContentVersion,
+    [property: JsonPropertyName("continuation_token")] string? ContinuationToken,
+    [property: JsonPropertyName("sections")] IReadOnlyList<WikiEvidenceSection> Sections);
+
+internal sealed record WikiEvidenceSection(
+    [property: JsonPropertyName("path")] string Path,
     [property: JsonPropertyName("anchor")] string? Anchor);
 
 internal sealed record WikiEvidenceBlock(

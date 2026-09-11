@@ -25,6 +25,8 @@ Phase 05 已用受限无状态 loopback MCP 暴露 Application Search/Read。Pha
 
 ## 选择理由
 
+2026-09-11 证据流程增量：保持同一 PydanticAI/MCP 循环及原历史、provider 和限位，完整工具响应先由宿主验证并派生来源，再投影为模型需要的字段。先 Search 后 Read 在运行步骤边界强制；同次运行重复证据仅引用仍在先前模型输入中的同版本精确块，实际 MCP 调用仍执行。默认 v1 保持兼容，显式 v2 section 区分选择范围与全页完整，并保留父章节条件；具体 JSON 契约见 Wiki Tools spec。该决定不引入答案逐结论运行时审稿，也不把流程验证当作语义正确性的证明；真实 Token 与答案质量仍需 provider 对照验收。
+
 - PydanticAI 已提供 MCP client、完整事件图、OpenAI Responses/Chat model classes、provider adapter、测试模型和多维运行限位；使用单一内部 provider factory 不需要复制 Agent 循环。
 - 显式 endpoint、模型和线协议把供应商选择留给 Runtime，同时保持客户端只依赖稳定 answer/source/usage/error 语义。
 - 保守 profile 避免把 OpenAI 特有的 strict schema、required tool choice、developer role 或参数名称误认为兼容服务的共同能力。

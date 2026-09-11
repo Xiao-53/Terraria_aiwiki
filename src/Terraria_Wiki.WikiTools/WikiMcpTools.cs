@@ -57,7 +57,7 @@ internal sealed class WikiMcpTools
         OpenWorld = false,
         UseStructuredContent = true,
         OutputSchemaType = typeof(WikiReadToolResponse))]
-    [Description("Reads bounded plain-text evidence blocks from one local Wiki page, resolving redirects and anchors without recording history. Continue with next_cursor when evidence is incomplete.")]
+    [Description("Read local Wiki evidence after Search. Omit mode for legacy page ordering; mode=page returns a section catalog, mode=section reads title#anchor with parent context. is_complete covers the selected range; scope.page_complete covers the page. Continue using next_cursor and scope.continuation_token with identical inputs. A missing anchor returns scope.anchor_found=false and a catalog; choose a listed anchor or mode=page.")]
     public Task<CallToolResult> ReadWikiAsync(
         [Required]
         [Description("The exact local Wiki page title, optionally followed by a #fragment anchor.")]
@@ -68,15 +68,23 @@ internal sealed class WikiMcpTools
         [Range(0, int.MaxValue)]
         [Description("Optional continuation cursor returned by an earlier read with the same title and focus.")]
         int? cursor = null,
+        [Description("Optional page or section. Section requires title#anchor; focus only ranks, never filters.")]
+        string? mode = null,
+        [Description("For mode=page/section continuation, pass scope.continuation_token with next_cursor as cursor.")]
+        string? continuation_token = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(
             async token =>
             {
                 if (title is null)
                     throw new ArgumentNullException(nameof(title));
+                if (mode is not (null or "page" or "section") || cursor < 0
+                    || (mode is null && continuation_token is not null))
+                    throw new ArgumentException("Invalid evidence arguments.");
                 var result = await _query.ReadAsync(title, token).ConfigureAwait(false);
                 var evidence = result.IsFound && result.Content is not null && result.Title is not null
-                    ? WikiEvidenceFormatter.Format(result.Title, result.Content, result.Anchor, focus, cursor)
+                    ? WikiEvidenceFormatter.Format(result.Title, result.Content, result.Anchor, focus, cursor,
+                        mode, continuation_token, result.RequestedTitle)
                     : WikiEvidencePage.Empty;
                 return new WikiReadToolResponse(
                     result.RequestedTitle,
@@ -84,7 +92,7 @@ internal sealed class WikiMcpTools
                     result.IsFound ? "found" : "not_found",
                     result.IsFound,
                     result.Title,
-                    result.IsFound ? "wiki_blocks_v1" : null,
+                    result.IsFound ? mode is null ? "wiki_blocks_v1" : "wiki_blocks_v2" : null,
                     evidence.Blocks,
                     evidence.IncludedCharacters,
                     result.Content?.EnumerateRunes().Count() ?? 0,
@@ -96,7 +104,8 @@ internal sealed class WikiMcpTools
                     result.RedirectFromTitle,
                     result.RedirectTargetTitle,
                     result.RedirectTargetAnchor,
-                    result.Anchor);
+                    result.Anchor,
+                    evidence.Scope);
             },
             cancellationToken);
 

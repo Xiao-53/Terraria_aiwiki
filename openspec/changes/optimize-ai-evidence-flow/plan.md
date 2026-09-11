@@ -1,10 +1,10 @@
 # AI 证据流程与 Token 效率优化
 
-- 状态：draft；仅创建计划，未开始源码实施
+- 状态：in-progress；源码及非付费自动验证已完成，真实 provider Token/质量/延迟对照待用户验收或单独有限付费授权
 - Phase：无；独立 AI / Wiki Tools 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑和平台无关验证；Windows 11 x64 负责 .NET、真实 C# MCP→Python 离线链路与开发输出验证
 - 创建日期：2026-09-09
-- 最后更新：2026-09-09
+- 最后更新：2026-09-11
 - 范围：工具说明与模型证据投影、定向读取、单次运行内重复证据处理、证据流程约束与质量评测
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/specs/wiki-query-boundary/spec.md`、`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`、`docs/adr/0010-use-bounded-local-ai-conversations.md`、`openspec/changes/ai-conversation-token-optimization/plan.md`
 
@@ -45,8 +45,8 @@
 ## 前置条件
 
 - 原 `ai-conversation-token-optimization` change 已实现但未关闭真实验收；新计划在其源码上增量推进，不改写其历史验证，也不将其归档为完成。
-- 规划时 HEAD 为 `530c653`；工作树已有 `add-local-wiki-search-page/plan.md` 修改和未跟踪 `optimize-windows-startup/plan.md`。保留这些文件，不夹带提交。
-- 本轮只获创建计划授权；后续实施前检查状态，建立可恢复 Git 保存点，只含确认范围。
+- 规划时 HEAD 为 `530c653` 且有其他计划修改；实施时已是干净的 `09a4cf2`，既有工作已在该基线，不夹带其他 change 修改。
+- 2026-09-11 用户明确授权创建分支并完成本计划；原 master 的 `09a4cf2` 为可恢复保存点。
 - 离线测试不得使用真实密钥或调用付费 provider；真实对照由用户使用现有密钥执行，或取得单独明确的有限付费授权后执行。
 - 不新增/升级依赖，不以获取额外模型或数据服务作为前置条件。
 
@@ -126,7 +126,7 @@
 
 ## 文件变更
 
-本轮仅 ADD 本 plan；后续候选：
+实际文件范围如下；另见同目录 `evaluation.md` 的固定 Oracle 与对照记录：
 
 | 文件 | 动作与职责 |
 |---|---|
@@ -134,25 +134,28 @@
 | `src/Terraria_Wiki.WikiTools/WikiEvidenceFormatter.cs` | MODIFY：显式章节范围和完整性/续读，保留原 page 模式 |
 | `src/Terraria_Wiki.WikiTools/WikiMcpTools.cs`、`WikiToolContracts.cs` | MODIFY：read 输入说明及定向输出契约；Search 不变 |
 | `agent/tests/fakes.py`、`test_agent_answers.py`、`test_failures.py` | MODIFY：新增格式、违规顺序、重复证据、并行及流式回归 |
-| `agent/tests/test_cross_language.py`、`openai_fixture_server.py` | MODIFY：真实 C# 工具与两种模型线协议的受控载荷/结果验证 |
-| `agent/tests/test_evidence_efficiency.py` | ADD candidate：单次运行模型输入构成、重复证据与覆盖样例对照 |
+| `agent/tests/test_cross_language.py` | MODIFY：真实 C# 工具的定向/分页/parser 验证；原 openai_fixture_server.py 保持不变并复用其 Chat fixture |
+| `agent/tests/test_evidence_efficiency.py` | ADD：单次运行模型输入构成、重复证据与覆盖样例对照 |
+| `agent/tests/evidence_wire_fixture.py`、`test_evidence_wire.py` | ADD：Responses/Chat 内存 HTTP 线协议 fixture，接 fake/真实 C# MCP 验证 |
+| `tests/Terraria_Wiki.WikiTools.TestHost/WikiToolTestHost.cs` | MODIFY：增加仅测试合成版本/模式与跨页枚举资料，不读取真实数据 |
+| `evaluation.md` | ADD：固定质量 Oracle、载荷基线、真实 provider 待验收步骤 |
 | `tests/Terraria_Wiki.WikiTools.Tests/WikiEvidenceFormatterTests.cs`、`WikiToolContractTests.cs` | MODIFY：定向范围、复杂表格、完整性、分页及旧调用兼容 |
 | `openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md` | MODIFY：实施时同步投影、程序流程、定向阅读与去重契约 |
-| `docs/adr/0005-use-pydantic-ai-openai-backend.md` | MODIFY IF REQUIRED：仅同步确认的长期证据/格式决定，不改框架/provider/历史 |
+| `docs/adr/0005-use-pydantic-ai-openai-backend.md` | MODIFY：同步宿主验证后投影及运行内证据引用，不改框架/provider/历史 |
 
 KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildHistory/会话/设置/UI、Core/Application、Search、Viewer、依赖锁与打包。当前两个其他 draft 和前一 Token change 不夹带修改；README 仅在有真实实施结果时按需更新状态。
 
 ## 执行步骤
 
-- [ ] 获实施授权后标为 in-progress；确认 Git 保存点和既有修改边界。
-- [ ] 固定评测问题/数据/历史，补充当前流程缺口与输入构成基线；记录 schema、正文、重复字段各占多少。
-- [ ] 先完成模型说明/元数据投影，验证保留严格校验、全部 Search 候选、来源和两种协议。
-- [ ] 明确定向读取 JSON 示例与兼容语义，成套实现 C# formatter/契约、Python parser 与测试。
-- [ ] 实现本次运行内重复证据投影，覆盖版本变化、并行、续页和调用配对。
-- [ ] 加入 Search→Read 程序前置和证据覆盖提示，确保在正文流式发布前处理违规路径。
-- [ ] 运行离线、C# MCP 跨语言、Windows build/tests，逐项比较收益与质量，不下调限位或历史。
+- [x] 获实施授权后标为 in-progress；确认 Git 保存点和既有修改边界。
+- [x] 固定评测问题/数据/历史，补充当前流程缺口与工具说明/载荷基线；对照边界与质量 Oracle 见 evaluation.md。
+- [x] 先完成模型说明/元数据投影，验证保留严格校验、全部 Search 候选、来源和两种协议。
+- [x] 明确定向读取 JSON 示例与兼容语义，成套实现 C# formatter/契约、Python parser 与测试。
+- [x] 实现本次运行内重复证据投影，覆盖版本变化、并行、续页和调用配对。
+- [x] 加入 Search→Read 程序前置和证据覆盖提示，确保在正文流式发布前处理违规路径。
+- [x] 运行离线、C# MCP 跨语言、Windows build/tests，逐项比较结构收益与证据保留，不下调限位或历史；真实语义质量不由 scripted 测试代替。
 - [ ] 用户执行真实 provider 对照，或在单独有限付费授权下执行；回填 Token、质量和延迟结果。
-- [ ] 更新 spec/必要 ADR、计划和验证记录，检查 diff/临时数据/进程，独立提交；不打包、push 或发布。
+- [x] 更新 spec/必要 ADR、计划和验证记录，检查 diff/临时数据/进程，独立提交保存本记录及当前实现；不打包、push 或发布。
 
 ## 验证与回归计划
 
@@ -194,6 +197,18 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 
 ## 进度记录
 
+- 2026-09-11：用户授权完成计划；从干净的 `09a4cf256f9e6f9f63c544b6a9c484ffdff7a58f` 创建 `optimize-ai-evidence-flow` 分支，原 master 是可恢复保存点。不使用子代理，不调用付费 provider。
+- 2026-09-11：完成 v1/v2 兼容、显式 section/父章节上下文、绑定 continuation、精确证据/目录引用、Search 步骤前置、schema 精简和两协议内存 HTTP 测试。检查发现原 formatter 会丢失图标 alt，并将数字标点归一后去重；已局部修正，并补充嵌套表格/多级表头 oracle。
+- 2026-09-11：首轮 Python 104 项离线通过、5 项 fake/真实 MCP 协议测试通过；Windows 全量 .NET 344/344。并行构建与 TestHost 一度产生 DLL 复制重试 warning，已停止交叉执行并顺序重建，0 warning/0 error。新增最后的重叠/悬空引用与真实分页验证正在执行，最终数字以末尾验证结果为准。
+
+### 实施契约决定
+
+- 省略 `mode` 继续返回原 `wiki_blocks_v1`，保留 page 排序和整数 cursor；显式 `mode=page|section` 选择 `wiki_blocks_v2`，旧 parser 对新格式明确拒绝。新 Python 同时严格解析 v1/v2，旧工具仍可用。
+- v2 保留原完整来源字段并增加 `scope`：`mode`、`selected_section`、`anchor_found`、`page_complete`、`content_version`、`continuation_token` 和带真实 anchor 的 `sections`。`is_complete` 表示本次选择范围已遍历；只有 `scope.page_complete` 表示全页完成。section 包含根导语和父章节正文作为限定上下文。
+- 例：输入 `{"title":"月铸镐#配方","mode":"section"}`；输出 `content_format=wiki_blocks_v2`，`is_complete=true`，`scope={mode:section, selected_section:"月铸镐 > 配方", anchor_found:true, page_complete:false, ...}`。锚点不存在时 `anchor_found=false`、无目标正文、返回可用目录；不生成成功来源。
+- v2 续读同时传回整数 `cursor=next_cursor` 与 `continuation_token`；token 绑定请求页面、完整 HTML、focus、anchor、mode，变化或缺失即 `invalid-arguments`。不引入服务端缓存。
+- 模型重复引用只指向 `RunContext.messages` 中已有的成功工具返回；并行批次未进入先前模型请求的内容不作为引用目标。每次依然真实调用 MCP 并先验证，精确正文、章节、页面和版本共同判定。
+
 - 2026-09-09：只读审查当前 Agent、Wiki formatter/MCP、上下文构造、锁定 SDK 与测试，执行两项非付费离线流程模拟。
 - 2026-09-09：用户要求创建优化计划，并明确不改最多 4 轮历史；创建本 draft，源码实施尚未开始。
 
@@ -203,13 +218,20 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 - 当前来源列表去重与模型输入去重是两个不同问题；本方案在严格来源记录之后处理后者。
 - 先 Search 后 Read 可以程序验证，任意答案的语义正确性不能仅靠 found/source 数量验证；质量承诺以评测为准。
 - 完整返回 schema 与简洁模型说明属于可试验的 Adapter 选择，不需要升级 SDK 或牺牲结果类型校验。
+- v2 的 token 绑定内容 hash 而非缓存页面，节省重复序列化整页 HTML；v1 原有整数 cursor 为兼容保留，不能宣称旧协议也具有 v2 的绑定保证。
+- 目录有界且不代表页面所有章节；精简投影保留 page continuation 路径，长列表必须自行验证覆盖。未采用每题额外模型审稿或摘要。
+- 为取得更准确的每请求基线，ScriptedModel 记录消息时改用深拷贝，防止后续图更新污染先前快照。真实线协议用 MockTransport 捕获，所有网络出口限定在真实本地 MCP，无远程 provider。
 
 ## 验证结果
 
-- 已有离线模拟证明直接 Read 可被标 answered、重复 Read 证据进入后续消息两次；没有调用远程模型。
-- 本轮只新增计划；完成前执行新增文件空白/差异检查并确认既有两个计划不变。
-- 尚未实现新流程、执行新方案 build/tests 或真实 Token/答案质量对照；不宣称提速、省费或质量提升已完成。
+- Windows 虚拟环境 Python：ruff check、ruff format --check（22 文件）、strict mypy（6 源文件）通过；离线 pytest **107 passed / 7 deselected**。7 项为4项跨语言及3项付费测试，付费项未执行。
+- Windows 真实 C# TestHost：原多跳 fixture、v2 section/缺 anchor/全范围分页与两协议 fake/真实 MCP 矩阵合计 **6 passed / 3 paid deselected**；其中4项使用真实 MCP，2项为内存模型线协议+fake 工具。使用 PowerShell 显式设置测试开关；WSL 前缀环境变量未透传到 Windows 的初次尝试按 skip 处理，未误报为通过。
+- Windows `dotnet build Terraria_Wiki.Core.slnx -c Release --no-restore` 最终 **0 warning / 0 error**。`dotnet test ... --no-build --no-restore` **344/344**：Core 97、Application 56、WikiTools 45、Windows 146。早期构建/TestHost 并发有1项 DLL 文件锁重试 warning，后续顺序构建消除，未修改依赖或提高等待限位。
+- 固定合成序列：description 2641→47 bytes；Search 5693→4893 bytes；首 Read 6809→6507 bytes；重复 Read 6809→179 bytes；最终请求工具返回合计19311→11579 bytes。保留全部50候选、精确配方文本和四轮历史。每请求快照、单位及局限详见 `evaluation.md`，不把字节变化称为真实 Token 下降。
+- Windows Chat、BuildHistory、Core/Application、公共 models、Sidecar v2、锁文件、打包和其他 changes 对基线无差异；现有四轮/24000字符/段落边界测试通过。开发输出的 Agent 源与工作区逐字一致；真实 TestHost 测试进程已全部退出。
+- `git diff --check` 通过；无新增依赖、生产日志、原始请求留档、secret、用户数据库或临时 fixture 数据进入提交；未 publish、打包、push 或发布。
+- **未执行**真实 provider 的 Token、答案质量、遗漏、误拒答与延迟对照。现有授权明确排除此类自动付费调用，不能把离线成功记作最终产品效率/质量验收。
 
 ## 完成摘要
 
-计划创建完成，实施状态保持 draft。最终实现须同时交付 Token 对照和证据质量结果，最近最多 4 轮历史策略保持原样。
+已在独立分支实现并自动验证：严格校验后精简模型证据、显式定向章节及父条件、绑定续读、运行内安全重复引用和程序强制 Search→Read；表格、图标与精确数字证据有回归保障。最近最多4轮、24000字符策略及原运行限位保持不变。所有已授权源码与非付费验证完成，并独立提交；计划保持 in-progress、不归档，唯一未关闭门槛是真实 provider 对照。用户可按 evaluation.md 自行验收，或另行给出 provider/模型、题集、重复次数和费用上限授权。

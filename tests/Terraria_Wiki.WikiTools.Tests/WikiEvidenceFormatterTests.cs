@@ -5,6 +5,105 @@ namespace Terraria_Wiki.WikiTools.Tests;
 
 public sealed class WikiEvidenceFormatterTests
 {
+    [Theory]
+    [InlineData(0)]
+    [InlineData(12)]
+    [InlineData(24)]
+    public void SectionReadKeepsParentConditionsAndChildrenWithoutUnrelatedSiblings(int position)
+    {
+        var sections = Enumerable.Range(0, 25).Select(index => index == position
+            ? "<h2 id='v'>专家模式 1.4.4</h2><p>仅击败月亮领主后。</p>"
+              + "<h3 id='craft-real'>制作配方</h3><p>12夜银锭；远古操纵机。</p>"
+              + "<h4 id='material'>材料来源</h4><p>3棱镜核心。</p>"
+              + "<h3 id='other'>其他配方</h3><p>不得纳入的配方</p>"
+            : $"<h2 id='s{index}'>其他{index}</h2><p>{new string('无', 2000)}</p>");
+        var html = "<p>模组：合成测试。</p>" + string.Concat(sections);
+        var result = WikiEvidenceFormatter.Format("物品", html, "craft-real", "其他", null, "section");
+        Assert.Equal(["物品", "模组：合成测试。", "专家模式 1.4.4", "仅击败月亮领主后。",
+            "制作配方", "12夜银锭；远古操纵机。", "材料来源", "3棱镜核心。"],
+            result.Blocks.Select(block => block.Text));
+        Assert.True(result.IsComplete);
+        Assert.False(result.Scope!.PageComplete);
+        Assert.True(result.Scope.AnchorFound);
+        Assert.Contains(result.Scope.Sections, section => section.Anchor == "craft-real");
+        Assert.True(result.IncludedCharacters < 200);
+    }
+
+    [Fact]
+    public void MissingExactAnchorProvidesCatalogWithoutClaimingEvidence()
+    {
+        var result = WikiEvidenceFormatter.Format("页", "<h2 id='actual-id'>配方</h2><p>12锭</p>",
+            "wrong", null, null, "section");
+        Assert.Empty(result.Blocks);
+        Assert.True(result.IsComplete);
+        Assert.False(result.Scope!.AnchorFound);
+        Assert.False(result.Scope.PageComplete);
+        Assert.Null(result.Scope.SelectedSection);
+        Assert.Equal("actual-id", Assert.Single(result.Scope.Sections).Anchor);
+    }
+
+    [Theory]
+    [InlineData("page")]
+    [InlineData("section")]
+    public void VersionedContinuationBindsContentIdentityFocusAndRange(string mode)
+    {
+        var html = "<h2 id='a'>条件</h2>" + string.Concat(Enumerable.Range(0, 20)
+            .Select(i => $"<p>条目{i} {new string('文', 1800)}</p>"));
+        var first = WikiEvidenceFormatter.Format("页", html, "a", "条件", null, mode);
+        Assert.False(first.IsComplete);
+        var token = first.Scope!.ContinuationToken;
+        Assert.NotNull(token);
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html, "a", "条件", first.NextCursor, mode));
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "另一页", html, "a", "条件", first.NextCursor, mode, token));
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html + "changed", "a", "条件", first.NextCursor, mode, token));
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html, "a", "changed", first.NextCursor, mode, token));
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html, "b", "条件", first.NextCursor, mode, token));
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html, "a", "条件", first.NextCursor, mode == "page" ? "section" : "page", token));
+        var all = first.Blocks.ToList();
+        var current = first;
+        while (current.NextCursor is { } cursor)
+        {
+            current = WikiEvidenceFormatter.Format("页", html, "a", "条件", cursor,
+                mode, current.Scope!.ContinuationToken);
+            all.AddRange(current.Blocks);
+        }
+        Assert.Equal(20, all.Count(block => block.Kind == "paragraph"));
+        Assert.Equal(all.Count, all.Distinct().Count());
+        Assert.Equal(mode == "page", current.Scope!.PageComplete);
+    }
+
+    [Fact]
+    public void IconsNestedTablesAndMultiLevelHeadersKeepExactConditions()
+    {
+        const string html = """
+            <h2 id='items'>全部新增物品</h2>
+            <table><tr><th rowspan='2'>物品</th><th colspan='2'>专家模式</th></tr>
+            <tr><th>数量</th><th>概率</th></tr>
+            <tr><td><img alt='星云法杖' src='ignored'></td><td>1</td><td>0.5%</td></tr>
+            <tr><td>月光法典</td><td>2</td><td>5%</td></tr></table>
+            <p><img alt='困难模式'/> 击败世纪之花后。<img hidden alt='不应出现'/></p>
+            <table><tr><th>配方</th><td><table><tr><th>材料</th><th>数量</th></tr>
+            <tr><td><img alt='夜银锭'/></td><td>12</td></tr></table></td></tr></table>
+            <p>概率0.5%</p><p>概率05%</p><p>不能制作</p><p>能制作</p>
+            """;
+        var result = WikiEvidenceFormatter.Format("页", html, "items", null, null, "section");
+        var texts = result.Blocks.Select(block => block.Text).ToArray();
+        Assert.Contains(texts, text => text.Contains("物品: 星云法杖")
+            && text.Contains("专家模式 / 数量: 1") && text.Contains("专家模式 / 概率: 0.5%"));
+        Assert.Contains(texts, text => text.Contains("物品: 月光法典") && text.Contains("概率: 5%"));
+        Assert.Contains(texts, text => text.Contains("配方: ") && text.Contains("材料: 夜银锭 | 数量: 12"));
+        Assert.Contains("困难模式 击败世纪之花后。", texts);
+        Assert.Contains("概率0.5%", texts);
+        Assert.Contains("概率05%", texts);
+        Assert.DoesNotContain("不应出现", string.Join(' ', texts));
+    }
+
     [Fact]
     public void RemovesMarkupHiddenNavigationAndMediaWhilePreservingSemanticBlocks()
     {

@@ -9,6 +9,33 @@ namespace Terraria_Wiki.WikiTools.Tests;
 public sealed class WikiToolContractTests
 {
     [Fact]
+    public async Task ExplicitSectionModeUsesV2WhileLegacyCallsKeepV1()
+    {
+        await using var fixture = await WikiToolFixture.CreateAsync();
+        await fixture.SavePagesAndIndexesAsync(("页", "配方", "<h2 id='craft'>制作</h2><p>12锭</p>"
+            + "<h2 id='other'>其他</h2><p>无关内容</p>", DateTime.UtcNow));
+        await using var client = await fixture.CreateClientAsync();
+        var legacy = await client.CallToolAsync("read_wiki", new Dictionary<string, object?> { ["title"] = "页#craft" });
+        Assert.Equal("wiki_blocks_v1", legacy.StructuredContent!.Value.GetProperty("content_format").GetString());
+        Assert.False(legacy.StructuredContent.Value.TryGetProperty("scope", out _));
+        foreach (var anchor in new[] { "craft", "missing" })
+        {
+            var result = await client.CallToolAsync("read_wiki", new Dictionary<string, object?>
+                { ["title"] = "页#" + anchor, ["mode"] = "section" });
+            Assert.False(result.IsError);
+            var body = result.StructuredContent!.Value;
+            Assert.Equal("wiki_blocks_v2", body.GetProperty("content_format").GetString());
+            Assert.True(body.GetProperty("is_complete").GetBoolean());
+            Assert.False(body.GetProperty("scope").GetProperty("page_complete").GetBoolean());
+            Assert.Equal(anchor == "craft", body.GetProperty("scope").GetProperty("anchor_found").GetBoolean());
+        }
+        var invalid = await client.CallToolAsync("read_wiki", new Dictionary<string, object?>
+            { ["title"] = "页#craft", ["mode"] = "section", ["cursor"] = 1 });
+        Assert.True(invalid.IsError);
+        Assert.Equal("invalid-arguments", Assert.IsType<TextContentBlock>(Assert.Single(invalid.Content)).Text);
+    }
+
+    [Fact]
     public async Task OfficialClientInitializesAndDiscoversExactlyTheTwoFixedTools()
     {
         await using var fixture = await WikiToolFixture.CreateAsync();
@@ -32,7 +59,7 @@ public sealed class WikiToolContractTests
         Assert.Equal(1, maxResults.GetProperty("minimum").GetInt32());
         Assert.Equal(100, maxResults.GetProperty("maximum").GetInt32());
 
-        Assert.Equal(["cursor", "focus", "title"], PropertyNames(read.InputSchema));
+        Assert.Equal(["continuation_token", "cursor", "focus", "mode", "title"], PropertyNames(read.InputSchema));
         Assert.Equal(["title"], RequiredNames(read.InputSchema));
         Assert.Contains("results", search.OutputSchema!.Value.GetRawText(), StringComparison.Ordinal);
         foreach (var property in new[] { "title", "redirect_target", "summary", "match_type", "highlights", "start", "length" })
