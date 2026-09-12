@@ -1,0 +1,4 @@
+interface:
+  display_name: "Package Core Source RAR"
+  short_description: "Package tracked product source into a verified RAR"
+  default_prompt: "Use $package-core-source-rar to create a verified source-only RAR backup for this repository."
