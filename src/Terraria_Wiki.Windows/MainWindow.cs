@@ -143,7 +143,7 @@ internal sealed partial class MainWindow : Window
 
     private async void OnWikiDataChanged(object? sender, WikiDataChangedEventArgs args)
     {
-        _shellViewModel.RefreshAfterWikiDataChange();
+        _shellViewModel.RefreshAfterWikiDataChange(args.RequiresViewerRebind);
         if (!args.RequiresViewerRebind || _runtime is null)
             return;
         try
@@ -261,6 +261,7 @@ internal sealed partial class MainWindow : Window
             }
             _timings.ViewerReadyMilliseconds = ElapsedFromProcessStart();
             await _shellViewModel.Reader.SetHomePageAsync(activeWiki.DefaultPageTitle);
+            _shellViewModel.SetWikiHomePage(activeWiki.DefaultPageTitle);
             _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
             _shellViewModel.SetStartupStatus(
                 $"本地 Wiki 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
@@ -882,6 +883,7 @@ internal sealed partial class MainWindow : Window
         session.Navigate(ready.BaseUri, forceReload: true);
         await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), cancellationToken);
         await _shellViewModel.Reader.SetHomePageAsync(active.DefaultPageTitle);
+        _shellViewModel.SetWikiHomePage(active.DefaultPageTitle);
         _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
         _shellViewModel.SetStartupStatus(
             $"{active.Title} 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");

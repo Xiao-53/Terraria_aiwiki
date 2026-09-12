@@ -1,6 +1,7 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
@@ -25,6 +26,12 @@ internal sealed partial class ShellView : UserControl
         AvaloniaXamlLoader.Load(this);
         _workspace = this.FindControl<Grid>("WorkspaceGrid")!;
         _readerHost = this.FindControl<ReaderView>("ReaderHost")!;
+        var wikiSearchInput = this.FindControl<TextBox>("WikiSearchInput")!;
+        wikiSearchInput.AddHandler(
+            InputElement.KeyDownEvent,
+            OnWikiSearchKeyDown,
+            RoutingStrategies.Tunnel,
+            handledEventsToo: true);
         DataContextChanged += OnDataContextChanged;
         AttachedToVisualTree += OnAttachedToVisualTree;
         DetachedFromVisualTree += OnDetachedFromVisualTree;
@@ -74,7 +81,9 @@ internal sealed partial class ShellView : UserControl
         if (args.PropertyName is nameof(ShellViewModel.IsWideLayout)
             or nameof(ShellViewModel.IsReaderVisible)
             or nameof(ShellViewModel.CurrentSection)
-            or nameof(ShellViewModel.ReaderState))
+            or nameof(ShellViewModel.ReaderState)
+            or nameof(ShellViewModel.WikiMode)
+            or nameof(ShellViewModel.IsWikiSurfaceVisible))
         {
             UpdateResponsiveLayout();
         }
@@ -88,7 +97,22 @@ internal sealed partial class ShellView : UserControl
         if (width > 0)
             viewModel.SetViewportWidth(width);
 
-        if (viewModel.IsReaderInlineVisible)
+        if (viewModel.IsWikiSurfaceVisible)
+        {
+            _inlineLayoutApplied = false;
+            _workspace.ColumnDefinitions[0].MinWidth = 0;
+            _workspace.ColumnDefinitions[0].Width = new GridLength(1, GridUnitType.Star);
+            _workspace.ColumnDefinitions[1].Width = new GridLength(0);
+            _workspace.ColumnDefinitions[2].MinWidth = 0;
+            _workspace.ColumnDefinitions[2].Width = new GridLength(0);
+            Grid.SetColumn(_readerHost, 0);
+            Grid.SetColumnSpan(_readerHost, 3);
+            _readerHost.HorizontalAlignment = Avalonia.Layout.HorizontalAlignment.Stretch;
+            _readerHost.Width = double.NaN;
+            _readerHost.Margin = new Thickness(0);
+            _readerHost.ZIndex = 1;
+        }
+        else if (viewModel.IsReaderInlineVisible)
         {
             if (!_inlineLayoutApplied)
             {
@@ -120,6 +144,26 @@ internal sealed partial class ShellView : UserControl
             _readerHost.Width = Math.Min(720, Math.Max(520, _workspace.Bounds.Width * 0.82));
             _readerHost.Margin = new Thickness(12);
             _readerHost.ZIndex = 3;
+        }
+    }
+
+    private void OnWikiSearchKeyDown(object? sender, KeyEventArgs args)
+    {
+        var isComposing = sender is TextBox searchBox
+                          && searchBox.GetVisualDescendants()
+                              .OfType<TextPresenter>()
+                              .Any(presenter => !string.IsNullOrEmpty(presenter.PreeditText));
+        if (args.Key != Key.Enter
+            || args.KeyModifiers.HasFlag(KeyModifiers.Shift)
+            || isComposing)
+        {
+            return;
+        }
+        if (DataContext is ShellViewModel viewModel
+            && viewModel.Wiki.SearchCommand.CanExecute(null))
+        {
+            viewModel.Wiki.SearchCommand.Execute(null);
+            args.Handled = true;
         }
     }
 

@@ -1,3 +1,4 @@
+using System.ComponentModel;
 using Terraria_Wiki.Application;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Windows.AI;
@@ -26,6 +27,13 @@ internal enum ShellSection
     Wiki,
 }
 
+internal enum WikiDisplayMode
+{
+    Home,
+    Search,
+    Reading,
+}
+
 internal enum StartupRecoveryKind
 {
     None,
@@ -40,6 +48,9 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     private ShellSection _currentSection = ShellSection.Chat;
     private ReaderPaneState _readerState = ReaderPaneState.Home;
+    private ReaderPaneState _readerStateBeforeWiki = ReaderPaneState.Home;
+    private WikiDisplayMode _wikiMode = WikiDisplayMode.Home;
+    private string? _wikiHomeTitle;
     private bool _isWideLayout = true;
     private string _startupStatus = "正在启动…";
     private bool _hasStartupError;
@@ -93,13 +104,17 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             productDiagnostics);
         Chat.ConversationChanged += OnConversationChanged;
         Favorites.ConversationFavoriteChanged += OnConversationFavoriteChanged;
+        Wiki.PropertyChanged += OnWikiPropertyChanged;
         NavigateChatCommand = new RelayCommand(_ => NavigateChat());
         NavigateFavoritesCommand = new RelayCommand(_ => NavigateFavorites());
         NavigateLibraryCommand = new RelayCommand(_ => NavigateLibrary());
         NavigateManagementCommand = new RelayCommand(_ => NavigateManagement());
         NavigateSettingsCommand = new RelayCommand(_ => NavigateSettings());
+        NavigateWikiCommand = new RelayCommand(_ => NavigateWiki());
+        GoToWikiHomeCommand = new RelayCommand(_ => GoToWikiHome());
+        ReturnToWikiSearchCommand = new RelayCommand(_ => ReturnToWikiSearch());
         OpenWikiReaderCommand = new RelayCommand(_ => OpenWikiReader(), _ => CanOpenWikiReader);
-        CloseReaderCommand = new RelayCommand(_ => CloseReader(), _ => IsReaderVisible);
+        CloseReaderCommand = new RelayCommand(_ => CloseReader(), _ => CanCloseReader);
         RetryStartupCommand = new RelayCommand(
             _ => RetryStartupRequested?.Invoke(this, EventArgs.Empty),
             _ => CanRetryStartup);
@@ -126,8 +141,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         get => _currentSection;
         private set
         {
+            var previous = _currentSection;
             if (!SetProperty(ref _currentSection, value))
                 return;
+            if (previous == ShellSection.Wiki && value != ShellSection.Wiki)
+                ReaderState = _readerStateBeforeWiki;
             OnPropertyChanged(nameof(IsChatSelected));
             OnPropertyChanged(nameof(IsFavoritesSelected));
             OnPropertyChanged(nameof(IsLibrarySelected));
@@ -140,6 +158,11 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsManagementVisible));
             OnPropertyChanged(nameof(IsSettingsVisible));
             OnPropertyChanged(nameof(IsWikiVisible));
+            OnPropertyChanged(nameof(IsWikiHomeActive));
+            OnPropertyChanged(nameof(IsWikiSearchActive));
+            OnPropertyChanged(nameof(IsWikiReadingActive));
+            OnPropertyChanged(nameof(IsWikiSurfaceVisible));
+            OnPropertyChanged(nameof(IsWikiPreviewVisible));
             RefreshReaderProperties();
         }
     }
@@ -215,22 +238,46 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public bool IsManagementVisible => IsManagementSelected;
     public bool IsSettingsVisible => IsSettingsSelected;
     public bool IsWikiVisible => IsWikiSelected;
-    public bool IsReaderVisible => !IsSettingsSelected
-                                   && (ReaderState switch
-                                   {
-                                       ReaderPaneState.Home => IsWideLayout,
-                                       ReaderPaneState.ChatSource or ReaderPaneState.Wiki => true,
-                                       _ => false,
-                                   });
-    public bool IsReaderOverlayVisible => IsReaderVisible && !IsWideLayout;
-    public bool IsReaderInlineVisible => IsReaderVisible && IsWideLayout;
-    public bool CanCloseReader => IsReaderVisible;
+    public WikiDisplayMode WikiMode
+    {
+        get => _wikiMode;
+        private set
+        {
+            if (!SetProperty(ref _wikiMode, value))
+                return;
+            OnPropertyChanged(nameof(IsWikiHomeActive));
+            OnPropertyChanged(nameof(IsWikiSearchActive));
+            OnPropertyChanged(nameof(IsWikiReadingActive));
+            OnPropertyChanged(nameof(IsWikiSurfaceVisible));
+            RefreshReaderProperties();
+        }
+    }
+    public bool IsWikiHomeActive => IsWikiSelected && WikiMode == WikiDisplayMode.Home;
+    public bool IsWikiSearchActive => IsWikiSelected && WikiMode == WikiDisplayMode.Search;
+    public bool IsWikiReadingActive => IsWikiSelected && WikiMode == WikiDisplayMode.Reading;
+    public bool IsWikiSurfaceVisible => IsWikiSelected && WikiMode != WikiDisplayMode.Search;
+    public bool IsWikiPreviewVisible => !IsSettingsSelected && !IsWikiSelected;
+    public bool IsReaderVisible => IsWikiSelected
+        ? IsWikiSurfaceVisible
+        : !IsSettingsSelected
+          && (ReaderState switch
+          {
+              ReaderPaneState.Home => IsWideLayout,
+              ReaderPaneState.ChatSource or ReaderPaneState.Wiki => true,
+              _ => false,
+          });
+    public bool IsReaderOverlayVisible => !IsWikiSelected && IsReaderVisible && !IsWideLayout;
+    public bool IsReaderInlineVisible => !IsWikiSelected && IsReaderVisible && IsWideLayout;
+    public bool CanCloseReader => !IsWikiSelected && IsReaderVisible;
 
     public RelayCommand NavigateChatCommand { get; }
     public RelayCommand NavigateFavoritesCommand { get; }
     public RelayCommand NavigateLibraryCommand { get; }
     public RelayCommand NavigateManagementCommand { get; }
     public RelayCommand NavigateSettingsCommand { get; }
+    public RelayCommand NavigateWikiCommand { get; }
+    public RelayCommand GoToWikiHomeCommand { get; }
+    public RelayCommand ReturnToWikiSearchCommand { get; }
     public RelayCommand OpenWikiReaderCommand { get; }
     public RelayCommand CloseReaderCommand { get; }
     public RelayCommand RetryStartupCommand { get; }
@@ -297,6 +344,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void ShowEmptyWikiOnboarding()
     {
+        _wikiHomeTitle = null;
         Reader.Detach();
         Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
         CloseReader();
@@ -316,16 +364,18 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public void NavigateChat()
     {
         var isLeavingSettings = IsSettingsSelected;
+        var isLeavingWiki = IsWikiSelected;
         CurrentSection = ShellSection.Chat;
-        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && !isLeavingWiki && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
     }
 
     public void NavigateFavorites()
     {
         var isLeavingSettings = IsSettingsSelected;
+        var isLeavingWiki = IsWikiSelected;
         CurrentSection = ShellSection.Favorites;
-        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && !isLeavingWiki && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Favorites.RefreshAsync();
     }
@@ -333,8 +383,9 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public void NavigateLibrary()
     {
         var isLeavingSettings = IsSettingsSelected;
+        var isLeavingWiki = IsWikiSelected;
         CurrentSection = ShellSection.Library;
-        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && !isLeavingWiki && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Library.RefreshAsync();
     }
@@ -342,8 +393,9 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public void NavigateManagement()
     {
         var isLeavingSettings = IsSettingsSelected;
+        var isLeavingWiki = IsWikiSelected;
         CurrentSection = ShellSection.Management;
-        if (!isLeavingSettings && ReaderState == ReaderPaneState.Wiki)
+        if (!isLeavingSettings && !isLeavingWiki && ReaderState == ReaderPaneState.Wiki)
             ReaderState = ReaderPaneState.Home;
         _ = Management.RefreshAsync();
     }
@@ -353,8 +405,27 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         CurrentSection = ShellSection.Settings;
     }
 
-    public void RefreshAfterWikiDataChange()
+    public void NavigateWiki()
     {
+        if (IsWikiSelected)
+            return;
+        _readerStateBeforeWiki = ReaderState;
+        CurrentSection = ShellSection.Wiki;
+        if (string.IsNullOrWhiteSpace(Wiki.Query))
+        {
+            WikiMode = WikiDisplayMode.Home;
+            _ = OpenWikiHomeAsync();
+        }
+        else
+        {
+            WikiMode = WikiDisplayMode.Search;
+        }
+    }
+
+    public void RefreshAfterWikiDataChange(bool clearHomePage)
+    {
+        if (clearHomePage)
+            _wikiHomeTitle = null;
         Wiki.ResetForDataSourceChange();
         _ = Favorites.RefreshAsync();
         if (IsLibrarySelected)
@@ -369,6 +440,28 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void CloseReader() => ReaderState = ReaderPaneState.Closed;
 
+    public void SetWikiHomePage(string title) =>
+        _wikiHomeTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
+
+    public void GoToWikiHome()
+    {
+        if (!IsWikiSelected)
+            return;
+        if (Wiki.Query.Length > 0)
+        {
+            Wiki.Query = string.Empty;
+            return;
+        }
+        WikiMode = WikiDisplayMode.Home;
+        _ = OpenWikiHomeAsync();
+    }
+
+    public void ReturnToWikiSearch()
+    {
+        if (IsWikiSelected && WikiMode == WikiDisplayMode.Reading)
+            WikiMode = WikiDisplayMode.Search;
+    }
+
     public void Dispose()
     {
         if (_disposed)
@@ -377,6 +470,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Reader.PropertyChanged -= OnReaderPropertyChanged;
         Chat.ConversationChanged -= OnConversationChanged;
         Favorites.ConversationFavoriteChanged -= OnConversationFavoriteChanged;
+        Wiki.PropertyChanged -= OnWikiPropertyChanged;
         Chat.Dispose();
         Wiki.Dispose();
         Library.Dispose();
@@ -394,7 +488,35 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private async Task OpenSearchResultAsync(SearchResultItem result)
     {
         ReaderState = ReaderPaneState.Wiki;
+        if (IsWikiSelected)
+            WikiMode = WikiDisplayMode.Reading;
         await Reader.OpenAsync(new ReaderPageRequest(result.Title));
+    }
+
+    private async Task OpenWikiHomeAsync()
+    {
+        var homeTitle = _wikiHomeTitle;
+        if (string.IsNullOrWhiteSpace(homeTitle) || !Reader.IsReady)
+            return;
+        await Reader.OpenAsync(new ReaderPageRequest(homeTitle));
+    }
+
+    private void OnWikiPropertyChanged(object? sender, PropertyChangedEventArgs args)
+    {
+        if (args.PropertyName != nameof(WikiViewModel.Query) || !IsWikiSelected)
+            return;
+        if (string.IsNullOrWhiteSpace(Wiki.Query))
+        {
+            if (WikiMode != WikiDisplayMode.Home)
+            {
+                WikiMode = WikiDisplayMode.Home;
+                _ = OpenWikiHomeAsync();
+            }
+        }
+        else if (WikiMode != WikiDisplayMode.Search)
+        {
+            WikiMode = WikiDisplayMode.Search;
+        }
     }
 
     private Task OpenChatConversationAsync(ChatConversation conversation)
@@ -445,5 +567,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             return;
         OnPropertyChanged(nameof(CanOpenWikiReader));
         OpenWikiReaderCommand.NotifyCanExecuteChanged();
+        if (Reader.IsReady && IsWikiHomeActive)
+            _ = OpenWikiHomeAsync();
     }
 }

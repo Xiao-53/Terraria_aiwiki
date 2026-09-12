@@ -52,6 +52,7 @@ codex
 - AI Backend 能力契约：[`openspec/specs/ai-backend/spec.md`](./openspec/specs/ai-backend/spec.md)
 - Windows AI Runtime 能力契约：[`openspec/specs/windows-ai-runtime/spec.md`](./openspec/specs/windows-ai-runtime/spec.md)
 - Windows Presentation 能力契约：[`openspec/specs/windows-presentation/spec.md`](./openspec/specs/windows-presentation/spec.md)
+- 正在验收的全宽本地 Wiki 搜索页：[`openspec/changes/add-local-wiki-search-page/plan.md`](./openspec/changes/add-local-wiki-search-page/plan.md)
 - Windows UI 规范与新页面工作流：[`.agents/skills/terraria-ui/SKILL.md`](./.agents/skills/terraria-ui/SKILL.md)
 - 正在实施的 AI 会话 Token 优化：[`openspec/changes/ai-conversation-token-optimization/plan.md`](./openspec/changes/ai-conversation-token-optimization/plan.md)
 - 已完成 Windows 启动可靠性与性能优化：[`openspec/changes/archive/optimize-windows-startup/plan.md`](./openspec/changes/archive/optimize-windows-startup/plan.md)
@@ -127,7 +128,7 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的五个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。
+**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的六个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。新增“Wiki”入口在同一工作区复用原搜索与 Viewer，提供真实本地首页、全宽搜索结果和全宽正文；自动化验证已通过，真实窗口效果等待用户验收。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。
 
 当前独立变更已在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。真实 DeepSeek Token、答案与来源由用户在开发版使用现有 API Key 验收；本仓库验证不得自行产生付费请求。
 

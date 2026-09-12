@@ -1,16 +1,16 @@
 # Windows Presentation 能力契约
 
-- 状态：implemented；2026-09-05 本地完整会话、整段收藏与对话历史已接入
+- 状态：implemented；2026-09-12 独立全宽本地 Wiki 搜索/阅读入口已接入，等待用户真实窗口验收
 - 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、数据管理、设置、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
 - 来源：Master Architecture v0.6、Phase 08、已归档 Phase 09 计划、ADR 0001、ADR 0010、Application/Viewer/Windows AI Runtime 能力契约
 
 ## 信息架构与响应式布局
 
-- 应用默认进入 AI 问答，左侧显示可用的“AI 问答”“收藏”“Wiki 资料库”“数据管理”和“设置”五个导航入口；顶部 Wiki 按钮只打开或恢复共享 Reader，不替换当前主页面。
+- 应用默认进入 AI 问答，左侧显示“AI 问答”“收藏”“Wiki”“Wiki 资料库”“数据管理”和“设置”六个导航入口；其中“Wiki”负责本地全文搜索与正文阅读，“Wiki 资料库”继续负责全部页面和对话历史。非 Wiki 页面顶部的 Wiki 按钮只打开或恢复共享 Reader，不替换当前主页面。
 - Windows Shell 使用固定窄导航栏、标题区和细描边工作区。初始窗口为 1280×820 DIP，最小窗口为 900×600 DIP。
 - 宽度不小于 1100 DIP 时，默认由 AI 画布与同一个 Wiki Reader 并排组成；两侧可用细拖柄调整，但主内容和 Reader 均有硬性最小宽度。拖动分隔条不会自动关闭 Reader；关闭只由 Reader 叉号执行，顶部 Wiki 按钮可重新打开。
-- 宽度小于 1100 DIP 时，默认只显示 AI 画布。点击可信来源或进入 Wiki 阅读时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。
-- Chat/收藏/资料库/数据管理/设置/Wiki 导航不取消活动回答；当前完整会话在内存中保留，退出应用才统一取消和清理。设置页临时独占主工作区并隐藏共享 Reader，离开设置后按进入前的 Reader 状态恢复，不销毁或复制 Viewer。
+- 宽度小于 1100 DIP 时，普通页面默认只显示主画布；点击可信来源或顶部 Wiki 预览时，Reader 作为右侧覆盖层出现，可用 Esc、关闭按钮或遮罩收起。独立 Wiki 页面在宽窄窗口都使用整个工作区，不回退为普通覆盖层。
+- Chat/收藏/Wiki/资料库/数据管理/设置导航不取消活动回答；当前完整会话在内存中保留，退出应用才统一取消和清理。设置页临时独占主工作区并隐藏共享 Reader；进入独立 Wiki 页面前保存普通 Reader 状态，离开后恢复，不销毁或复制 Viewer。
 
 ## 视觉系统与交互状态
 
@@ -61,7 +61,7 @@
 - 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键返回、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。
 - 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
 - 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
-- 设置页使用“常规设置 / AI 配置”二级菜单，不增加第六个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
+- 设置页使用“常规设置 / AI 配置”二级菜单；AI 配置仍留在设置内部，不增加第七个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
 - DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。“模型服务”是唯一 AI 配置区域，合并提供商字段、API Key、思考强度和数据发送说明；普通用户界面不显示 Python 版本或路径。API key 保存到 Windows Credential Manager，不回显真实值或长度；已有凭据以固定长度遮蔽标记和“已保存”文字显示，空底层输入仍表示保留，输入新值表示替换，并另有显式清除操作。思考强度提供服务默认、关闭、低、高、最大五档。
 - AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
 - AI 配置与 Credential Manager 不依赖 Wiki 数据库 Runtime 才可编辑。没有有效数据根时 API Key 输入、provider 载入与保存仍可用；保存成功后明确提示 AI 将在选定有效数据根后启动，不把暂时无法重启误报成凭据保存失败。
@@ -78,8 +78,10 @@
 ## Wiki 与共享 Reader
 
 - Chat 来源必须按 `resolvedTitle#anchor` 打开；不得使用 requested title 代替已解析标题。
-- 顶部 Wiki 按钮只控制 Reader 可见性；Reader 尚未与可交互 Viewer 会话绑定时保持禁用，不能打开显示“等待本地 Viewer”的空白面板。Reader 内继续使用既有 Viewer 页面导航和搜索。原生 Wiki 搜索状态仍保持内部能力，但顶部按钮不得把主内容切换到该页面。
-- 整个 Windows Presentation 只创建一个 `NativeWebView` 和一个 `ViewerWebViewSession`。宽窄切换只改变该 Reader 的布局与可见性，不移动、复制或启动第二个 Viewer。
+- 非 Wiki 页面顶部 Wiki 按钮只控制 Reader 可见性；Reader 尚未与可交互 Viewer 会话绑定时保持禁用，不能打开显示“等待本地 Viewer”的空白面板。该按钮不得把主内容切换到独立 Wiki 页面。
+- 独立 Wiki 页面使用“本地首页 → 全宽搜索结果 → 全宽正文”三态。初次进入和主页命令按活动 Wiki 的 `DefaultPageTitle` 通过现有 Reader 打开真实本地首页；非空查询直接复用 `WikiViewModel` 与 Application Search，结果保持标题、匹配类型、Redirect 和纯文本摘要。选择结果后同一个 Reader 占满工作区，返回搜索保留查询和已有结果。
+- Wiki 页内工具栏在首页、结果和正文状态均保留本地搜索；清空查询回到首页。900×600 下搜索和正文仍可用，不依赖水平滚动；错误、不可用、搜索中、无结果和过期请求继续使用现有安全搜索状态。
+- 整个 Windows Presentation 只创建一个 `NativeWebView` 和一个 `ViewerWebViewSession`。普通宽窄切换与 Wiki 全宽切换只改变同一父级内 Reader 的 Grid 布局与可见性，不复制、重建或启动第二个 Viewer。
 - Reader 继续使用既有 Viewer 协议、内部链接、主题、内存返回行为和资源链路；Presentation 不直接访问 Core、SQLite 或 Viewer backend。
 
 ## 变更边界

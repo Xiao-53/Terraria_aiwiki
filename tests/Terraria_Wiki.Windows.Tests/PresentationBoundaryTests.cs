@@ -43,6 +43,7 @@ public sealed class PresentationBoundaryTests
         Assert.Equal(1, Count(combined, "new ViewerWebViewSession("));
         Assert.Contains("AI 问答导航", shell, StringComparison.Ordinal);
         Assert.Contains("收藏导航", shell, StringComparison.Ordinal);
+        Assert.Contains("Wiki 搜索导航", shell, StringComparison.Ordinal);
         Assert.Contains("Wiki 资料库导航", shell, StringComparison.Ordinal);
         Assert.Contains("数据管理导航", shell, StringComparison.Ordinal);
         Assert.Contains("设置导航", shell, StringComparison.Ordinal);
@@ -83,7 +84,40 @@ public sealed class PresentationBoundaryTests
         Assert.Contains("MinHeight\" Value=\"40\"", controls, StringComparison.Ordinal);
         Assert.Contains("TextBox.api-key-input:focus", controls, StringComparison.Ordinal);
         Assert.Contains("TextBox.api-key-input:disabled", controls, StringComparison.Ordinal);
-        Assert.DoesNotContain("Wiki 阅读导航", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiNavigation\"", shell, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public void WikiPageKeepsSingleViewerAndFullWidthSearchSurface()
+    {
+        var root = FindSourceRoot();
+        var shell = File.ReadAllText(Path.Combine(root, "Presentation", "Shell", "ShellView.axaml"));
+        var wiki = File.ReadAllText(Path.Combine(root, "Presentation", "Wiki", "WikiView.axaml"));
+        var shellCode = File.ReadAllText(Path.Combine(root, "Presentation", "Shell", "ShellView.axaml.cs"));
+        var shellViewModel = File.ReadAllText(Path.Combine(root, "Presentation", "Shell", "ShellViewModel.cs"));
+        var mainWindow = File.ReadAllText(Path.Combine(root, "MainWindow.cs"));
+
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiToolbar\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiSearchInput\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiSearchButton\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiHomeNavigation\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiReturnToSearch\"", shell, StringComparison.Ordinal);
+        Assert.Contains("PlaceholderText=\"输入关键词搜索…\"", shell, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding Wiki.SearchCommand}\"", shell, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding GoToWikiHomeCommand}\"", shell, StringComparison.Ordinal);
+        Assert.Contains("Command=\"{Binding ReturnToWikiSearchCommand}\"", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("Width=\"360\"", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("Width=\"360\"", wiki, StringComparison.Ordinal);
+        Assert.DoesNotContain("没有找到结果", wiki, StringComparison.Ordinal);
+        Assert.Contains("IsVisible=\"{Binding !IsWikiSurfaceVisible}\"", shell, StringComparison.Ordinal);
+        Assert.Contains("viewModel.IsWikiSurfaceVisible", shellCode, StringComparison.Ordinal);
+        Assert.Contains("Grid.SetColumnSpan(_readerHost, 3)", shellCode, StringComparison.Ordinal);
+        Assert.Contains("HorizontalAlignment.Stretch", shellCode, StringComparison.Ordinal);
+        Assert.Contains("nameof(ShellViewModel.WikiMode)", shellCode, StringComparison.Ordinal);
+        Assert.Contains("SetWikiHomePage", shellViewModel, StringComparison.Ordinal);
+        Assert.Equal(2, Count(mainWindow, "SetWikiHomePage("));
+        Assert.Contains("private async Task OpenWikiHomeAsync()", shellViewModel, StringComparison.Ordinal);
+        Assert.Contains("IsWikiSurfaceVisible => IsWikiSelected && WikiMode != WikiDisplayMode.Search", shellViewModel, StringComparison.Ordinal);
     }
 
     [Fact]

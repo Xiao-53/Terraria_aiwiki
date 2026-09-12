@@ -210,6 +210,141 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
+    public void WikiNavigationEntersFullWidthHomeAndLeavingRestoresReaderState()
+    {
+        using var shell = new ShellViewModel();
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
+        shell.SetViewportWidth(1280);
+        shell.OpenWikiReader();
+
+        shell.NavigateWiki();
+
+        Assert.True(shell.IsWikiSelected);
+        Assert.True(shell.IsWikiHomeActive);
+        Assert.False(shell.IsWikiSearchActive);
+        Assert.False(shell.IsWikiReadingActive);
+        Assert.True(shell.IsWikiSurfaceVisible);
+        Assert.True(shell.IsReaderVisible);
+        Assert.False(shell.IsReaderInlineVisible);
+        Assert.False(shell.IsReaderOverlayVisible);
+        Assert.False(shell.CanCloseReader);
+        Assert.False(shell.IsWikiPreviewVisible);
+
+        shell.NavigateChat();
+
+        Assert.True(shell.IsChatSelected);
+        Assert.Equal(ReaderPaneState.Wiki, shell.ReaderState);
+        Assert.True(shell.IsReaderVisible);
+        Assert.True(shell.IsReaderInlineVisible);
+        Assert.True(shell.CanCloseReader);
+        Assert.True(shell.IsWikiPreviewVisible);
+    }
+
+    [Fact]
+    public void LeavingWikiSearchRestoresNarrowLayoutWithoutReader()
+    {
+        using var shell = new ShellViewModel();
+        shell.SetViewportWidth(900);
+        Assert.False(shell.IsReaderVisible);
+
+        shell.NavigateWiki();
+        Assert.True(shell.IsReaderVisible);
+        Assert.False(shell.IsReaderOverlayVisible);
+
+        shell.Wiki.Query = "史莱姆";
+        Assert.True(shell.IsWikiSearchActive);
+        Assert.False(shell.IsWikiSurfaceVisible);
+        Assert.False(shell.IsReaderVisible);
+        Assert.False(shell.IsReaderOverlayVisible);
+
+        shell.NavigateChat();
+
+        Assert.True(shell.IsChatSelected);
+        Assert.Equal(ReaderPaneState.Home, shell.ReaderState);
+        Assert.False(shell.IsReaderVisible);
+        Assert.False(shell.IsReaderOverlayVisible);
+    }
+
+    [Fact]
+    public async Task WikiSearchReadingAndHomeModesPreserveResultsAndUseOneReaderFlow()
+    {
+        using var shell = new ShellViewModel();
+        var opened = new List<string>();
+        shell.AttachReader(
+            (title, _) =>
+            {
+                opened.Add(title);
+                return Task.CompletedTask;
+            },
+            _ => Task.CompletedTask);
+        shell.SetWikiHomePage("Terraria Wiki");
+        var wiki = shell.Wiki;
+        wiki.Attach((_, _) => Task.FromResult<IReadOnlyList<SearchResultItem>>(
+            [new SearchResultItem { Title = "史莱姆", MatchKind = WikiSearchMatchKind.ExactTitle }]));
+
+        shell.NavigateWiki();
+
+        Assert.Equal(new[] { "Terraria Wiki" }, opened);
+
+        wiki.Query = "史莱姆";
+        Assert.True(shell.IsWikiSearchActive);
+        await wiki.SearchNowAsync();
+        Assert.Single(wiki.Results);
+
+        await wiki.Results.Single().OpenAsync();
+        Assert.True(shell.IsWikiReadingActive);
+        Assert.True(shell.IsWikiSurfaceVisible);
+        Assert.True(shell.IsReaderVisible);
+        Assert.Equal(new[] { "Terraria Wiki", "史莱姆" }, opened);
+
+        shell.ReturnToWikiSearchCommand.Execute(null);
+        Assert.True(shell.IsWikiSearchActive);
+        Assert.Equal("史莱姆", wiki.Query);
+        Assert.Single(wiki.Results);
+        Assert.False(shell.IsReaderVisible);
+
+        shell.GoToWikiHomeCommand.Execute(null);
+        Assert.True(shell.IsWikiHomeActive);
+        Assert.Equal(string.Empty, wiki.Query);
+        Assert.True(shell.IsReaderVisible);
+        await Task.Delay(300);
+        Assert.Empty(wiki.Results);
+        Assert.Equal(new[] { "Terraria Wiki", "史莱姆", "Terraria Wiki" }, opened);
+
+        shell.NavigateChat();
+        shell.NavigateWiki();
+        Assert.True(shell.IsWikiHomeActive);
+        Assert.Equal(new[] { "Terraria Wiki", "史莱姆", "Terraria Wiki", "Terraria Wiki" }, opened);
+    }
+
+    [Fact]
+    public void WikiHomeWaitsForReaderAndRequiresAnActiveHomeTitle()
+    {
+        using var shell = new ShellViewModel();
+        var opened = new List<string>();
+        shell.NavigateWiki();
+        shell.SetWikiHomePage("Terraria Wiki");
+
+        Assert.True(shell.IsWikiHomeActive);
+        Assert.Empty(opened);
+
+        shell.AttachReader(
+            (title, _) =>
+            {
+                opened.Add(title);
+                return Task.CompletedTask;
+            },
+            _ => Task.CompletedTask);
+
+        Assert.Equal(new[] { "Terraria Wiki" }, opened);
+
+        shell.NavigateChat();
+        shell.SetWikiHomePage("  ");
+        shell.NavigateWiki();
+        Assert.Equal(new[] { "Terraria Wiki" }, opened);
+    }
+
+    [Fact]
     public void ReaderUsesInlineAndOverlayModesAtExactThresholdAndEscapeClosesOverlay()
     {
         using var shell = new ShellViewModel();

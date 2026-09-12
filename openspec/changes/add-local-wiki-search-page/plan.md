@@ -1,11 +1,11 @@
 # 新增参考图风格的全宽本地 Wiki 搜索页面
 
-- 状态：draft；等待用户批准后实施
+- 状态：in-progress；用户已批准按本计划在独立分支实施，完成后交由用户验证再合并
 - Phase：无；独立 Windows Presentation 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑、计划维护与静态检查；Windows 11 x64 负责 .NET/Avalonia 构建、测试与真实窗口验收
 - 创建日期：2026-09-09
-- 最后更新：2026-09-09
-- 范围：新增 Windows Avalonia 左侧 Wiki 入口及参考图风格的全宽搜索/阅读页面；仅增加必要 Presentation 接线，复用原搜索和唯一 Viewer。当前授权仅修订本计划。
+- 最后更新：2026-09-12
+- 范围：新增 Windows Avalonia 左侧 Wiki 入口及参考图风格的全宽搜索/阅读页面；仅增加必要 Presentation 接线，复用原搜索和唯一 Viewer；在独立功能分支完成并提交，等待用户验证后再合并。
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/wiki-query-boundary/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`
 
 ## 背景与当前证据
@@ -148,6 +148,7 @@
 - **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Shell/ShellView.axaml`：增加 Wiki rail；为 Wiki 搜索态和全宽 Reader 态提供互斥布局，普通页面布局保持原样。
 - **MODIFY IF REQUIRED** `src/Terraria_Wiki.Windows/Presentation/Shell/ShellView.axaml.cs`：只扩展现有布局计算，使单一 ReaderHost 在 Wiki/普通模式间切换位置，不重建控件。
 - **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Shell/ShellViewModel.cs`：增加 Wiki 导航、搜索/阅读模式和普通 Reader 状态保存/恢复。
+- **MODIFY** `src/Terraria_Wiki.Windows/MainWindow.cs`：把现有活动 Wiki 的 `DefaultPageTitle` 传给 Shell；不改变 Viewer 启动、重绑或数据流程。
 - **MODIFY** `src/Terraria_Wiki.Windows/Presentation/Wiki/WikiView.axaml`：实现全宽搜索页和结果列表，不承载第二个 Viewer。
 - **KEEP** `src/Terraria_Wiki.Windows/Presentation/Wiki/WikiViewModel.cs`：Query、SearchCommand、搜索流程和结果映射原样复用；页内导航状态放在 Shell 的 Wiki 专属接线中。
 - **KEEP** `src/Terraria_Wiki.Windows/Presentation/Reader/ReaderView.axaml`、`ReaderPaneViewModel.cs` 与共享 `Styles/Controls.axaml`、`Styles/ThemeResources.axaml`：复用现有控件、命令和 token，不调整通用行为或清理样式。
@@ -159,14 +160,15 @@
 
 ## 执行步骤
 
-- [ ] 用户批准修订计划后将状态改为 `in-progress`，确认 Git 状态和恢复点。
-- [ ] 接入左侧 Wiki 导航和 Shell 状态；先用行为测试锁定其他五个入口及普通 Reader 状态不变。
-- [ ] 接入参考图风格的 Wiki 工具栏、现有 Viewer 本地首页和全宽结果区；直接绑定现有搜索与状态属性，补齐可访问性，不修改搜索 ViewModel 或重画首页内容。
-- [ ] 接通搜索结果到全宽单一 ReaderHost，并实现返回搜索且保留查询结果。
-- [ ] 实现 Wiki/普通页面布局切换；验证同一个 NativeWebView 不重建、不重挂第二父级。
-- [ ] 更新 Presentation flow/boundary 回归与持续文档。
-- [ ] 执行 WSL 静态检查、Windows Release build、定向/全量 .NET tests 和真实窗口验收。
-- [ ] 更新计划进度与验证结果，只提交当前变更，不 push。
+- [x] 用户批准修订计划后将状态改为 `in-progress`，确认 Git 状态和恢复点。
+- [x] 接入左侧 Wiki 导航和 Shell 状态；先用行为测试锁定其他五个入口及普通 Reader 状态不变。
+- [x] 接入参考图风格的 Wiki 工具栏、现有 Viewer 本地首页和全宽结果区；直接绑定现有搜索与状态属性，补齐可访问性，不修改搜索 ViewModel 或重画首页内容。
+- [x] 接通搜索结果到全宽单一 ReaderHost，并实现返回搜索且保留查询结果。
+- [x] 实现 Wiki/普通页面布局切换；验证同一个 NativeWebView 不重建、不重挂第二父级。
+- [x] 更新 Presentation flow/boundary 回归与持续文档。
+- [x] 执行 WSL 静态检查、Windows Release build、定向/全量 .NET tests。
+- [ ] 用户在真实 Windows 窗口完成 Light/Dark、1280×820、900×600 与本地首页/搜索/正文验收。
+- [x] 更新计划进度与验证结果，只提交当前变更，不 push；用户验收后再合并。
 
 ## 验证与回归计划
 
@@ -213,6 +215,9 @@
 - 2026-09-09：重写本计划为全宽 Wiki 搜索/阅读模式；下一步等待用户批准，不实施源码。
 - 2026-09-09：按用户新参考图补充工具栏、右侧搜索、首页横幅、连续内容区和窄窗布局；收紧为搜索 ViewModel、共享 Reader 与其他页面实现全部 KEEP，仅修订此 plan。实施仍未开始。
 - 2026-09-09：用户进一步以 20:03:15 截图确认有数据首页效果；最终方案改为现有 Viewer 的完整本地 Wiki 首页，取消原生横幅/留白首页和新增图片资源引用。新增入口、首页/搜索/正文编排仍为唯一实施范围。
+- 2026-09-12：用户批准实施。当前 `HEAD` 为 `24ee9d9`；建立 `checkpoint/pre-add-local-wiki-search-page-20260912` 保存点，并从同一提交创建 `feature/add-local-wiki-search-page`。实施前已有的 AI change 归档移动和 `package-core-source-rar` 未跟踪目录保持原样，不纳入本变更提交。
+- 2026-09-12：接入第六个“Wiki”入口、页内工具栏和首页/搜索/正文三态；活动 Wiki 的 `DefaultPageTitle` 由现有 Windows 宿主传入 Shell，页面搜索仍原样复用 `WikiViewModel`，正文仍使用唯一 ReaderHost。
+- 2026-09-12：增加 Wiki 模式与普通 Reader 状态恢复回归，同步 Presentation spec、项目基线和 README。Windows Release build 与 349 项全量 .NET tests 已通过；等待用户真实窗口验收，未合并、未 push。
 
 ## 发现、偏差与决策
 
@@ -223,15 +228,19 @@
 - 决策：不触碰其他五个页面的功能与视觉，不进入相邻重构。
 - 决策：本次使用 terraria-ui 的语义 token、轻量列表、状态/键盘及 Windows 验收要求；用户参考图决定 Wiki 首页横幅与工具栏形态。Skill 中旧 `terraria-wiki-offline/src/` 路径按根治理规则解析为当前根级 `src/`，不恢复旧 checkout。
 - 发现：Local Viewer spec 仍记有 `RecordVisitAsync`，与当前项目基线所述旧浏览历史停止读写不一致；本计划不恢复历史写入，也不顺带修订该独立文档问题。
+- 发现：保存分支 `preserve-wiki-search-page-implementation` 提供了单 Reader 布局草稿，但基于旧代码线且未把 `DefaultPageTitle` 接入 Shell，也遗漏部分派生可见性通知；本次只手工复用布局思路并在当前基线上补齐，未 cherry-pick 该提交。
+- 决策：`WikiViewModel`、`ReaderPaneViewModel`、共享样式和 Viewer 资产保持零修改；主页显式操作和进入 Wiki 时通过现有 `Reader.OpenAsync` 导航，布局重算不触发重复导航。
 
 ## 验证结果
 
 - 规划基线 Windows Release build 已通过 9 个项目、0 warning / 0 error；该证据不包含计划中的新功能。
-- 旧计划记载 `terraria-ui` Skill validator 已通过；本轮未运行该 validator，不将其视为本次修订或新页面的验证。
-- 当前静态证据确认：Wiki 搜索实现存在但无导航；Shell/Reader 只有一个 NativeWebView/Viewer session。
-- 修订计划尚未实施，没有新 Wiki 页面或目标窗口通过结果。
-- 本轮仅核对计划、截图、现有搜索/Reader 接线和资产清单；不运行应用、不发搜索/AI/下载请求，不构建或打包。文档差异与 `git diff --check` 在修订后检查。
+- 旧计划记载的规划阶段验证只作为实施前基线，不作为本次新页面的完成证据。
+- 2026-09-12 Windows `.NET 10` Release solution build：9 个项目成功，0 warning / 0 error；包含 Avalonia XAML 编译。
+- 2026-09-12 定向 `PresentationFlowTests|PresentationBoundaryTests`：38/38 通过。
+- 2026-09-12 Windows 全量 `.NET` tests：349/349 通过（Core 97、Application 56、WikiTools 45、Windows 151）。
+- 2026-09-12 WSL 静态检查：`git diff --check` 通过；源码仍只有一个 `<NativeWebView` 和一个 `new ViewerWebViewSession(`；计划要求 KEEP 的 `WikiViewModel`、Reader、共享 styles、Application/Core、Viewer assets 与项目依赖均无改动。Skill 目录未提供独立 validator 脚本，按 `terraria-ui` 检查表完成源码/自动化检查。
+- 未验证：真实 Windows 窗口的 Light/Dark、1280×820、900×600、实际本地首页内容与交互；按用户要求交由用户验收后再合并。本轮未运行 publish/安装器，不产生付费 AI、在线 Wiki 或下载请求。
 
 ## 完成摘要
 
-不适用：状态为 draft。用户批准后才实施；完成时必须记录实际 Windows build/tests、全宽 Wiki 实机验收、其他页面无回归证据和最终提交。
+实现与自动化验证已在 `feature/add-local-wiki-search-page` 完成，保存点为 `checkpoint/pre-add-local-wiki-search-page-20260912`。当前仍为 in-progress：等待用户完成真实窗口验收；验收前不合并、不 push，也不把 change 标记 completed。
