@@ -1,6 +1,6 @@
 # Windows Presentation 能力契约
 
-- 状态：implemented；2026-09-12 独立全宽本地 Wiki 搜索/阅读入口已接入，等待用户真实窗口验收
+- 状态：implemented；2026-09-12 独立全宽本地 Wiki 搜索/阅读入口已接入，首次真实窗口功能成立但视觉未通过，后续由新 change 继续优化
 - 适用范围：Avalonia Windows Presentation、Chat、收藏、Wiki 资料库、数据管理、设置、Wiki Search、共享 Reader 与安全 Markdown；不外推 Android
 - 来源：Master Architecture v0.6、Phase 08、已归档 Phase 09 计划、ADR 0001、ADR 0010、Application/Viewer/Windows AI Runtime 能力契约
 

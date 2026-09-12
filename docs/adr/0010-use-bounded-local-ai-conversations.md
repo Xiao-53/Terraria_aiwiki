@@ -3,7 +3,7 @@
 - 状态：accepted
 - 日期：2026-09-05
 - 决策范围：Windows Chat 会话所有权、持久化、收藏/历史语义和模型历史隔离；不包含云同步、其他平台或 Wiki 数据复制
-- 关联：`openspec/changes/ai-conversation-token-optimization/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
+- 关联：`openspec/changes/archive/ai-conversation-token-optimization/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
 
 ## 背景
 

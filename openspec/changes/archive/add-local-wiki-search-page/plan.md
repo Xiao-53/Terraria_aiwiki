@@ -1,6 +1,6 @@
 # 新增参考图风格的全宽本地 Wiki 搜索页面
 
-- 状态：in-progress；首次真实窗口验收提出顶栏收敛修订，本轮只更新 plan，等待用户批准后实施
+- 状态：archived；首版功能已实现但真实窗口视觉验收未通过，单顶栏修订未实施；用户于 2026-09-12 要求结束本 change，后续由新 plan 继续优化
 - Phase：无；独立 Windows Presentation 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑、计划维护与静态检查；Windows 11 x64 负责 .NET/Avalonia 构建、测试与真实窗口验收
 - 创建日期：2026-09-09
@@ -240,6 +240,7 @@
 - 2026-09-12：接入第六个“Wiki”入口、页内工具栏和首页/搜索/正文三态；活动 Wiki 的 `DefaultPageTitle` 由现有 Windows 宿主传入 Shell，页面搜索仍原样复用 `WikiViewModel`，正文仍使用唯一 ReaderHost。
 - 2026-09-12：增加 Wiki 模式与普通 Reader 状态恢复回归，同步 Presentation spec、项目基线和 README。Windows Release build 与 349 项全量 .NET tests 已通过；等待用户真实窗口验收，未合并、未 push。
 - 2026-09-12：用户提供首次真实窗口截图，确认功能链路可用但拒绝三层重复抬头；要求先计划把 Wiki 工具栏并入 Shell 顶栏、把本地搜索移到最上方并删除下方重复标题栏。本轮只更新 plan，提交 `f73d49e` 的实现保持不动。
+- 2026-09-12：用户决定归档本 change，并将另建新 plan 继续优化。已记录但尚未执行的单顶栏修订、第二轮构建/测试和真实窗口复验均不在本 change 内完成；功能分支保持未合并、未 push。
 
 ## 发现、偏差与决策
 
@@ -268,4 +269,4 @@
 
 ## 完成摘要
 
-首版实现与自动化验证位于 `feature/add-local-wiki-search-page` 的 `f73d49e`，保存点为 `checkpoint/pre-add-local-wiki-search-page-20260912`。首次真实窗口功能链路成立但视觉验收未通过；当前等待用户批准本次单顶栏修订计划，批准前不修改实现，验收前不合并、不 push，也不把 change 标记 completed。
+首版实现与自动化验证位于 `feature/add-local-wiki-search-page` 的 `f73d49e`，保存点为 `checkpoint/pre-add-local-wiki-search-page-20260912`。首次真实窗口功能链路成立但视觉验收未通过；单顶栏修订没有实施、构建或复验，功能分支未合并、未 push。用户于 2026-09-12 主动结束并归档本 change，因此不标记为 `complete`，后续优化由新 plan 承接。

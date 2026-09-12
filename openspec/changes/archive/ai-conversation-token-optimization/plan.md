@@ -1,10 +1,10 @@
 # AI 会话与 Token 花费优化
 
-- 状态：implemented；自动化与 Windows Release 开发输出已通过，等待用户付费/人工验收
+- 状态：archived；实现与自动化验证已完成，真实付费/窗口验收未执行；用户于 2026-09-12 要求结束本 change，后续由新 plan 继续优化
 - Phase：无；独立非 Phase 变更
 - 执行环境：WSL2 Codex CLI 负责实施与平台无关检查；Windows 11 x64 负责 .NET/Avalonia 构建、运行与人工验收
 - 创建日期：2026-09-05
-- 最后更新：2026-09-06
+- 最后更新：2026-09-12
 - 范围：Wiki Tools 读取结构、Python Agent 多轮上下文、Windows Sidecar 协议、Chat/收藏/对话历史、本地会话持久化、旧 Wiki 浏览历史下线
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/application-use-cases/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0010-use-bounded-local-ai-conversations.md`
 
@@ -225,7 +225,7 @@
 - 2026-09-05：最终 Python `ruff`/format/strict mypy 通过，离线 pytest 82 passed / 4 skipped；真实 C# MCP→Python 非付费测试另行通过 1/1。内置 CPython 的 Application→WikiTools→Sidecar 离线链路首次冷启动受 Defender 扫描超过 15 秒，未改代码直接重跑通过（1/1，13 秒）。
 - 2026-09-05：Windows dotnet Release solution build 9 项目 0 warning / 0 error；对同一输出执行全量测试 324/324（Core 92、Application 52、WikiTools 37、Windows 143）。开发输出中的 Agent/Sidecar 源与工作区逐字一致，EXE 和内置 CPython 均存在。
 - 2026-09-06：人工启动发现 Chat 输入框在 Runtime 尚未 Ready 时被错误设为只读；修复为启动中/未配置/失败时可编辑并保留草稿、仅发送禁用，回答期间仍只读，补充 Presentation 行为回归与持续契约。定向测试 3/3、Windows Release build 0 warning / 0 error、全量测试 325/325 通过。
-- 下一步：用户继续按交付步骤执行真实问题和窗口验收。禁止的 publish/Velopack/Setup/portable/update/upload 均未运行。
+- 2026-09-12：用户要求归档本 change，并将另建新 plan 继续优化。真实问题、Token 门槛和窗口验收未在本 change 内执行；禁止的 publish/Velopack/Setup/portable/update/upload 均未运行。
 
 ## 发现、偏差与决策
 
@@ -255,4 +255,4 @@
 
 ## 完成摘要
 
-源码、持续契约与 Release 开发输出已经实现并通过自动验证：保持足够 Search/Read 调用，通过分章节、按主题、可继续读取的纯文本 evidence blocks 从源头移除模型上下文中的完整 HTML；同时增加最近 4 轮模型文本上下文、完整本地会话、新对话、整段收藏和对话历史页，并下线持久 Wiki 浏览历史。真实 Token/答案/来源与窗口门槛必须由用户使用现有 key 验收；在该结果回填前计划保持 `implemented` 而非 `complete`。本 change 未进行打包或发布。
+源码、持续契约与 Release 开发输出已经实现并通过自动验证：保持足够 Search/Read 调用，通过分章节、按主题、可继续读取的纯文本 evidence blocks 从源头移除模型上下文中的完整 HTML；同时增加最近 4 轮模型文本上下文、完整本地会话、新对话、整段收藏和对话历史页，并下线持久 Wiki 浏览历史。真实 Token/答案/来源与窗口门槛尚未由用户使用现有 key 验收，因此本 change 不标记为 `complete`；用户于 2026-09-12 主动结束并归档，剩余优化与验收交由后续新 plan 承接。本 change 未进行打包或发布。
