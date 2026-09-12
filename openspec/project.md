@@ -94,7 +94,7 @@ Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` �
 
 产品源码已以 `d67d904` 内容建立独立基线，固定上游参考从未参与迁移后的 build/runtime；Phase 10 已移除其本地 gitlink。移除后的 Windows Release build 为 0 warning/0 error，275/275 .NET tests 与两种 publish smoke 均通过；冻结 Python 回归沿用此前无源码变化的证据。
 
-Phase 00–10 已完成，Phase 11 Windows Productization 正在实施；Phase 12 按真实需求决定是否实施，Phase 13 Android 已暂缓。Windows Avalonia Shell 现有六个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite；新增“Wiki”入口复用原搜索与唯一共享 Reader，在同一工作区切换真实本地首页、全宽结果和全宽正文。其首版自动化验证通过但真实窗口视觉验收未通过，原 change 已按用户要求归档且功能分支未合并，后续由新 plan 继续优化。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收。已归档的 AI 会话 Token 优化 change 把 AI 边界升级为 `wiki_blocks_v1`、NDJSON v2 和最多最近 4 轮纯文本，并增加本地完整会话、整段收藏与对话历史；其真实付费模型 Token/答案/来源和窗口验收未执行，后续由新 plan 承接。Windows 本地 Wiki 启动也已前移无损冲突检测、取消首屏统计重算并收紧迁移 checkpoint，可证明目标库严格覆盖旧布局时完成可回滚接管，未绑定 Reader 不再允许打开空白预览。Application/Viewer 继续使用完整 HTML，SQLite schema、FTS5、Redirect、数据包和唯一 Reader 不变。该最新源码的 Windows Release build 为 0 warning / 0 error；各变更全量测试结果在相应 change plan 中单独记录。Python 离线与非付费跨语言回归通过。最新未打包源代码会自动创建 Windows 默认数据根，空内容时直接进入数据管理页，并保留页面内更改入口；设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利确认；GitHub 渠道、WebView2 缺失干净机与 Windows 10 条件矩阵未完成，当前候选不是公开发行就绪状态。
+Phase 00–10 已完成，Phase 11 Windows Productization 已按用户决定关闭并归档；Phase 12 按真实需求决定是否实施，Phase 13 Android 继续暂缓。Windows Avalonia Shell 现有六个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite；新增“Wiki”入口复用原搜索与唯一共享 Reader，在同一工作区切换真实本地首页、全宽结果和全宽正文。其首版已进入本地主线并通过自动化验证，但真实窗口视觉验收未通过，后续由新 plan 继续优化。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收；公开仓库/版本/许可输入、干净机与真实 GitHub 渠道矩阵、Windows 10 可选门槛和发布审计未完成，已转入 `post-phase-11-roadmap`，当前候选仍为 `publicationReady: false`。已完整关闭并归档的 AI 会话 Token 优化 change 把 AI 边界升级为 `wiki_blocks_v1`、NDJSON v2 和最多最近 4 轮纯文本，并增加本地完整会话、整段收藏与对话历史；后续 Token/答案质量工作另建 plan。Windows 本地 Wiki 启动也已前移无损冲突检测、取消首屏统计重算并收紧迁移 checkpoint，可证明目标库严格覆盖旧布局时完成可回滚接管，未绑定 Reader 不再允许打开空白预览。Application/Viewer 继续使用完整 HTML，SQLite schema、FTS5、Redirect、数据包和唯一 Reader 不变。各变更测试结果与未验证边界在相应归档计划中单独记录。最新未打包源代码会自动创建 Windows 默认数据根，空内容时直接进入数据管理页，并保留页面内更改入口；设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按要求未重建。未来公开发行工作必须另建 change 并取得必要输入与外部写入授权。
 
 ## 治理关系
 
@@ -107,7 +107,7 @@ Phase 00–10 已完成，Phase 11 Windows Productization 正在实施；Phase 1
 | 计划规范 | `.agent/PLANS.md` |
 | 已确认能力契约 | `openspec/specs/` |
 | 进行中计划与变更 | `openspec/changes/` |
-| 已完成变更 | `openspec/changes/archive/` |
+| 已完成或明确关闭的变更 | `openspec/changes/archive/` |
 | 长期技术决策 | `docs/adr/` |
 
 当事实或决策变化时，只更新负责该内容的文件；不要在多个入口文档复制并分别维护同一细节。

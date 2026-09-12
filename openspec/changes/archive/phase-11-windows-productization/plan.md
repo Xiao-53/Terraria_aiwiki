@@ -1,14 +1,14 @@
 # Phase 11 — Windows Productization
 
-- 状态：in-progress；用户已于 2026-09-04 明确授权开始实施，公开 GitHub 仓库地址、首发版本和软件许可证范围在对应发布步骤前关闭
+- 状态：archived；用户于 2026-09-12 决定关闭并归档 Phase 11，本地产品化成果保留，未完成的公开发行事项转入后续路线图
 - Phase：11 — Windows Productization
 - 执行环境：WSL Codex CLI 负责阅读、编辑、计划维护和平台无关检查；Windows 11 x64 负责 .NET/Avalonia、内置 Python、安装器、portable、升级、修复、卸载和目标平台验证；Windows 10 22H2 x64 仅执行低成本兼容性门槛
 - 创建日期：2026-09-03
-- 最后更新：2026-09-05
+- 最后更新：2026-09-12
 - 范围：Windows 错误恢复、内置 Python Runtime、Credential Manager、Evergreen WebView2 前置处理、版本化 self-contained 发布、普通 Windows 安装程序、portable zip、GitHub Releases 更新与发布准备、发布诊断和许可告知
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-ai-runtime/spec.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0001-use-avalonia-client.md`、`docs/adr/0003-use-loopback-local-viewer-transport.md`、`docs/adr/0006-use-stdio-python-sidecar.md`、`docs/adr/0008-use-github-releases-windows-distribution.md`、`assets/windows/README.md`
 
-> 2026-09-05 后续独立 change `ai-conversation-token-optimization` 已获授权并修改 Agent/Wiki Tool/Sidecar/Chat 契约：当前源码采用 NDJSON v2、`wiki_blocks_v1` 和本地完整会话。下文 NDJSON v1、单轮、Chat 收藏等文字保留为 Phase 11 当时的输入与历史验证，不再代表当前产品契约；现行基线见持续 specs、ADR 0010 与该 change plan。该后续 change 不重建或发布 Phase 11 制品。
+> 2026-09-05 后续独立 change `ai-conversation-token-optimization` 已获授权并修改 Agent/Wiki Tool/Sidecar/Chat 契约：当前源码采用 NDJSON v2、`wiki_blocks_v1` 和本地完整会话。下文 NDJSON v1、单轮、Chat 收藏等文字保留为 Phase 11 当时的输入与历史验证，不再代表当前产品契约；现行基线见持续 specs、ADR 0010 与归档 change plan。该后续 change 不重建或发布 Phase 11 制品。
 
 ## 背景与当前证据
 
@@ -294,6 +294,7 @@
 - 2026-09-05：标准 Windows Release 开发输出完成 9 项目 build（0 warning / 0 error），40 项相关回归和 299/299 全量 .NET tests 通过。Windows 11 25H2 build 26200 使用两套隔离 host settings/data roots 实测 Light 1280×820 与 Dark 900×600：两边均创建 `Manager.db` 并直接显示数据管理；宽 Reader 分栏、窄 Reader 覆盖、路径省略、首次使用主按钮和 AI 单区布局无挤压重叠。API Key 实际控件为 300×40 DIP，UI Automation 输入返回 8 个遮蔽字符并立即启用“保存并应用”；非交互会话未能把全局键盘注入送入窗口，因此本轮不把物理键盘/剪贴板手工输入记作已重新实测。未保存密钥、下载数据、请求模型、运行 publish 或重建包。
 - 2026-09-05：用户试用要求发送后清空 Chat 编辑框、设置页临时隐藏 Wiki Reader 并在离开后恢复，以及让已保存 API Key 在输入区具有明确反馈。实现保持已提交问题的内部单轮/收藏状态，设置页只隐藏且不销毁唯一 Viewer，凭据只显示固定八位遮蔽与“已保存”而不读取真实值或泄漏长度。34 项 Chat/Settings/Presentation 定向回归和 300/300 全量 .NET tests 通过；按用户要求只更新未打包 Release 开发输出，不运行 publish/Velopack，由用户继续实际 UI 验收。连续会话与“新对话”按钮涉及现有单轮 Agent/协议/收藏契约，留作用户选择方案后的独立 change，不在本局部修复中放置无后端行为的按钮。
 - 2026-09-05：用户随后授权独立 `ai-conversation-token-optimization` change；它实现结构化 Wiki evidence、NDJSON v2、多轮、本地会话/整段收藏与对话历史，并停止持久 WikiHistory 读写。该变更只更新源码与 Release 开发输出验证，不运行 publish、Velopack、Setup、portable 或上传，因此既有 `0.11.0-local.22` 制品和上述 Phase 11 发布证据不被改写。
+- 2026-09-12：用户决定关闭并归档 Phase 11。已完成的本地安装、portable、更新/repair 语义、内置 Runtime、Credential Manager、WebView2、诊断与本机 Windows 11 证据继续有效；未完成的公开仓库/版本/许可输入、干净机与真实 GitHub 渠道矩阵、Windows 10 可选门槛和发布审计转入 `post-phase-11-roadmap`，不补写为已通过。
 
 ## 发现、偏差与决策
 
@@ -325,4 +326,4 @@
 
 ## 完成摘要
 
-Phase 11 的本地实现、最终候选、本机 Windows 11 产品化回归和 UI 验收已经完成，可作为实施检查点保存。阶段仍保持 `in-progress`：公开发行就绪被目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证与素材权利核对阻断，真实 GitHub 渠道、WebView2 缺失干净机和 Windows 10 条件矩阵也尚无证据。未获相应输入与授权前不会上传 Release、发送真实 provider 请求、归档本计划或把本地候选标为 `publicationReady`。
+Phase 11 的本地实现、最终候选、本机 Windows 11 产品化回归和 UI 验收已经完成，可作为实施检查点保存。公开发行就绪仍缺少目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证与素材权利核对，真实 GitHub 渠道、WebView2 缺失干净机和 Windows 10 条件矩阵也没有证据；这些项目不得解释为已通过。用户于 2026-09-12 决定结束并归档本 Phase，遗留事项完整转入 `openspec/changes/post-phase-11-roadmap/plan.md`，未来只有在另建 change、补齐输入并获得外部写入授权后才能继续。本地候选仍为 `publicationReady: false`，本次关闭不上传 Release、不发送真实 provider 请求。

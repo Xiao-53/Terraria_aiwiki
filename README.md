@@ -45,7 +45,8 @@ codex
 - 本地完整会话与有界模型历史决策：[`docs/adr/0010-use-bounded-local-ai-conversations.md`](./docs/adr/0010-use-bounded-local-ai-conversations.md)
 - 产品源码与参考仓库分离决策：[`docs/adr/0007-separate-product-source-from-reference.md`](./docs/adr/0007-separate-product-source-from-reference.md)
 - Windows GitHub Releases 分发决策：[`docs/adr/0008-use-github-releases-windows-distribution.md`](./docs/adr/0008-use-github-releases-windows-distribution.md)
-- 正在实施的 Phase 11 记录：[`openspec/changes/phase-11-windows-productization/plan.md`](./openspec/changes/phase-11-windows-productization/plan.md)
+- 已关闭并归档的 Phase 11 记录：[`openspec/changes/archive/phase-11-windows-productization/plan.md`](./openspec/changes/archive/phase-11-windows-productization/plan.md)
+- Phase 11 后续产品路线图：[`openspec/changes/post-phase-11-roadmap/plan.md`](./openspec/changes/post-phase-11-roadmap/plan.md)
 - Windows 产品化能力契约：[`openspec/specs/windows-productization/spec.md`](./openspec/specs/windows-productization/spec.md)
 - Windows 发布与本地验收手册：[`docs/release/windows.md`](./docs/release/windows.md)
 - 已完成产品源码分离记录：[`openspec/changes/archive/separate-product-from-reference/plan.md`](./openspec/changes/archive/separate-product-from-reference/plan.md)
@@ -55,6 +56,8 @@ codex
 - 已归档的全宽本地 Wiki 搜索页记录：[`openspec/changes/archive/add-local-wiki-search-page/plan.md`](./openspec/changes/archive/add-local-wiki-search-page/plan.md)
 - Windows UI 规范与新页面工作流：[`.agents/skills/terraria-ui/SKILL.md`](./.agents/skills/terraria-ui/SKILL.md)
 - 已归档的 AI 会话 Token 优化记录：[`openspec/changes/archive/ai-conversation-token-optimization/plan.md`](./openspec/changes/archive/ai-conversation-token-optimization/plan.md)
+- 核心源码 RAR 打包 Skill：[`.agents/skills/package-core-source-rar/SKILL.md`](./.agents/skills/package-core-source-rar/SKILL.md)
+- 已归档的核心源码 RAR 打包记录：[`openspec/changes/archive/package-core-source-rar/plan.md`](./openspec/changes/archive/package-core-source-rar/plan.md)
 - 已完成 Windows 启动可靠性与性能优化：[`openspec/changes/archive/optimize-windows-startup/plan.md`](./openspec/changes/archive/optimize-windows-startup/plan.md)
 - 已完成旧/目标 Wiki 布局冲突恢复：[`openspec/changes/archive/resolve-superseded-wiki-layout/plan.md`](./openspec/changes/archive/resolve-superseded-wiki-layout/plan.md)
 - 持续能力契约：[`openspec/specs/`](./openspec/specs/)
@@ -108,7 +111,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 当前路线与状态
 
-产品源码已迁到当前仓库根级目录，Windows build/publish/runtime 不读取旧 MAUI checkout；Phase 10 已移除参考 gitlink。Phase 11 Windows Productization 正在实施，本地产品化实现与 Windows 11 验证已完成，公开 GitHub Release 所需输入和外部渠道矩阵仍待关闭。
+产品源码已迁到当前仓库根级目录，Windows build/publish/runtime 不读取旧 MAUI checkout；Phase 10 已移除参考 gitlink。Phase 11 Windows Productization 已按用户决定关闭并归档，本地产品化实现与本机 Windows 11 证据继续保留；公开 GitHub Release 所需输入和外部渠道矩阵转入后续路线图，不视为已完成。
 
 ```text
 Migration Baseline & Host Spike
@@ -128,15 +131,15 @@ Migration Baseline & Host Spike
 暂缓：Android（Phase 13；须用户重新明确授权后恢复）
 ```
 
-**Phase 00–10 已完成，Phase 11 正在实施。** Windows Avalonia Client 的六个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。新增“Wiki”入口在同一工作区复用原搜索与 Viewer，提供真实本地首页、全宽搜索结果和全宽正文；首版自动化验证已通过，但真实窗口视觉验收未通过，原 change 已按用户要求归档且功能分支未合并，后续由新 plan 继续优化。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。
+**Phase 00–10 已完成，Phase 11 已关闭并归档。** Windows Avalonia Client 的六个入口继续通过现有 Application/Core 与唯一共享 Reader 提供 P0 能力，Presentation 不直接访问 SQLite。新增“Wiki”入口在同一工作区复用原搜索与 Viewer，提供真实本地首页、全宽搜索结果和全宽正文；首版已进入本地主线并通过自动化验证，但真实窗口视觉验收未通过，后续由新 plan 继续优化。Phase 11 已在本机 Windows 11 x64 完成普通每用户 Setup、portable zip、self-contained `win-x64` payload、内置 CPython 3.14.7、Credential Manager + 严格 `ai-runtime.json` v3、Evergreen WebView2 前置/恢复、显式 GitHub stable 更新状态和有界诊断实现；本地 N→N+1、同版本 repair、安装/portable smoke、卸载、Light/Dark 与宽窄窗口验收均通过。
 
-已归档的 AI 会话 Token 优化变更在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。该 change 的真实 DeepSeek Token、答案、来源与窗口验收未执行，后续由新 plan 承接；本仓库验证不得自行产生付费请求。
+已完整关闭并归档的 AI 会话 Token 优化变更在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。旧 change 未执行的真实 Token、答案、来源与窗口验收保留为历史边界，不再作为开放项；后续优化另建 plan，本仓库验证不得自行产生付费请求。
 
 Windows 本地 Wiki 启动现已把旧/目标数据目录冲突前移到只读布局预检并保留稳定错误，冲突时 Manager 与两套 Content 数据库原字节不变且不会启动 Viewer；健康库启动使用 Manager 统计快照，不再在首屏前统计三张表，锚点迁移仅在轻量预检确认需要后才 checkpoint。Windows smoke 同时记录 allowlist 启动阶段的累计/阶段耗时，数据兼容错误、Viewer 资源/bind/导航/DOM Ready 错误进入不同恢复分类。
 
-该源码的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 336/336；Python lint、format、strict mypy 通过，离线 tests 为 82 passed / 4 skipped，另有 1 项真实 C# MCP→Python 非付费跨语言测试通过。未运行 publish、Velopack、Setup、portable、更新包或上传。
+当前合并源码最近记录的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 349/349；AI evidence 变更的 Python lint、format、strict mypy 通过，离线 tests 为 109 passed / 7 deselected，并完成两组五轮真实 DeepSeek 验收。各证据边界和未验证项以相应归档计划为准；本轮治理整理未重新运行产品构建、发布或付费请求。
 
-此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品不标记为 `publicationReady`，也不宣称 Phase 11 已完成。Phase 12 仅按真实需求决定是否实施；Phase 13 Android 已暂缓。
+此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按用户要求未重建。公开发行仍等待目标 GitHub `owner/repo`、正式版本/tag、项目软件许可证和素材权利核对；GitHub 渠道矩阵、WebView2 缺失干净机与 Windows 10 条件门槛尚未执行，因此当前本地制品继续保持 `publicationReady: false`。Phase 11 的这些遗留已移交后续路线图；Phase 12 仅按真实需求决定是否实施，Phase 13 Android 继续暂缓。
 
 ## 工作区结构
 

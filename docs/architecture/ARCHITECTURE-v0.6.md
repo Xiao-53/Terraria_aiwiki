@@ -171,7 +171,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 ## 4. Phase Roadmap
 
-默认按依赖顺序推进。Phase 11 当前处于实施收尾，公开发行输入和外部渠道矩阵关闭后才达到阶段出口；Phase 12 只按真实需求决定是否实施。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
+默认按依赖顺序推进。Phase 11 已由用户于 2026-09-12 决定关闭并归档：本地产品化基线保留，但公开发行输入和外部渠道矩阵没有达到原阶段出口，已转入非 Phase 后续路线图。Phase 12 只按真实需求决定是否实施。Phase 13 已由用户暂缓，不属于当前执行队列；恢复前必须重新获得用户明确授权。每个实际进入实施的 Phase 必须先建立并批准独立计划；本表只定义阶段边界和出口。
 
 | Phase | 目标与边界 | 前置 | 阶段出口 | 计划文件 |
 |---|---|---|---|---|
@@ -186,11 +186,13 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 | **08 — Presentation Rebuild** | 建设新的产品信息架构和核心页面，通过 Application 使用后端 | 04、07 | 已完成：AI-first Chat、Wiki Search、安全 Markdown 和唯一共享 Reader 通过 Windows 验证 | `openspec/changes/archive/phase-08-presentation-rebuild/plan.md` |
 | **09 — P0 UI Takeover** | 新 UI 逐项接管 Wiki、数据管理、设置、导入导出、维护和错误流程 | 08 | 已完成：五入口 Avalonia UI 接管 P0，复用 Application/Core 与唯一 Reader，并通过 Windows build/tests/UI 验收 | `openspec/changes/archive/phase-09-p0-ui-takeover/plan.md` |
 | **10 — Legacy MAUI Retirement** | 只清理已被替代、确认无依赖且获准删除的旧 Presentation/宿主 | 09 | 已完成：参考 gitlink 已移除，外层产品通过独立 Windows build/tests/publish smoke | `openspec/changes/archive/phase-10-legacy-maui-retirement/plan.md` |
-| **11 — Windows Productization** | 完成错误恢复、安装打包、升级和发布准备 | 07、10 | Windows 成品达到发布门槛 | `openspec/changes/phase-11-windows-productization/plan.md` |
-| **12 — Extensions** | 按真实需求增加其他 Toolset；每项独立决策 | 11 | 扩展通过既有边界接入且可独立关闭 | `openspec/changes/phase-12-extensions/plan.md` |
+| **11 — Windows Productization** | 完成错误恢复、安装打包、升级和发布准备 | 07、10 | 已关闭：本地产品化与本机 Windows 11 证据保留；公开发行门槛未完成并转入后续路线图 | `openspec/changes/archive/phase-11-windows-productization/plan.md` |
+| **12 — Extensions** | 按真实需求增加其他 Toolset；每项独立决策 | Phase 11 本地产品化基线 | 扩展通过既有边界接入且可独立关闭 | 获授权后建立 `openspec/changes/phase-12-extensions/plan.md` |
 | **13 — Android（暂缓）** | 当前不实施；恢复后在目标环境验证客户端、数据、Viewer、平台行为和 AI Runtime | 11，且须用户重新明确授权 | 暂不设置当前阶段出口；恢复后以 Android 目标平台实测为准 | 恢复后建立 `openspec/changes/phase-13-android/plan.md` |
 
 Windows 当前开发不安装 MAUI/Android 工具链。Phase 13 恢复并获用户明确授权前，不安装 Android workload、SDK、JDK 或 Emulator，不创建 Android 实施计划，也不建立 Android 交付或验证承诺。文档支持矩阵不能替代目标平台实测。
+
+Phase 11 关闭后的候选队列和遗留项见 `openspec/changes/post-phase-11-roadmap/plan.md`；该文件不替代本节的 Phase 边界，也不构成任何候选项的实施授权。
 
 ---
 

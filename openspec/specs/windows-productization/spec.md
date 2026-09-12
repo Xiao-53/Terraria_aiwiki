@@ -1,6 +1,6 @@
 # Windows Productization 能力契约
 
-- 状态：implemented locally；Phase 11 公开发行仍等待仓库坐标、正式版本、项目软件许可证和权利审计
+- 状态：implemented locally；Phase 11 已关闭归档，公开发行仍需未来独立 change 补齐仓库坐标、正式版本、许可证、权利审计和渠道矩阵
 - 适用范围：Avalonia Windows 11 x64 安装、portable、更新、Runtime 前置、诊断与发行；不外推 Android 或其他桌面平台
 - 来源：Master Architecture v0.6、Phase 11、ADR 0008、Windows AI Runtime/Presentation/Local Viewer specs
 

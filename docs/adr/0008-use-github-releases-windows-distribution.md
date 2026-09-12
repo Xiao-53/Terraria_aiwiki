@@ -1,9 +1,9 @@
 # ADR 0008：Windows 仅通过 GitHub Releases 分发普通安装器与 portable
 
-- 状态：accepted；Phase 11 本地候选链路已验证，公开发布仍需仓库、版本与软件许可证输入
+- 状态：accepted；Phase 11 已关闭归档，本地候选链路已验证，公开发布遗留转入后续独立 change
 - 日期：2026-09-04
 - 决策范围：Windows 发行、安装、更新、Runtime 前置和支持基线；不外推 Android
-- 关联：`openspec/changes/phase-11-windows-productization/plan.md`、`docs/release/windows.md`
+- 关联：`openspec/changes/archive/phase-11-windows-productization/plan.md`、`openspec/changes/post-phase-11-roadmap/plan.md`、`docs/release/windows.md`
 
 ## 背景
 

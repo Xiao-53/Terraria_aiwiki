@@ -1,6 +1,6 @@
 # Windows release runbook
 
-Phase 11 produces one self-contained `win-x64` payload and packages it as a per-user Velopack
+Archived Phase 11 established one self-contained `win-x64` payload that is packaged as a per-user Velopack
 `Setup.exe`, a portable zip, and the full package/index required by application updates. GitHub
 Releases is the only application distribution and update channel. Microsoft Store, MSIX, App
 Installer, and Store identity are not used.

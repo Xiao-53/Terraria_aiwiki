@@ -3,7 +3,7 @@
 - 状态：accepted
 - 日期：2026-09-04
 - 决策范围：Windows 首次运行的数据根创建、恢复与用户更改行为
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`docs/adr/0002-portable-core-and-data-root.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/changes/phase-11-windows-productization/plan.md`
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`docs/adr/0002-portable-core-and-data-root.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/changes/archive/phase-11-windows-productization/plan.md`
 
 ## 背景
 
