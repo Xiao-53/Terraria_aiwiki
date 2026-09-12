@@ -34,8 +34,18 @@ internal sealed class ViewerBridge
     private readonly IExternalUriLauncher _externalUris;
     private int _sideButtonBackEnabled;
     private readonly ConcurrentDictionary<string, byte> _activeRequestIds = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, PendingPageIdentity> _pendingPages = new(StringComparer.Ordinal);
+    private readonly ConcurrentQueue<string> _pendingPageOrder = new();
+    private readonly ConcurrentDictionary<string, byte> _committedPageTokens = new(StringComparer.Ordinal);
+    private readonly ConcurrentQueue<string> _committedTokenOrder = new();
     private readonly object _historyGate = new();
+    private readonly object _commitGate = new();
     private readonly List<ViewerHistoryEntry> _history = [];
+    private long _generation;
+    private int _wikiId;
+    private string _wikiDisplayTitle = string.Empty;
+    private long _lastCommittedNavigationVersion;
+    private string? _currentPageToken;
 
     public ViewerBridge(
         WikiApplication application,
@@ -51,8 +61,40 @@ internal sealed class ViewerBridge
     {
         get { lock (_historyGate) return _history.ToArray(); }
     }
+    public bool HasHistory
+    {
+        get { lock (_historyGate) return _history.Count > 0; }
+    }
 
     public event EventHandler<ViewerBridgeRequestCompleted>? RequestCompleted;
+    public event EventHandler<ViewerPageIdentity>? PageCommitted;
+    public event EventHandler<bool>? HistoryChanged;
+
+    public void BeginSession(int wikiId, string wikiDisplayTitle, long generation)
+    {
+        if (wikiId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(wikiId));
+        if (generation <= 0)
+            throw new ArgumentOutOfRangeException(nameof(generation));
+        if (string.IsNullOrWhiteSpace(wikiDisplayTitle))
+            throw new ArgumentException("A Wiki display title is required.", nameof(wikiDisplayTitle));
+
+        lock (_commitGate)
+        {
+            Volatile.Write(ref _wikiId, wikiId);
+            Volatile.Write(ref _wikiDisplayTitle, wikiDisplayTitle.Trim());
+            Volatile.Write(ref _generation, generation);
+            Volatile.Write(ref _lastCommittedNavigationVersion, 0);
+            Volatile.Write(ref _currentPageToken, null);
+            _pendingPages.Clear();
+            _pendingPageOrder.Clear();
+            _committedPageTokens.Clear();
+            _committedTokenOrder.Clear();
+        }
+        lock (_historyGate)
+            _history.Clear();
+        HistoryChanged?.Invoke(this, false);
+    }
 
     public async Task<ViewerDispatchResult?> HandleOuterMessageAsync(
         string body,
@@ -64,29 +106,30 @@ internal sealed class ViewerBridge
         if (!_activeRequestIds.TryAdd(envelope.Id, 0))
             return Error(envelope.Id, "duplicate-request-id", "The Viewer request ID is already active.");
 
+        var requestGeneration = Volatile.Read(ref _generation);
         try
         {
             cancellationToken.ThrowIfCancellationRequested();
             var result = await DispatchAsync(envelope, cancellationToken).ConfigureAwait(false);
-            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result));
+            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
         catch (OperationCanceledException)
         {
             var result = Error(envelope.Id, "cancelled", "The Viewer operation was cancelled.");
-            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result));
+            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
         catch (ApplicationUseCaseException exception)
         {
             var result = Error(envelope.Id, exception.Code, exception.Message);
-            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result));
+            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
         catch (Exception exception)
         {
             var result = Error(envelope.Id, "viewer-operation-failed", exception.Message);
-            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result));
+            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
         finally
@@ -114,26 +157,90 @@ internal sealed class ViewerBridge
             case "PageRedirectAsync":
             {
                 RequireData(data, envelope.Method);
+                long generation;
+                int wikiId;
+                lock (_commitGate)
+                {
+                    generation = _generation;
+                    wikiId = _wikiId;
+                }
+                if (generation <= 0 || wikiId <= 0)
+                    return Error(envelope.Id, "viewer-session-unbound", "The Viewer session is not bound to a Wiki.");
                 var read = await _application.Query.ReadAsync(data!, cancellationToken).ConfigureAwait(false);
                 if (!read.IsFound || string.IsNullOrWhiteSpace(read.Title) || read.Content is null)
                     return Error(envelope.Id, "page-not-found", $"Wiki page '{data}' was not found.");
-
+                var readToken = Guid.NewGuid().ToString("N");
+                lock (_commitGate)
+                {
+                    if (generation != _generation || wikiId != _wikiId)
+                        return Error(envelope.Id, "viewer-session-expired", "The Viewer session changed while the page was being read.");
+                    _pendingPages[readToken] = new PendingPageIdentity(generation, wikiId, read.Title);
+                    _pendingPageOrder.Enqueue(readToken);
+                    TrimPendingPages();
+                }
                 var page = new ViewerPage(
                     read.Title,
                     read.Content,
-                    read.LastModified?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty);
+                    read.LastModified?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty,
+                    readToken);
                 return Success(envelope.Id, JsonSerializer.Serialize(page, JsonOptions));
+            }
+            case "ViewerPageCommitted":
+            {
+                RequireData(data, envelope.Method);
+                var commit = JsonSerializer.Deserialize<ViewerPageCommit>(data!, JsonOptions)
+                    ?? throw new InvalidDataException("The Viewer page commit is invalid.");
+                if (string.IsNullOrWhiteSpace(commit.ReadToken)
+                    || commit.NavigationVersion <= 0
+                    || !_pendingPages.TryRemove(commit.ReadToken, out var pending))
+                    return Error(envelope.Id, "viewer-page-commit-invalid", "The Viewer page commit is unknown or expired.");
+
+                ViewerPageIdentity identity;
+                lock (_commitGate)
+                {
+                    var generation = Volatile.Read(ref _generation);
+                    var wikiId = Volatile.Read(ref _wikiId);
+                    if (pending.Generation != generation || pending.WikiId != wikiId)
+                        return Error(envelope.Id, "viewer-page-commit-expired", "The Viewer page commit belongs to an expired session.");
+
+                    var previous = Volatile.Read(ref _lastCommittedNavigationVersion);
+                    if (commit.NavigationVersion <= previous)
+                        return Error(envelope.Id, "viewer-page-commit-stale", "The Viewer page commit is older than the displayed page.");
+                    Volatile.Write(ref _lastCommittedNavigationVersion, commit.NavigationVersion);
+                    Volatile.Write(ref _currentPageToken, commit.ReadToken);
+                    _committedPageTokens[commit.ReadToken] = 0;
+                    _committedTokenOrder.Enqueue(commit.ReadToken);
+                    while (_committedPageTokens.Count > 64 && _committedTokenOrder.TryDequeue(out var expiredToken))
+                        _committedPageTokens.TryRemove(expiredToken, out _);
+                    identity = new ViewerPageIdentity(
+                        generation,
+                        wikiId,
+                        Volatile.Read(ref _wikiDisplayTitle),
+                        pending.CanonicalTitle,
+                        commit.NavigationVersion);
+                }
+                PageCommitted?.Invoke(this, identity);
+                return Success(envelope.Id, "true");
             }
             case "SaveToTabHistory":
             {
                 RequireData(data, envelope.Method);
                 var entry = JsonSerializer.Deserialize<ViewerHistoryEntry>(data!, JsonOptions)
                     ?? throw new InvalidDataException("The Viewer history entry is invalid.");
-                if (!string.IsNullOrWhiteSpace(entry.Title))
+                lock (_commitGate)
                 {
-                    lock (_historyGate)
-                        _history.Add(entry);
+                    if (string.IsNullOrWhiteSpace(entry.ReadToken)
+                        || !_committedPageTokens.ContainsKey(entry.ReadToken)
+                        || entry.NavigationVersion != _lastCommittedNavigationVersion)
+                        return Error(envelope.Id, "viewer-history-expired", "The Viewer history entry belongs to an expired page.");
+                    if (!string.IsNullOrWhiteSpace(entry.Title))
+                    {
+                        lock (_historyGate)
+                            _history.Add(entry);
+                    }
                 }
+                if (!string.IsNullOrWhiteSpace(entry.Title))
+                    HistoryChanged?.Invoke(this, true);
                 return Success(envelope.Id, "true");
             }
             case "WikiBackAsync":
@@ -157,7 +264,10 @@ internal sealed class ViewerBridge
             case "ChangeTheme":
                 return Success(envelope.Id, "true");
             case "ViewerReady":
-                return Success(envelope.Id, "true");
+                RequireData(data, envelope.Method);
+                return string.Equals(data, Volatile.Read(ref _currentPageToken), StringComparison.Ordinal)
+                    ? Success(envelope.Id, "true")
+                    : Error(envelope.Id, "viewer-ready-expired", "The Viewer ready signal belongs to an expired page.");
             case "OpenInNewTab":
                 return Error(envelope.Id, "not-supported", "Opening Viewer tabs is not available in Phase 04.");
             case "CopyImageToClipboard":
@@ -184,9 +294,37 @@ internal sealed class ViewerBridge
             }
         }
 
+        HistoryChanged?.Invoke(this, HasHistory);
+
         return entry is null
             ? null
             : new ViewerOutboundCommand("BackToPage", JsonSerializer.Serialize(entry, JsonOptions));
+    }
+
+    public void RestoreBackCommand(ViewerOutboundCommand command)
+    {
+        ArgumentNullException.ThrowIfNull(command);
+        if (!string.Equals(command.Method, "BackToPage", StringComparison.Ordinal))
+            return;
+        var entry = JsonSerializer.Deserialize<ViewerHistoryEntry>(command.Data, JsonOptions);
+        if (entry is null || string.IsNullOrWhiteSpace(entry.Title))
+            return;
+        lock (_commitGate)
+        {
+            if (string.IsNullOrWhiteSpace(entry.ReadToken)
+                || !_committedPageTokens.ContainsKey(entry.ReadToken))
+                return;
+            lock (_historyGate)
+                _history.Add(entry);
+        }
+        HistoryChanged?.Invoke(this, true);
+    }
+
+    private void TrimPendingPages()
+    {
+        while ((_pendingPages.Count > 32 || _pendingPageOrder.Count > 64)
+               && _pendingPageOrder.TryDequeue(out var expiredToken))
+            _pendingPages.TryRemove(expiredToken, out _);
     }
 
     private static void RequireData(string? data, string method)
@@ -252,8 +390,14 @@ internal sealed record ViewerEnvelope(string Type, string Id, string? Method, Js
 internal sealed record ViewerResponseEnvelope(string Type, string Id, string Data, ViewerProtocolError? Error);
 internal sealed record ViewerProtocolError(string Code, string Message);
 internal sealed record ViewerDispatchResult(string ResponseJson, ViewerOutboundCommand? Command, ViewerProtocolError? Error);
-internal sealed record ViewerBridgeRequestCompleted(string Method, ViewerDispatchResult Result);
+internal sealed record ViewerBridgeRequestCompleted(string Method, ViewerDispatchResult Result, long Generation);
 internal sealed record ViewerOutboundCommand(string Method, string Data);
-internal sealed record ViewerPage(string Title, string Content, string LastModified);
+internal sealed record ViewerPage(string Title, string Content, string LastModified, string ReadToken);
 internal sealed record ViewerTitleAnchor(string Title, string? Anchor);
-internal sealed record ViewerHistoryEntry(string? Title, double Position);
+internal sealed record ViewerHistoryEntry(
+    string? Title,
+    double Position,
+    string? ReadToken = null,
+    long NavigationVersion = 0);
+internal sealed record ViewerPageCommit(string ReadToken, long NavigationVersion);
+internal sealed record PendingPageIdentity(long Generation, int WikiId, string CanonicalTitle);

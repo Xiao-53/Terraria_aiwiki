@@ -43,6 +43,18 @@ public sealed record WikiAssetContent(
 
 public sealed record WikiFavoriteItem(string WikiTitle, DateTime FavoritedAt);
 
+public sealed record GlobalWikiFavoriteItem(
+    int WikiId,
+    string WikiDisplayTitle,
+    string PageTitle,
+    DateTime FavoritedAt);
+
+public sealed record GlobalWikiFavoriteIssue(int WikiId, string WikiDisplayTitle, string Code);
+
+public sealed record GlobalWikiFavoritesResult(
+    IReadOnlyList<GlobalWikiFavoriteItem> Items,
+    IReadOnlyList<GlobalWikiFavoriteIssue> Issues);
+
 public sealed record WikiPackageImportResponse(
     WikiBookSnapshot WikiBook,
     WikiPackageInspection Inspection,

@@ -19,6 +19,7 @@ public sealed class ViewerBridgeTests
     {
         await using var fixture = await BridgeApplicationFixture.CreateAsync();
         var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
+        bridge.BeginSession(1, "Wiki A", 1);
 
         var redirect = await SendAsync(bridge, "redirect", "GetRedirectedTitleAndAnchorAsync", "Alias");
         var redirectPayload = JsonDocument.Parse(ResponseData(redirect));
@@ -29,14 +30,126 @@ public sealed class ViewerBridgeTests
         var pagePayload = JsonDocument.Parse(ResponseData(page));
         Assert.Equal("Target", pagePayload.RootElement.GetProperty("title").GetString());
         Assert.Contains("/src/image.png", pagePayload.RootElement.GetProperty("content").GetString(), StringComparison.Ordinal);
+        var readToken = pagePayload.RootElement.GetProperty("readToken").GetString();
+        await SendAsync(
+            bridge,
+            "page-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken, navigationVersion = 1 }));
+        var ready = await SendAsync(bridge, "page-ready", "ViewerReady", readToken!);
+        Assert.Null(ready.Error);
         var legacyHistory = Assert.Single(await fixture.ReadLegacyHistoryAsync());
         Assert.Equal("Legacy page", legacyHistory.WikiTitle);
 
-        await SendAsync(bridge, "history", "SaveToTabHistory", "{\"title\":\"Home\",\"position\":42}");
+        await SendAsync(
+            bridge,
+            "history",
+            "SaveToTabHistory",
+            JsonSerializer.Serialize(new { title = "Home", position = 42, readToken, navigationVersion = 1 }));
         var back = await SendAsync(bridge, "back", "WikiBackAsync", "");
         Assert.Equal("BackToPage", back.Command?.Method);
         Assert.Contains("\"position\":42", back.Command?.Data, StringComparison.Ordinal);
         Assert.Empty(bridge.History);
+    }
+
+    [Fact]
+    public async Task PageIdentityIsPublishedOnlyAfterTrustedCurrentCommit()
+    {
+        await using var fixture = await BridgeApplicationFixture.CreateAsync();
+        var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
+        var committed = new List<ViewerPageIdentity>();
+        bridge.PageCommitted += (_, identity) => committed.Add(identity);
+        bridge.BeginSession(1, "Wiki A", 1);
+
+        var page = await SendAsync(bridge, "page-identity", "PageRedirectAsync", "Alias");
+        using var payload = JsonDocument.Parse(ResponseData(page));
+        var token = payload.RootElement.GetProperty("readToken").GetString();
+        Assert.Empty(committed);
+
+        var commit = await SendAsync(
+            bridge,
+            "commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken = token, navigationVersion = 2 }));
+
+        Assert.Null(commit.Error);
+        var identity = Assert.Single(committed);
+        Assert.Equal(1, identity.WikiId);
+        Assert.Equal("Target", identity.CanonicalTitle);
+        Assert.Equal(2, identity.NavigationVersion);
+    }
+
+    [Fact]
+    public async Task ReadyCompletionAndFailedBackRestoreRemainBoundToTheirSession()
+    {
+        await using var fixture = await BridgeApplicationFixture.CreateAsync();
+        var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
+        var completions = new List<ViewerBridgeRequestCompleted>();
+        bridge.RequestCompleted += (_, completed) => completions.Add(completed);
+        bridge.BeginSession(1, "Wiki A", 7);
+        var page = await SendAsync(bridge, "bound-page", "PageRedirectAsync", "Target");
+        using var payload = JsonDocument.Parse(ResponseData(page));
+        var readToken = payload.RootElement.GetProperty("readToken").GetString();
+        await SendAsync(
+            bridge,
+            "bound-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken, navigationVersion = 1 }));
+        await SendAsync(
+            bridge,
+            "bound-history",
+            "SaveToTabHistory",
+            JsonSerializer.Serialize(new { title = "Home", position = 0, readToken, navigationVersion = 1 }));
+        var back = bridge.TryTakeBackCommand();
+
+        var ready = await SendAsync(bridge, "bound-ready", "ViewerReady", readToken!);
+        bridge.BeginSession(2, "Wiki B", 8);
+        bridge.RestoreBackCommand(Assert.IsType<ViewerOutboundCommand>(back));
+
+        Assert.Null(ready.Error);
+        Assert.Equal(7, completions.Single(item => item.Method == "ViewerReady").Generation);
+        Assert.Empty(bridge.History);
+    }
+
+    [Fact]
+    public async Task ExpiredAndStalePageCommitsCannotReplaceCurrentIdentity()
+    {
+        await using var fixture = await BridgeApplicationFixture.CreateAsync();
+        var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
+        var committed = new List<ViewerPageIdentity>();
+        bridge.PageCommitted += (_, identity) => committed.Add(identity);
+        bridge.BeginSession(1, "Wiki A", 1);
+        var expiredPage = await SendAsync(bridge, "expired-page", "PageRedirectAsync", "Target");
+        using var expiredPayload = JsonDocument.Parse(ResponseData(expiredPage));
+        var expiredToken = expiredPayload.RootElement.GetProperty("readToken").GetString();
+
+        bridge.BeginSession(2, "Wiki B", 2);
+        var expired = await SendAsync(
+            bridge,
+            "expired-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken = expiredToken, navigationVersion = 1 }));
+        var currentPage = await SendAsync(bridge, "current-page", "PageRedirectAsync", "Target");
+        using var currentPayload = JsonDocument.Parse(ResponseData(currentPage));
+        var currentToken = currentPayload.RootElement.GetProperty("readToken").GetString();
+        await SendAsync(
+            bridge,
+            "current-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken = currentToken, navigationVersion = 3 }));
+        var stalePage = await SendAsync(bridge, "stale-page", "PageRedirectAsync", "Target");
+        using var stalePayload = JsonDocument.Parse(ResponseData(stalePage));
+        var staleToken = stalePayload.RootElement.GetProperty("readToken").GetString();
+        var stale = await SendAsync(
+            bridge,
+            "stale-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken = staleToken, navigationVersion = 2 }));
+
+        Assert.Equal("viewer-page-commit-invalid", expired.Error?.Code);
+        Assert.Equal("viewer-page-commit-stale", stale.Error?.Code);
+        Assert.Single(committed);
+        Assert.Equal(2, committed[0].WikiId);
     }
 
     [Fact]
@@ -90,7 +203,7 @@ public sealed class ViewerBridgeTests
         Assert.Equal("external-uri-not-allowed", denied.Error?.Code);
         Assert.Equal("not-supported", unsupported.Error?.Code);
         Assert.Equal("unknown-viewer-method", unknown.Error?.Code);
-        Assert.Null(ready.Error);
+        Assert.Equal("viewer-ready-expired", ready.Error?.Code);
         Assert.Equal("cancelled", cancelled?.Error?.Code);
     }
 
@@ -116,7 +229,20 @@ public sealed class ViewerBridgeTests
     {
         await using var fixture = await BridgeApplicationFixture.CreateAsync();
         var bridge = new ViewerBridge(fixture.Application, fixture.ExternalUris);
-        await SendAsync(bridge, "history-setting", "SaveToTabHistory", "{\"title\":\"Home\",\"position\":0}");
+        bridge.BeginSession(1, "Wiki A", 1);
+        var page = await SendAsync(bridge, "history-page", "PageRedirectAsync", "Target");
+        using var payload = JsonDocument.Parse(ResponseData(page));
+        var readToken = payload.RootElement.GetProperty("readToken").GetString();
+        await SendAsync(
+            bridge,
+            "history-commit",
+            "ViewerPageCommitted",
+            JsonSerializer.Serialize(new { readToken, navigationVersion = 1 }));
+        await SendAsync(
+            bridge,
+            "history-setting",
+            "SaveToTabHistory",
+            JsonSerializer.Serialize(new { title = "Home", position = 0, readToken, navigationVersion = 1 }));
 
         bridge.SetSideButtonBackEnabled(false);
         var disabled = await SendAsync(bridge, "back-disabled", "WikiBackAsync", "");

@@ -123,12 +123,14 @@ public sealed class ViewerServerTests
         var ready = script.IndexOf("callCSharpAsync(\"ViewerReady\"", handlers, StringComparison.Ordinal);
         var redirect = script.IndexOf("redirect(config.homePage, config, undefined, notifyViewerReady)", ready, StringComparison.Ordinal);
         var contentWritten = script.IndexOf("document.getElementById(\"mw-content-text\").innerHTML", redirect, StringComparison.Ordinal);
-        var rendered = script.IndexOf("onRendered?.();", contentWritten, StringComparison.Ordinal);
+        var committed = script.IndexOf("callCSharpAsync(\"ViewerPageCommitted\"", contentWritten, StringComparison.Ordinal);
+        var rendered = script.IndexOf("onRendered?.();", committed, StringComparison.Ordinal);
         var refresh = script.IndexOf("config.refresh();", rendered, StringComparison.Ordinal);
 
         Assert.True(start >= 0 && start < handlers);
         Assert.True(handlers < ready && ready < redirect);
-        Assert.True(redirect < contentWritten && contentWritten < rendered && rendered < refresh);
+        Assert.True(redirect < contentWritten && contentWritten < committed && committed < rendered && rendered < refresh);
+        Assert.Contains("navigationVersion: navigationId", script, StringComparison.Ordinal);
         Assert.Contains("urlParams.get('host') === 'Avalonia'", script, StringComparison.Ordinal);
         Assert.Contains("window.parent.terrariaWikiHost", script, StringComparison.Ordinal);
     }

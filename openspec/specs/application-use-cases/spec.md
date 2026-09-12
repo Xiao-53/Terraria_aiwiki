@@ -48,6 +48,9 @@
 - `PageRequest` 使用零基 offset、`1..200` limit、可选 title filter；`PageSlice<T>` 同时返回当前项与过滤后的总数。
 - 页面按标题升序，收藏按收藏时间降序；日期与本地化属于 Presentation。
 - favorite 查询、添加与移除均通过用例；重复添加或移除保持幂等。
+- 保留活动 Wiki 的既有分页 favorite API；另提供带 `WikiId` 的显式查询/设置和当前数据根全库聚合 DTO。聚合枚举 Manager 已注册 Wiki，返回全部收藏并按时间倒序、WikiId 与 ordinal 标题稳定排序，不通过切换活动 Wiki 扫描，也不取得 consumer pause lease。
+- 非活动库收藏访问使用 Core 的窄存取：只打开已存在的 `data.db` 或无歧义 legacy 数据库，不执行建目录、Create、Init、建表、seed、FTS、迁移、checkpoint 或 journal mode 切换。缺库视为无本地收藏；缺表/损坏/权限/路径或数据库家族问题作为逐 Wiki 安全问题返回，取消继续传播。
+- 指定 Wiki 收藏写入保持原 `WikiFavorite` 主键和时间编码；添加已存在收藏保留首次时间，移除只作用于给定 Wiki/标题。查询和写入复用 CoordinationGate 与 OperationGate，不切换活动 Wiki、不修改设置或 Viewer。
 - Core `WikiHistory` 模型、旧表建表和 schema 容忍只为旧数据库/数据包兼容保留；Application 与 Viewer 不读写旧行，也不主动删除旧表或数据。
 
 ### 数据生命周期与 package

@@ -208,14 +208,17 @@ internal sealed partial class MainWindow : Window
             session.StatusChanged += OnViewerSessionStatusChanged;
             session.ProtocolError += OnViewerProtocolError;
             session.ReadyChanged += OnViewerReadyChanged;
+            session.PageCommitted += OnViewerPageCommitted;
+            session.HistoryChanged += OnViewerHistoryChanged;
 
             if (runtime.Viewer.Status is not { State: ViewerConsumerState.Ready, BaseUri: not null } ready)
                 throw new WindowsClientStartupException(
                     "viewer-not-ready",
                     runtime.Viewer.Status.Message ?? "Viewer is not ready.");
 
-            _shellViewModel.AttachRuntime(runtime);
+            _shellViewModel.AttachRuntime(runtime, SwitchWikiAndRebindAsync);
             var activeWiki = await runtime.Application.ActiveWiki.GetActiveAsync(_lifetime.Token);
+            _shellViewModel.SetWikiHomePage(activeWiki.DefaultPageTitle);
             _aiStartupTask = EnableAiInBackgroundAsync(runtime);
             if (!activeWiki.IsPageDownloaded)
             {
@@ -227,7 +230,7 @@ internal sealed partial class MainWindow : Window
             var navigationTimer = Stopwatch.StartNew();
             try
             {
-                session.Navigate(ready.BaseUri);
+                session.Navigate(ready.BaseUri, activeWiki.Id, activeWiki.Title);
                 _viewerNavigationStartedMilliseconds = ElapsedFromProcessStart();
                 RecordStartupStage(
                     WindowsStartupStage.ViewerNavigationStarted,
@@ -260,9 +263,9 @@ internal sealed partial class MainWindow : Window
                 RecordStartupStage(WindowsStartupStage.ViewerDomReady, domTimer.ElapsedMilliseconds);
             }
             _timings.ViewerReadyMilliseconds = ElapsedFromProcessStart();
-            await _shellViewModel.Reader.SetHomePageAsync(activeWiki.DefaultPageTitle);
-            _shellViewModel.SetWikiHomePage(activeWiki.DefaultPageTitle);
-            _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
+            _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync, session.HasHistory);
+            if (session.CurrentPage is { } currentPage)
+                await _shellViewModel.Reader.ApplyPageIdentityAsync(currentPage);
             _shellViewModel.SetStartupStatus(
                 $"本地 Wiki 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
 
@@ -690,6 +693,8 @@ internal sealed partial class MainWindow : Window
             session.StatusChanged -= OnViewerSessionStatusChanged;
             session.ProtocolError -= OnViewerProtocolError;
             session.ReadyChanged -= OnViewerReadyChanged;
+            session.PageCommitted -= OnViewerPageCommitted;
+            session.HistoryChanged -= OnViewerHistoryChanged;
             var sessionTimer = Stopwatch.StartNew();
             try { await session.DisposeAsync(); } catch { }
             sessionTimer.Stop();
@@ -880,13 +885,52 @@ internal sealed partial class MainWindow : Window
             throw new InvalidOperationException("Viewer did not resume after the Wiki data operation.");
 
         _shellViewModel.Reader.SetTransportReady(false);
-        session.Navigate(ready.BaseUri, forceReload: true);
-        await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), cancellationToken);
-        await _shellViewModel.Reader.SetHomePageAsync(active.DefaultPageTitle);
         _shellViewModel.SetWikiHomePage(active.DefaultPageTitle);
-        _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync);
+        session.Navigate(ready.BaseUri, active.Id, active.Title, forceReload: true);
+        await session.WaitUntilReadyAsync(TimeSpan.FromSeconds(15), cancellationToken);
+        _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync, session.HasHistory);
+        if (session.CurrentPage is { } currentPage)
+            await _shellViewModel.Reader.ApplyPageIdentityAsync(currentPage);
         _shellViewModel.SetStartupStatus(
             $"{active.Title} 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
+    }
+
+    private async Task<WikiBookSnapshot> SwitchWikiAndRebindAsync(
+        int wikiId,
+        CancellationToken cancellationToken)
+    {
+        var runtime = _runtime ?? throw new InvalidOperationException("Wiki runtime is unavailable.");
+        var active = await runtime.Application.ActiveWiki.GetActiveAsync(cancellationToken);
+        if (active.Id == wikiId)
+            return active;
+        active = await runtime.Application.ActiveWiki.SwitchAsync(wikiId, cancellationToken);
+        _shellViewModel.RefreshAfterWikiDataChange(clearHomePage: true);
+        await RebindViewerAsync(runtime, cancellationToken);
+        return active;
+    }
+
+    private void OnViewerPageCommitted(object? sender, ViewerPageIdentity identity)
+    {
+        if (sender is not ViewerWebViewSession session || !ReferenceEquals(session, _viewerSession))
+            return;
+        Dispatcher.UIThread.Post(async () =>
+        {
+            if (!ReferenceEquals(session, _viewerSession) || session.CurrentPage != identity)
+                return;
+            await _shellViewModel.Reader.ApplyPageIdentityAsync(identity);
+            _shellViewModel.OnViewerPageCommitted(identity);
+        });
+    }
+
+    private void OnViewerHistoryChanged(object? sender, bool hasHistory)
+    {
+        if (!ReferenceEquals(sender, _viewerSession))
+            return;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (ReferenceEquals(sender, _viewerSession))
+                _shellViewModel.Reader.SetCanGoBack(hasHistory);
+        });
     }
 
     internal static string CreateTemporaryExportPath(string targetPath)

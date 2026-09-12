@@ -18,7 +18,7 @@ Windows Local Viewer 采用宿主管理的受限 IPv4 loopback transport：
 1. 每次启动绑定 `127.0.0.1:0`，由操作系统分配端口；不使用固定端口或公开网卡。
 2. HTTP/1.1 `Host` 必须精确等于当前 `127.0.0.1:<port>`，只接受 GET/HEAD；拒绝 absolute target、反斜线、冒号、NUL、路径穿越和活动 Wiki 之外的站点目录，不返回宽松 CORS。
 3. build/publish 从旧项目的 `Resources/Raw/Web/**` 和 `wwwroot/js/iframe-bridge.js` 直接复制唯一 Viewer 资产；新 Host 只增加一个安全 outer page，不复制或修改站点内容。
-4. `/src/*` 只调用 Application `Query.ReadAssetAsync`；页面和 Redirect 只调用 `Query.ReadAsync`；页面成功读取后显式调用 `Library.RecordVisitAsync`。
+4. `/src/*` 只调用 Application `Query.ReadAssetAsync`；页面和 Redirect 只调用 `Query.ReadAsync`。本 ADR 当时记录的 `Library.RecordVisitAsync` 已被当前 Application/Presentation 契约替代：产品停止持久 WikiHistory 读写，只保留经页面 commit 身份校验的内存返回栈。
 5. outer page 只转发精确同 origin、精确 iframe `contentWindow`、`req/res` 类型和合法 request ID 的消息；C# 再校验 source、origin、类型、ID 和方法。未知方法及 Phase 04 未支持的新标签、图片剪贴板和完整右键菜单返回错误，不静默成功。
 6. HTTP(S) 外链由 bridge 校验后交给系统浏览器。Local Viewer 不获得任意文件 URI 或其他 scheme 能力。
 7. Adapter 实现 `IWikiDataConsumerCoordinator`：pause 时先停止 listener；lease 释放后仅在宿主仍存活时按 Application 当前活动 Wiki 重启。窗口退出先取消任务和 WebView session，再停止 transport、Dispose Application 并释放数据锁。

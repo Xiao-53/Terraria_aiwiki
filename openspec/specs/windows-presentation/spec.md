@@ -35,7 +35,8 @@
 - 左侧收藏页组合两类现有能力：Windows 宿主会话库中显式收藏的完整 Chat 会话，以及 Application `WikiLibraryUseCases` 提供的 Wiki 收藏。Presentation 不直接访问 SQLite。
 - Chat 会话采用 `%LocalAppData%\Terraria AI Wiki\conversations\index.json` 与独立 `<guid>.json` 版本化宿主 JSON；临时写入、flush、原子 replace 与 backup 后才发布。最多保留 100 个未收藏会话，最旧者自动淘汰；收藏不自动淘汰，最多 200 个，单会话最多 100 轮。
 - 旧 `%LocalAppData%\Terraria AI Wiki\chat-favorites.json` 只在新 index 不存在时迁移为单轮已收藏会话；新会话文件与 index durable 后才完成，旧文件原样保留。取消收藏只改变状态，会话继续保留在历史。
-- Wiki 收藏继续使用现有数据源和 schema。Reader 标题栏星标当前由宿主明确打开的 Wiki 页面；收藏项在唯一共享 Reader 中打开，并可从收藏页移除。
+- Wiki 收藏继续存放在各 Wiki 既有 `WikiFavorite` 表，不改变 schema。收藏页聚合当前数据根全部已注册且存在内容库的 Wiki，逐项显示页面标题、所属 Wiki 与收藏时间；跨 Wiki 同名页面保持独立，不以 200 项静默截断。单库缺失、缺表或不可读时保留其他 Wiki 的可用结果并报告部分不可用。
+- Reader 标题、所属 Wiki 与星标只使用 Viewer 实际提交的可信 `(WikiId, CanonicalTitle)`，不得用导航请求别名、命令返回或配置首页猜测当前页。查询或取消非活动 Wiki 收藏不切换活动源；打开非活动 Wiki 收藏复用完整热切换和 Viewer rebind，等待新会话 Ready 后才打开目标。
 - 会话与收藏不跨设备同步，不进入诊断或发布物；Wiki 收藏继续保持原行为。
 
 ## Wiki 资料库
@@ -82,7 +83,8 @@
 - 独立 Wiki 页面使用“本地首页 → 全宽搜索结果 → 全宽正文”三态。初次进入和主页命令按活动 Wiki 的 `DefaultPageTitle` 通过现有 Reader 打开真实本地首页；非空查询直接复用 `WikiViewModel` 与 Application Search，结果保持标题、匹配类型、Redirect 和纯文本摘要。选择结果后同一个 Reader 占满工作区，返回搜索保留查询和已有结果。
 - Wiki 页内工具栏在首页、结果和正文状态均保留本地搜索；清空查询回到首页。900×600 下搜索和正文仍可用，不依赖水平滚动；错误、不可用、搜索中、无结果和过期请求继续使用现有安全搜索状态。
 - 整个 Windows Presentation 只创建一个 `NativeWebView` 和一个 `ViewerWebViewSession`。普通宽窄切换与 Wiki 全宽切换只改变同一父级内 Reader 的 Grid 布局与可见性，不复制、重建或启动第二个 Viewer。
-- Reader 继续使用既有 Viewer 协议、内部链接、主题、内存返回行为和资源链路；Presentation 不直接访问 Core、SQLite 或 Viewer backend。
+- Reader 继续使用既有 Viewer 协议、内部链接、主题、内存返回行为和资源链路；实际 DOM commit 驱动首页/正文状态与星标，空 Back、失败或过期结果不得清除仍显示页的身份。Presentation 不直接访问 Core、SQLite 或 Viewer backend。
+- 独立 Wiki 只使用 Shell 的 64 DIP 顶栏：同栏提供主页、返回搜索、页面返回、当前页收藏和可伸缩本地搜索，不再创建工作区第二工具栏。独立 Wiki 模式下 Reader header 的 Auto 行折叠为零；普通 Reader 仍保留 48 DIP header、关闭及宽窄布局行为。
 
 ## 变更边界
 

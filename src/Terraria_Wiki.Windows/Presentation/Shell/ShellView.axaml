@@ -129,13 +129,77 @@
     </Border>
 
     <Border Grid.Column="1" Classes="top-bar">
-      <Grid ColumnDefinitions="*,Auto" Margin="24,0,20,0">
+      <Grid ColumnDefinitions="Auto,*,Auto" Margin="24,0,20,0">
         <StackPanel VerticalAlignment="Center" Spacing="0">
           <TextBlock Text="Terraria AI Wiki" FontSize="20" LineHeight="26"
                      FontWeight="SemiBold" />
         </StackPanel>
-        <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
-                    VerticalAlignment="Center" MaxWidth="560">
+        <Grid Grid.Column="1" Grid.ColumnSpan="2"
+              ColumnDefinitions="Auto,Auto,Auto,Auto,*,Auto"
+              Margin="16,0,0,0" ColumnSpacing="4"
+              IsVisible="{Binding IsWikiSelected}">
+          <Button Classes="icon-button" Command="{Binding GoToWikiHomeCommand}"
+                  IsVisible="{Binding !IsWikiHomeActive}"
+                  ToolTip.Tip="打开 Wiki 首页"
+                  AutomationProperties.AutomationId="WikiHomeNavigation"
+                  AutomationProperties.Name="Wiki 主页">
+            <PathIcon Width="18" Height="18"
+                      Data="M 12,3 L 21.5,11.4 L 20,13.1 L 18.5,11.8 L 18.5,21 L 13.5,21 L 13.5,14.5 L 10.5,14.5 L 10.5,21 L 5.5,21 L 5.5,11.8 L 4,13.1 L 2.5,11.4 Z" />
+          </Button>
+          <Button Grid.Column="1" Classes="icon-button"
+                  Command="{Binding ReturnToWikiSearchCommand}"
+                  IsVisible="{Binding IsWikiReadingActive}"
+                  ToolTip.Tip="返回 Wiki 搜索结果"
+                  AutomationProperties.AutomationId="WikiReturnToSearch"
+                  AutomationProperties.Name="返回 Wiki 搜索结果">
+            <PathIcon Width="18" Height="18"
+                      Data="M 11,3 L 2,12 L 11,21 L 13,19 L 7,13 L 22,13 L 22,11 L 7,11 L 13,5 Z" />
+          </Button>
+          <Button Grid.Column="2" Classes="icon-button" Command="{Binding Reader.BackCommand}"
+                  IsVisible="{Binding IsWikiReadingActive}"
+                  ToolTip.Tip="返回上一 Wiki 页面"
+                  AutomationProperties.AutomationId="WikiPageBack"
+                  AutomationProperties.Name="返回上一 Wiki 页面">
+            <PathIcon Width="18" Height="18"
+                      Data="M 6,4 L 4,4 L 4,20 L 6,20 Z M 10,12 L 20,4 L 20,20 Z" />
+          </Button>
+          <Button Grid.Column="3" Classes="icon-button"
+                  Command="{Binding Reader.ToggleFavoriteCommand}"
+                  IsVisible="{Binding IsWikiSurfaceVisible}"
+                  ToolTip.Tip="收藏当前 Wiki 页面"
+                  AutomationProperties.AutomationId="WikiHeaderFavorite"
+                  AutomationProperties.Name="收藏当前 Wiki 页面">
+            <Grid Width="21" Height="21">
+              <Path Data="M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z"
+                    Stroke="{DynamicResource SystemControlForegroundBaseMediumHighBrush}"
+                    StrokeThickness="1.5" Fill="Transparent"
+                    IsVisible="{Binding !Reader.IsWikiFavorite}" />
+              <Path Data="M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z"
+                    Stroke="{DynamicResource TerrariaBrandBrush}"
+                    StrokeThickness="1.3" Fill="{DynamicResource TerrariaBrandSoftBrush}"
+                    IsVisible="{Binding Reader.IsWikiFavorite}" />
+            </Grid>
+          </Button>
+          <TextBox x:Name="WikiSearchInput" Grid.Column="4"
+                   MinWidth="180" MaxWidth="300" Margin="8,0,0,0"
+                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
+                   Text="{Binding Wiki.Query, Mode=TwoWay}"
+                   IsEnabled="{Binding Wiki.IsAvailable}"
+                   PlaceholderText="输入关键词搜索…"
+                   AutomationProperties.AutomationId="WikiSearchInput"
+                   AutomationProperties.Name="Wiki 本地搜索" />
+          <Button Grid.Column="5" Classes="icon-button"
+                  Command="{Binding Wiki.SearchCommand}"
+                  ToolTip.Tip="搜索本地 Wiki"
+                  AutomationProperties.AutomationId="WikiSearchButton"
+                  AutomationProperties.Name="搜索本地 Wiki">
+            <PathIcon Width="18" Height="18"
+                      Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
+          </Button>
+        </Grid>
+        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
+                    VerticalAlignment="Center" MaxWidth="560"
+                    IsVisible="{Binding !IsWikiSelected}">
           <TextBlock Text="{Binding StartupStatus}" Classes="muted"
                      IsVisible="{Binding HasStartupError}"
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
@@ -161,61 +225,9 @@
     </Border>
 
     <Grid x:Name="WorkspaceGrid" Grid.Column="1" Grid.Row="1"
-          RowDefinitions="Auto,*"
+          RowDefinitions="*"
           ColumnDefinitions="*,0,0">
-      <Border x:Name="WikiToolbar" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
-              Background="{DynamicResource TerrariaSurfaceBrush}"
-              BorderBrush="{DynamicResource TerrariaStrokeBrush}"
-              BorderThickness="0,0,0,1"
-              IsVisible="{Binding IsWikiSelected}"
-              AutomationProperties.AutomationId="WikiToolbar">
-        <Grid ColumnDefinitions="Auto,Auto,Auto,*,Auto,Auto,Auto" Margin="16,8,20,8">
-          <Button Classes="toolbar-action" Command="{Binding GoToWikiHomeCommand}"
-                  IsVisible="{Binding !IsWikiHomeActive}"
-                  ToolTip.Tip="打开 Wiki 首页"
-                  AutomationProperties.AutomationId="WikiHomeNavigation"
-                  AutomationProperties.Name="Wiki 主页">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Width="16" Height="16"
-                        Data="M 12,3 L 21.5,11.4 L 20,13.1 L 18.5,11.8 L 18.5,21 L 13.5,21 L 13.5,14.5 L 10.5,14.5 L 10.5,21 L 5.5,21 L 5.5,11.8 L 4,13.1 L 2.5,11.4 Z" />
-              <TextBlock Text="主页" />
-            </StackPanel>
-          </Button>
-          <Button Grid.Column="1" Classes="toolbar-action"
-                  Command="{Binding ReturnToWikiSearchCommand}"
-                  IsVisible="{Binding IsWikiReadingActive}"
-                  ToolTip.Tip="返回搜索结果"
-                  AutomationProperties.AutomationId="WikiReturnToSearch"
-                  AutomationProperties.Name="返回搜索结果">
-            <StackPanel Orientation="Horizontal" Spacing="6">
-              <PathIcon Width="16" Height="16"
-                        Data="M 11,3 L 2,12 L 11,21 L 13,19 L 7,13 L 22,13 L 22,11 L 7,11 L 13,5 Z" />
-              <TextBlock Text="返回搜索" />
-            </StackPanel>
-          </Button>
-          <TextBlock Grid.Column="2" Text="Terraria Wiki" FontSize="16" LineHeight="22"
-                     FontWeight="SemiBold" VerticalAlignment="Center"
-                     Margin="12,0,0,0" TextTrimming="CharacterEllipsis" />
-          <TextBlock Grid.Column="4" Text="本地搜索" Classes="muted"
-                     VerticalAlignment="Center" Margin="0,0,8,0" />
-          <TextBox x:Name="WikiSearchInput" Grid.Column="5" Width="300" VerticalAlignment="Center"
-                   Text="{Binding Wiki.Query, Mode=TwoWay}"
-                   IsEnabled="{Binding Wiki.IsAvailable}"
-                   PlaceholderText="输入关键词搜索…"
-                   AutomationProperties.AutomationId="WikiSearchInput"
-                   AutomationProperties.Name="Wiki 本地搜索" />
-          <Button Grid.Column="6" Classes="icon-button" Margin="8,0,0,0"
-                  Command="{Binding Wiki.SearchCommand}"
-                  ToolTip.Tip="搜索本地 Wiki"
-                  AutomationProperties.AutomationId="WikiSearchButton"
-                  AutomationProperties.Name="搜索本地 Wiki">
-            <PathIcon Width="18" Height="18"
-                      Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
-          </Button>
-        </Grid>
-      </Border>
-
-      <Border x:Name="MainSurface" Grid.Row="1" Grid.Column="0" Classes="workspace-surface"
+      <Border x:Name="MainSurface" Grid.Row="0" Grid.Column="0" Classes="workspace-surface"
               MinWidth="460" IsVisible="{Binding !IsWikiSurfaceVisible}"
               AutomationProperties.AutomationId="MainSurface">
         <Grid x:Name="MainContent">
@@ -241,7 +253,7 @@
         </Grid>
       </Border>
 
-      <GridSplitter x:Name="ReaderSplitter" Grid.Row="1" Grid.Column="1"
+      <GridSplitter x:Name="ReaderSplitter" Grid.Row="0" Grid.Column="1"
                     Classes="reader-splitter"
                     Width="12" HorizontalAlignment="Stretch"
                     ResizeDirection="Columns"
@@ -251,11 +263,11 @@
                     AutomationProperties.AutomationId="ReaderSplitter"
                     AutomationProperties.Name="调整对话与 Wiki 宽度" />
 
-      <Border x:Name="OverlayScrim" Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3"
+      <Border x:Name="OverlayScrim" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
               Background="{DynamicResource TerrariaOverlayScrimBrush}"
               IsVisible="{Binding IsReaderOverlayVisible}"
               PointerPressed="OnOverlayPressed" />
-      <reader:ReaderView x:Name="ReaderHost" Grid.Row="1"
+      <reader:ReaderView x:Name="ReaderHost" Grid.Row="0"
                          Grid.Column="2" MinWidth="400"
                          Classes.overlay="{Binding IsReaderOverlayVisible}"
                          IsVisible="{Binding IsReaderVisible}" />

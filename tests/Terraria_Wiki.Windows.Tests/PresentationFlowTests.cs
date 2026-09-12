@@ -345,6 +345,26 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
+    public void CommittedViewerIdentityDrivesWikiHomeAndReadingWithoutOverridingSearchIntent()
+    {
+        using var shell = new ShellViewModel();
+        shell.AttachReader((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
+        shell.SetWikiHomePage("Home");
+        shell.NavigateWiki();
+
+        shell.OnViewerPageCommitted(new ViewerPageIdentity(1, 1, "Wiki", "Linked page", 2));
+        Assert.True(shell.IsWikiReadingActive);
+
+        shell.OnViewerPageCommitted(new ViewerPageIdentity(1, 1, "Wiki", "Home", 3));
+        Assert.True(shell.IsWikiHomeActive);
+
+        shell.Wiki.Query = "search";
+        Assert.True(shell.IsWikiSearchActive);
+        shell.OnViewerPageCommitted(new ViewerPageIdentity(1, 1, "Wiki", "Late page", 4));
+        Assert.True(shell.IsWikiSearchActive);
+    }
+
+    [Fact]
     public void ReaderUsesInlineAndOverlayModesAtExactThresholdAndEscapeClosesOverlay()
     {
         using var shell = new ShellViewModel();
@@ -485,6 +505,25 @@ public sealed class PresentationFlowTests
 
         Assert.Single(favorites.ChatFavorites);
         Assert.Equal("无法更新对话收藏；现有收藏未被更改。", favorites.StatusMessage);
+    }
+
+    [Fact]
+    public async Task FavoriteRefreshCoalescesARequestArrivingWhileBusy()
+    {
+        var first = Conversation("first", 1, favorite: true);
+        var second = Conversation("second", 1, favorite: true);
+        var store = new BlockingRefreshConversationStore(first);
+        var favorites = new FavoritesViewModel(store, _ => Task.CompletedTask, _ => Task.CompletedTask);
+
+        var initial = favorites.RefreshAsync();
+        await store.FirstStarted.Task.WaitAsync(TimeSpan.FromSeconds(2));
+        store.Current = second;
+        var pending = favorites.RefreshAsync();
+        store.ReleaseFirst.TrySetResult();
+        await Task.WhenAll(initial, pending);
+
+        Assert.Equal(2, store.ReadCount);
+        Assert.Equal("second", Assert.Single(favorites.ChatFavorites).Question);
     }
 
     [Fact]
@@ -734,30 +773,33 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
-    public async Task ReaderFavoriteUsesCurrentResolvedPageAndClearsOnBack()
+    public async Task ReaderFavoriteUsesCommittedCanonicalPageAndKeepsItUntilBackCommits()
     {
         var reader = new ReaderPaneViewModel();
         string? changedTitle = null;
         var changedValue = false;
         reader.Attach((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
         reader.AttachFavorites(
-            title => Task.FromResult(title == "收藏页"),
-            (title, favorite) =>
+            identity => Task.FromResult(identity.CanonicalTitle == "规范收藏页"),
+            (identity, favorite) =>
             {
-                changedTitle = title;
+                changedTitle = identity.CanonicalTitle;
                 changedValue = favorite;
-                return Task.FromResult(favorite);
+                return Task.FromResult(new ReaderFavoriteUpdate(true, favorite));
             });
 
         await reader.OpenAsync(new ReaderPageRequest("收藏页", "章节"));
+        Assert.False(reader.CanFavorite);
+        await reader.ApplyPageIdentityAsync(new ViewerPageIdentity(1, 2, "Wiki B", "规范收藏页", 1));
         Assert.True(reader.IsWikiFavorite);
         await reader.ToggleFavoriteAsync();
-        Assert.Equal("收藏页", changedTitle);
+        Assert.Equal("规范收藏页", changedTitle);
         Assert.False(changedValue);
         Assert.False(reader.IsWikiFavorite);
 
         await reader.BackAsync();
-        Assert.False(reader.CanFavorite);
+        Assert.True(reader.CanFavorite);
+        Assert.Equal("规范收藏页", reader.Title);
     }
 
     [Fact]
@@ -768,19 +810,42 @@ public sealed class PresentationFlowTests
         reader.Attach((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
         reader.AttachFavorites(
             _ => Task.FromResult(false),
-            (title, favorite) =>
+            (identity, favorite) =>
             {
-                changedTitle = title;
-                return Task.FromResult(favorite);
+                changedTitle = identity.CanonicalTitle;
+                return Task.FromResult(new ReaderFavoriteUpdate(true, favorite));
             });
 
-        await reader.SetHomePageAsync("Terraria Wiki");
+        await reader.ApplyPageIdentityAsync(new ViewerPageIdentity(1, 1, "Terraria Wiki", "Terraria Wiki", 1));
 
         Assert.True(reader.CanFavorite);
         await reader.ToggleFavoriteAsync();
         Assert.Equal("Terraria Wiki", changedTitle);
         Assert.True(reader.IsWikiFavorite);
         Assert.Contains("已收藏", reader.StatusMessage, StringComparison.Ordinal);
+    }
+
+    [Fact]
+    public async Task SlowFavoriteLookupCannotOverwriteANewerCommittedPage()
+    {
+        var reader = new ReaderPaneViewModel();
+        var first = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        var second = new TaskCompletionSource<bool>(TaskCreationOptions.RunContinuationsAsynchronously);
+        reader.Attach((_, _) => Task.CompletedTask, _ => Task.CompletedTask);
+        reader.AttachFavorites(
+            identity => identity.CanonicalTitle == "A" ? first.Task : second.Task,
+            (_, favorite) => Task.FromResult(new ReaderFavoriteUpdate(true, favorite)));
+
+        var applyA = reader.ApplyPageIdentityAsync(new ViewerPageIdentity(1, 1, "Wiki", "A", 1));
+        var applyB = reader.ApplyPageIdentityAsync(new ViewerPageIdentity(1, 1, "Wiki", "B", 2));
+        second.TrySetResult(true);
+        await applyB;
+        first.TrySetResult(false);
+        await applyA;
+
+        Assert.Equal("B", reader.Title);
+        Assert.True(reader.IsWikiFavorite);
+        Assert.True(reader.CanFavorite);
     }
 
     [Fact]
@@ -1089,6 +1154,34 @@ public sealed class PresentationFlowTests
 
         public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
 
+        public Task DeleteUnfavoritedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
+    }
+
+    private sealed class BlockingRefreshConversationStore(ChatConversation initial) : IChatConversationStore
+    {
+        public TaskCompletionSource FirstStarted { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public TaskCompletionSource ReleaseFirst { get; } = new(TaskCreationOptions.RunContinuationsAsynchronously);
+        public ChatConversation Current { get; set; } = initial;
+        public int ReadCount { get; private set; }
+
+        public async Task<IReadOnlyList<ChatConversation>> GetAllAsync(
+            string? filter = null,
+            CancellationToken cancellationToken = default)
+        {
+            ReadCount++;
+            var snapshot = Current;
+            if (ReadCount == 1)
+            {
+                FirstStarted.TrySetResult();
+                await ReleaseFirst.Task.WaitAsync(cancellationToken);
+            }
+            return [snapshot];
+        }
+
+        public Task<ChatConversation?> GetAsync(Guid id, CancellationToken cancellationToken = default) =>
+            Task.FromResult<ChatConversation?>(Current.Id == id ? Current : null);
+        public Task SaveAsync(ChatConversation value, CancellationToken cancellationToken = default) => Task.CompletedTask;
+        public Task DeleteAsync(Guid id, CancellationToken cancellationToken = default) => Task.CompletedTask;
         public Task DeleteUnfavoritedAsync(CancellationToken cancellationToken = default) => Task.CompletedTask;
     }
 }

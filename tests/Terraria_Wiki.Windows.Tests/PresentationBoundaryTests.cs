@@ -97,16 +97,25 @@ public sealed class PresentationBoundaryTests
         var shellViewModel = File.ReadAllText(Path.Combine(root, "Presentation", "Shell", "ShellViewModel.cs"));
         var mainWindow = File.ReadAllText(Path.Combine(root, "MainWindow.cs"));
 
-        Assert.Contains("AutomationProperties.AutomationId=\"WikiToolbar\"", shell, StringComparison.Ordinal);
+        var reader = File.ReadAllText(Path.Combine(root, "Presentation", "Reader", "ReaderView.axaml"));
+        Assert.DoesNotContain("AutomationProperties.AutomationId=\"WikiToolbar\"", shell, StringComparison.Ordinal);
+        Assert.Equal(1, Count(shell, "AutomationProperties.AutomationId=\"WikiSearchInput\""));
+        Assert.Contains("RowDefinitions=\"*\"", shell, StringComparison.Ordinal);
+        Assert.Contains("RowDefinitions=\"Auto,*,Auto\"", reader, StringComparison.Ordinal);
+        Assert.Contains("Height=\"48\" IsVisible=\"{Binding !IsWikiSelected}\"", reader, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"WikiSearchInput\"", shell, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"WikiSearchButton\"", shell, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"WikiHomeNavigation\"", shell, StringComparison.Ordinal);
         Assert.Contains("AutomationProperties.AutomationId=\"WikiReturnToSearch\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiPageBack\"", shell, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"WikiHeaderFavorite\"", shell, StringComparison.Ordinal);
         Assert.Contains("PlaceholderText=\"输入关键词搜索…\"", shell, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding Wiki.SearchCommand}\"", shell, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding GoToWikiHomeCommand}\"", shell, StringComparison.Ordinal);
         Assert.Contains("Command=\"{Binding ReturnToWikiSearchCommand}\"", shell, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"360\"", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"Terraria Wiki\"", shell, StringComparison.Ordinal);
+        Assert.DoesNotContain("Text=\"本地搜索\"", shell, StringComparison.Ordinal);
         Assert.DoesNotContain("Width=\"360\"", wiki, StringComparison.Ordinal);
         Assert.DoesNotContain("没有找到结果", wiki, StringComparison.Ordinal);
         Assert.Contains("IsVisible=\"{Binding !IsWikiSurfaceVisible}\"", shell, StringComparison.Ordinal);

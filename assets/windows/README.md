@@ -30,14 +30,18 @@ Together with `src/Terraria_Wiki.Windows/Assets/viewer-host.html` and
 `src/Terraria_Wiki.Windows/app.manifest`, the runtime assets form the 96-file Windows
 Viewer/icon/host support set. All retained external snapshot files match upstream `a1dd899`
 except `Viewer/Web/_common/wiki-app-common.js`, whose product copy comes from `d67d904` and
-includes the later bounded lifecycle behavior introduced by product commit `5d1d52f`.
+includes the later bounded lifecycle behavior introduced by product commit `5d1d52f`. The current
+product override additionally reports a one-time read token and navigation version only after the
+latest page DOM is committed, allowing the Windows host to publish trusted canonical page identity;
+its SHA-256 is `c5cd8fac92a395df8685f1392d9ec3864be6b4178d46782bf2f35c20e0bb02e8`.
 
-For the current checkout, the SHA-256 of the sorted per-file SHA-256 manifest is
-`7b7d0ece9f45bcfb33bd58974423a1f20ca8f98d3679ff917c721d0b65f17cde` for the 94-file runtime
-asset set and `7c6e3d05f29a39c99f3b81a52f36e716a1120f3a6438e37265a2d021b35d0dfd` for the complete 96-file
-support set. The original migration values remain recorded in ADR 0007 and the archived migration
-plans. Paths are relative to the repository root and participate in the manifest, so a rename or
-content change alters the recorded value.
+For the current checkout, hashing the LF-delimited sequence of per-file SHA-256 values in ordinal
+repository-path order gives `ca4f78dbc48ffa2d2b61c7324ca5b5534bc777598c9782b3d583ed7e78c2f27c`
+for the 94-file runtime asset set and
+`abecefdca1496042d2c88d6d078dfe7fd1cf2761ffea73c1b3e8146fece28c98` for the complete 96-file
+support set. The original migration values and the pre-commit product values remain recorded in
+ADR 0007 and the archived migration/icon plans. Paths determine ordering but are not themselves
+hashed; content changes alter the recorded value.
 
 ## Copyright and licensing notes
 

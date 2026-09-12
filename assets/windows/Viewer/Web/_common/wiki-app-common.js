@@ -64,6 +64,7 @@
         ensureCommonUI(); // 注入公共 UI（加载遮罩、右键菜单结构、公共样式）
 
         window.pageTitle = null; // 当前页面标题，初始为空
+        window.pageReadToken = null; // 当前已提交页面的宿主可信读取标识
         registerHandlers(config); // 注册 C# -> JS 的消息处理器
         bindNavigation(config);   // 绑定链接点击、鼠标侧键等导航交互
 
@@ -78,7 +79,7 @@
             const isAvaloniaHost = urlParams.get('host') === 'Avalonia'
                 || (window.parent !== window && Boolean(window.parent.terrariaWikiHost));
             if (isAvaloniaHost) {
-                void callCSharpAsync("ViewerReady", window.pageTitle || config.homePage);
+                void callCSharpAsync("ViewerReady", window.pageReadToken);
             }
         };
         redirect(config.homePage, config, undefined, notifyViewerReady)
@@ -201,7 +202,9 @@
         // 记录当前页的标题与滚动位置，供后续返回使用
         const args = {
             title: window.pageTitle,
-            position: window.pageYOffset
+            position: window.pageYOffset,
+            readToken: window.pageReadToken,
+            navigationVersion: navigationId
         };
         const loadingMask = document.getElementById("loading-mask");
         // 显示加载遮罩（仅当仍是当前导航时）
@@ -308,12 +311,13 @@
 
         // 更新页面标题、正文内容与最后修改时间
         window.pageTitle = result.title;
+        window.pageReadToken = result.readToken;
         document.getElementById(config.headingId).textContent = result.title;
         document.getElementById("mw-content-text").innerHTML = result.content;
         document.getElementById("footer-info-lastmod").textContent = config.lastModifiedPrefix + result.lastModified;
 
         // 首页特殊处理：通过 body 上的类名控制首页样式
-        const isHomePage = title === config.homePage;
+        const isHomePage = result.title === config.homePage;
         if (config.homePageClass) {
             document.body.classList.toggle(config.homePageClass, isHomePage);
         }
@@ -326,8 +330,15 @@
             homeHeading.removeAttribute("style");
         }
 
-        // 先排队通知宿主；消息会在当前同步刷新工作结束后送达。即使某个站点的
-        // 增强脚本异常，也不会让宿主永远等待一个已经写入 DOM 的首屏。
+        // DOM 已经提交后，把一次性 read token 与导航版本回传。宿主据此发布
+        // 可信的 Wiki/规范标题身份；过期导航在上面的版本检查处不会发送通知。
+        await callCSharpAsync("ViewerPageCommitted", JSON.stringify({
+            readToken: result.readToken,
+            navigationVersion: navigationId
+        }));
+
+        // 页面身份确认后再通知首屏 Ready。即使某个站点的增强脚本异常，也不会
+        // 让宿主永远等待一个已经写入 DOM 的首屏。
         onRendered?.();
 
         // 调用配置中的刷新回调（例如重新运行页面脚本、刷新锚点等）

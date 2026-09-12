@@ -1,4 +1,5 @@
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
+using Terraria_Wiki.Windows.Viewer;
 
 namespace Terraria_Wiki.Windows.Presentation.Reader;
 
@@ -17,23 +18,28 @@ internal sealed record ReaderPageRequest(string Title, string? Anchor = null)
         : $"{Title}#{Anchor.TrimStart('#')}";
 }
 
+internal sealed record ReaderFavoriteUpdate(bool Succeeded, bool IsFavorite);
+
 internal sealed class ReaderPaneViewModel : ObservableObject
 {
     private Func<string, CancellationToken, Task>? _openPage;
     private Func<CancellationToken, Task>? _goBack;
-    private Func<string, Task<bool>>? _isFavorite;
-    private Func<string, bool, Task<bool>>? _setFavorite;
+    private Func<ViewerPageIdentity, Task<bool>>? _isFavorite;
+    private Func<ViewerPageIdentity, bool, Task<ReaderFavoriteUpdate>>? _setFavorite;
     private string _title = "Wiki";
     private string _location = "等待本地 Viewer…";
     private string _statusMessage = "Reader 正在启动。";
     private bool _isBusy;
     private bool _isReady;
-    private string? _currentPageTitle;
+    private ViewerPageIdentity? _currentPage;
     private bool _isWikiFavorite;
+    private bool _isFavoriteLoading;
+    private bool _canGoBack;
+    private long _identityVersion;
 
     public ReaderPaneViewModel()
     {
-        BackCommand = new AsyncCommand(_ => BackAsync(), _ => IsReady && !IsBusy);
+        BackCommand = new AsyncCommand(_ => BackAsync(), _ => IsReady && !IsBusy && _canGoBack);
         ToggleFavoriteCommand = new AsyncCommand(_ => ToggleFavoriteAsync(), _ => CanFavorite);
     }
 
@@ -85,7 +91,8 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     public AsyncCommand BackCommand { get; }
     public AsyncCommand ToggleFavoriteCommand { get; }
-    public bool CanFavorite => IsReady && !IsBusy && _setFavorite is not null && _currentPageTitle is not null;
+    public bool CanFavorite => IsReady && !_isFavoriteLoading && _setFavorite is not null && _currentPage is not null;
+    public bool CanGoBack => BackCommand.CanExecute(null);
 
     public bool IsWikiFavorite
     {
@@ -95,32 +102,37 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     public void Attach(
         Func<string, CancellationToken, Task> openPage,
-        Func<CancellationToken, Task> goBack)
+        Func<CancellationToken, Task> goBack,
+        bool canGoBack = false)
     {
         _openPage = openPage ?? throw new ArgumentNullException(nameof(openPage));
         _goBack = goBack ?? throw new ArgumentNullException(nameof(goBack));
+        _canGoBack = canGoBack;
         IsReady = true;
-        StatusMessage = "本地 Viewer 已就绪。";
-        Location = "本地 Wiki 首页";
+        StatusMessage = _currentPage is null ? "本地 Viewer 已就绪。" : $"已打开 {_currentPage.CanonicalTitle}。";
+        Location = _currentPage?.WikiDisplayTitle ?? "等待页面提交…";
     }
 
     public void Detach()
     {
         _openPage = null;
         _goBack = null;
+        _canGoBack = false;
+        _isFavoriteLoading = false;
         IsReady = false;
         IsBusy = false;
         StatusMessage = "Reader 不可用。";
         Location = "等待本地 Viewer…";
-        _currentPageTitle = null;
+        Interlocked.Increment(ref _identityVersion);
+        _currentPage = null;
         IsWikiFavorite = false;
         ToggleFavoriteCommand.NotifyCanExecuteChanged();
         OnPropertyChanged(nameof(CanFavorite));
     }
 
     public void AttachFavorites(
-        Func<string, Task<bool>> isFavorite,
-        Func<string, bool, Task<bool>> setFavorite)
+        Func<ViewerPageIdentity, Task<bool>> isFavorite,
+        Func<ViewerPageIdentity, bool, Task<ReaderFavoriteUpdate>> setFavorite)
     {
         _isFavorite = isFavorite ?? throw new ArgumentNullException(nameof(isFavorite));
         _setFavorite = setFavorite ?? throw new ArgumentNullException(nameof(setFavorite));
@@ -130,6 +142,7 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     public void DetachFavorites()
     {
+        Interlocked.Increment(ref _identityVersion);
         _isFavorite = null;
         _setFavorite = null;
         IsWikiFavorite = false;
@@ -139,6 +152,12 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     public void SetStatus(string message) => StatusMessage = message;
 
+    public void SetCanGoBack(bool canGoBack)
+    {
+        _canGoBack = canGoBack;
+        BackCommand.NotifyCanExecuteChanged();
+    }
+
     public void SetTransportReady(bool isReady)
     {
         IsReady = isReady && _openPage is not null;
@@ -147,23 +166,46 @@ internal sealed class ReaderPaneViewModel : ObservableObject
             : "正在准备本地 Wiki 内容…";
     }
 
-    public async Task SetHomePageAsync(string title)
+    public async Task ApplyPageIdentityAsync(ViewerPageIdentity identity)
     {
-        if (string.IsNullOrWhiteSpace(title))
+        ArgumentNullException.ThrowIfNull(identity);
+        if (string.IsNullOrWhiteSpace(identity.CanonicalTitle))
+            throw new ArgumentException("A canonical page title is required.", nameof(identity));
+        if (_currentPage is { } current
+            && (identity.Generation < current.Generation
+                || identity.Generation == current.Generation
+                && identity.NavigationVersion <= current.NavigationVersion))
             return;
-        _currentPageTitle = title.Trim();
-        Title = "Wiki";
-        Location = "本地 Wiki 首页";
+        var version = Interlocked.Increment(ref _identityVersion);
+        _currentPage = identity;
+        Title = identity.CanonicalTitle;
+        Location = identity.WikiDisplayTitle;
+        _isFavoriteLoading = true;
+        ToggleFavoriteCommand.NotifyCanExecuteChanged();
+        OnPropertyChanged(nameof(CanFavorite));
         try
         {
-            await RefreshFavoriteAsync();
+            var favorite = _isFavorite is not null && await _isFavorite(identity);
+            if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
+                return;
+            IsWikiFavorite = favorite;
+            StatusMessage = $"已打开 {identity.CanonicalTitle}。";
         }
         catch
         {
+            if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
+                return;
             IsWikiFavorite = false;
-            ToggleFavoriteCommand.NotifyCanExecuteChanged();
-            OnPropertyChanged(nameof(CanFavorite));
             StatusMessage = "无法读取 Wiki 收藏状态。";
+        }
+        finally
+        {
+            if (version == Volatile.Read(ref _identityVersion) && _currentPage == identity)
+            {
+                _isFavoriteLoading = false;
+                ToggleFavoriteCommand.NotifyCanExecuteChanged();
+                OnPropertyChanged(nameof(CanFavorite));
+            }
         }
     }
 
@@ -177,23 +219,23 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         }
 
         IsBusy = true;
-        Title = request.Title;
-        Location = request.Target;
+        var identityVersion = Volatile.Read(ref _identityVersion);
         StatusMessage = $"正在打开 {request.Title}…";
         try
         {
             await _openPage(request.Target, cancellationToken);
-            _currentPageTitle = request.Title;
-            await RefreshFavoriteAsync();
-            StatusMessage = $"已打开 {request.Title}。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = $"已发送打开 {request.Title} 的请求。";
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "打开页面已取消。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = "打开页面已取消。";
         }
         catch
         {
-            StatusMessage = "无法打开该 Wiki 页面。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = "无法打开该 Wiki 页面。";
         }
         finally
         {
@@ -206,22 +248,22 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         if (_goBack is null)
             return;
         IsBusy = true;
+        var identityVersion = Volatile.Read(ref _identityVersion);
         try
         {
             await _goBack(CancellationToken.None);
-            _currentPageTitle = null;
-            IsWikiFavorite = false;
-            ToggleFavoriteCommand.NotifyCanExecuteChanged();
-            OnPropertyChanged(nameof(CanFavorite));
-            StatusMessage = "已返回上一页。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = "已发送返回上一页的请求。";
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "返回操作已取消。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = "返回操作已取消。";
         }
         catch
         {
-            StatusMessage = "无法返回上一页。";
+            if (identityVersion == Volatile.Read(ref _identityVersion))
+                StatusMessage = "无法返回上一页。";
         }
         finally
         {
@@ -231,20 +273,30 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     internal async Task ToggleFavoriteAsync()
     {
-        if (_setFavorite is null || _currentPageTitle is null || !CanFavorite)
+        if (_setFavorite is null || _currentPage is null || !CanFavorite)
             return;
+        var identity = _currentPage;
+        var version = Volatile.Read(ref _identityVersion);
         var requested = !IsWikiFavorite;
-        IsWikiFavorite = await _setFavorite(_currentPageTitle, requested);
-        StatusMessage = IsWikiFavorite == requested
-            ? requested ? $"已收藏 {_currentPageTitle}。" : $"已取消收藏 {_currentPageTitle}。"
-            : "无法更新 Wiki 收藏。";
-    }
-
-    private async Task RefreshFavoriteAsync()
-    {
-        IsWikiFavorite = _isFavorite is not null && _currentPageTitle is not null
-            && await _isFavorite(_currentPageTitle);
-        ToggleFavoriteCommand.NotifyCanExecuteChanged();
-        OnPropertyChanged(nameof(CanFavorite));
+        ReaderFavoriteUpdate result;
+        try
+        {
+            result = await _setFavorite(identity, requested);
+        }
+        catch
+        {
+            if (version == Volatile.Read(ref _identityVersion) && _currentPage == identity)
+                StatusMessage = "无法更新 Wiki 收藏；当前状态未改变。";
+            return;
+        }
+        if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
+            return;
+        if (!result.Succeeded)
+        {
+            StatusMessage = "无法更新 Wiki 收藏；当前状态未改变。";
+            return;
+        }
+        IsWikiFavorite = result.IsFavorite;
+        StatusMessage = requested ? $"已收藏 {identity.CanonicalTitle}。" : $"已取消收藏 {identity.CanonicalTitle}。";
     }
 }

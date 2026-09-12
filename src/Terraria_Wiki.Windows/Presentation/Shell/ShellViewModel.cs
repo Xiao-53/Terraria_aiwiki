@@ -14,6 +14,7 @@ using Terraria_Wiki.Windows.Presentation.Reader;
 using Terraria_Wiki.Windows.Presentation.Settings;
 using Terraria_Wiki.Windows.Presentation.Wiki;
 using Terraria_Wiki.Windows.Updates;
+using Terraria_Wiki.Windows.Viewer;
 
 namespace Terraria_Wiki.Windows.Presentation.Shell;
 
@@ -56,6 +57,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private bool _hasStartupError;
     private StartupRecoveryKind _startupRecovery;
     private bool _disposed;
+    private Func<int, CancellationToken, Task<WikiBookSnapshot>>? _switchWiki;
 
     public ShellViewModel(
         IChatConversationStore? chatConversationStore = null,
@@ -287,15 +289,18 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void SetWebView2Status(WebView2RuntimeStatus status) => Settings.Diagnostics.SetWebView2Status(status);
 
-    public void AttachRuntime(WindowsClientRuntime runtime)
+    public void AttachRuntime(
+        WindowsClientRuntime runtime,
+        Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
+        _switchWiki = switchWiki;
         var gateway = new WindowsChatRuntimeGateway(runtime);
         Chat.AttachRuntime(gateway, gateway);
         Wiki.Attach((query, token) => runtime.Application.Query.SearchAsync(query, cancellationToken: token));
         Favorites.AttachWikiLibrary(runtime.Application.Library);
         Library.Attach(runtime.Application.Library);
         Management.SetDataRoot(runtime.DataRoot);
-        Management.Attach(runtime.Application);
+        Management.Attach(runtime.Application, switchWiki);
         Settings.Attach(runtime.Application.Settings);
         Reader.AttachFavorites(Favorites.IsWikiFavoriteAsync, Favorites.SetWikiFavoriteAsync);
         _ = Favorites.RefreshAsync();
@@ -308,7 +313,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public void AttachReader(
         Func<string, CancellationToken, Task> openPage,
-        Func<CancellationToken, Task> goBack) => Reader.Attach(openPage, goBack);
+        Func<CancellationToken, Task> goBack,
+        bool canGoBack = false) => Reader.Attach(openPage, goBack, canGoBack);
 
     public void DetachRuntime()
     {
@@ -320,6 +326,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Settings.Detach();
         Reader.DetachFavorites();
         Reader.Detach();
+        _switchWiki = null;
     }
 
     public void SetStartupStatus(
@@ -443,6 +450,16 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     public void SetWikiHomePage(string title) =>
         _wikiHomeTitle = string.IsNullOrWhiteSpace(title) ? null : title.Trim();
 
+    public void OnViewerPageCommitted(ViewerPageIdentity identity)
+    {
+        ArgumentNullException.ThrowIfNull(identity);
+        if (!IsWikiSelected || WikiMode == WikiDisplayMode.Search)
+            return;
+        WikiMode = string.Equals(identity.CanonicalTitle, _wikiHomeTitle, StringComparison.Ordinal)
+            ? WikiDisplayMode.Home
+            : WikiDisplayMode.Reading;
+    }
+
     public void GoToWikiHome()
     {
         if (!IsWikiSelected)
@@ -540,10 +557,12 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             _ = Library.RefreshAsync();
     }
 
-    private async Task OpenFavoriteWikiAsync(string title)
+    private async Task OpenFavoriteWikiAsync(GlobalWikiFavoriteItem item)
     {
         ReaderState = ReaderPaneState.Wiki;
-        await Reader.OpenAsync(new ReaderPageRequest(title));
+        if (_switchWiki is not null)
+            await _switchWiki(item.WikiId, CancellationToken.None);
+        await Reader.OpenAsync(new ReaderPageRequest(item.PageTitle));
     }
 
     private async Task OpenLibraryWikiAsync(string title)

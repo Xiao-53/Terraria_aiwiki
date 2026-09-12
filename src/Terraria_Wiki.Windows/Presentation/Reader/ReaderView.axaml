@@ -4,8 +4,9 @@
              x:Class="Terraria_Wiki.Windows.Presentation.Reader.ReaderView"
              x:DataType="shell:ShellViewModel">
   <Border Classes="reader-pane" ClipToBounds="True">
-    <Grid RowDefinitions="48,*,Auto">
+    <Grid RowDefinitions="Auto,*,Auto">
       <Border Grid.Row="0" Classes="reader-header" Padding="6,2"
+              Height="48" IsVisible="{Binding !IsWikiSelected}"
               BorderBrush="{DynamicResource TerrariaStrokeBrush}"
               BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,*,Auto,Auto">

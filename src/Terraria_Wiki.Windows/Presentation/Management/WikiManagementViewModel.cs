@@ -24,6 +24,7 @@ internal sealed class WikiDataChangedEventArgs(bool requiresViewerRebind) : Even
 
 internal sealed record class WikiManagementActions
 {
+    public bool SwitchIncludesViewerRebind { get; init; }
     public Func<CancellationToken, Task<IReadOnlyList<WikiBookSnapshot>>> ListWikis { get; init; } =
         _ => Unavailable<IReadOnlyList<WikiBookSnapshot>>();
     public Func<CancellationToken, Task<WikiBookSnapshot>> GetActiveWiki { get; init; } =
@@ -62,14 +63,16 @@ internal sealed record class WikiManagementActions
     public static WikiManagementActions From(
         WikiApplication application,
         Func<CancellationToken, Task<string?>> pickImportPackage,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> exportPackage)
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> exportPackage,
+        Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
         ArgumentNullException.ThrowIfNull(application);
         return new WikiManagementActions
         {
             ListWikis = application.ActiveWiki.ListAsync,
             GetActiveWiki = application.ActiveWiki.GetActiveAsync,
-            SwitchWiki = application.ActiveWiki.SwitchAsync,
+            SwitchWiki = switchWiki ?? application.ActiveWiki.SwitchAsync,
+            SwitchIncludesViewerRebind = switchWiki is not null,
             GetStatistics = application.Data.GetStatisticsAsync,
             HasFailures = application.Data.HasFailuresAsync,
             Download = application.Data.DownloadAsync,
@@ -387,9 +390,11 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 
     internal void EndDataRootSelection() => IsSelectingDataRoot = false;
 
-    public void Attach(WikiApplication application)
+    public void Attach(
+        WikiApplication application,
+        Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
-        Attach(WikiManagementActions.From(application, _pickImportPackage, _exportPackage));
+        Attach(WikiManagementActions.From(application, _pickImportPackage, _exportPackage, switchWiki));
     }
 
     internal void Attach(WikiManagementActions actions)
@@ -630,7 +635,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             async token => { await _actions!.SwitchWiki(target.Id, token); },
             $"已切换到“{target.Title}”。",
             dataChanged: true,
-            requiresViewerRebind: true);
+            requiresViewerRebind: !_actions!.SwitchIncludesViewerRebind);
     }
 
     private async Task ClearFailuresAsync() =>

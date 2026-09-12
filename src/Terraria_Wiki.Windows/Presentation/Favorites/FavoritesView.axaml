@@ -70,6 +70,7 @@
                             AutomationProperties.Name="打开 Wiki 收藏">
                       <StackPanel Spacing="3">
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Text="{Binding WikiTitle}" Classes="muted" />
                         <TextBlock Text="{Binding TimeText}" Classes="tag" />
                       </StackPanel>
                     </Button>

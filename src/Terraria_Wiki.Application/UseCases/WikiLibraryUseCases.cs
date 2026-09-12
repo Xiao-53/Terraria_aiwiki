@@ -1,4 +1,5 @@
 using Terraria_Wiki.Application.Internal;
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Operations;
 using Terraria_Wiki.Models;
 
@@ -136,6 +137,159 @@ public sealed class WikiLibraryUseCases
             await _state.ContentDatabase.DeleteItemAsync<WikiFavorite>(title, cancellationToken);
             return true;
         }, cancellationToken);
+    }
+
+    public async Task<GlobalWikiFavoritesResult> GetAllFavoritesAsync(
+        CancellationToken cancellationToken = default)
+    {
+        return await RunCoordinatedAsync(async () =>
+        {
+            var active = _state.RequireActiveBook();
+            var books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
+            var items = new List<GlobalWikiFavoriteItem>();
+            var issues = new List<GlobalWikiFavoriteIssue>();
+            foreach (var book in books.OrderBy(book => book.Id))
+            {
+                cancellationToken.ThrowIfCancellationRequested();
+                try
+                {
+                    IReadOnlyList<WikiFavorite> favorites;
+                    if (book.Id == active.Id)
+                    {
+                        favorites = await ReadActiveFavoritesAsync(cancellationToken);
+                    }
+                    else
+                    {
+                        var read = WikiFavoriteStore.ReadAllWithStatus(
+                            WikiDataPaths.Create(_state.DataRoot, book),
+                            cancellationToken);
+                        favorites = read.Items;
+                        if (read.IssueCode is not null)
+                            issues.Add(new GlobalWikiFavoriteIssue(book.Id, book.Title, read.IssueCode));
+                    }
+                    items.AddRange(favorites.Select(item => new GlobalWikiFavoriteItem(
+                        book.Id,
+                        book.Title,
+                        item.WikiTitle,
+                        item.FavoritedAt)));
+                }
+                catch (OperationCanceledException)
+                {
+                    throw;
+                }
+                catch (WikiFavoriteStoreException exception)
+                {
+                    issues.Add(new GlobalWikiFavoriteIssue(book.Id, book.Title, exception.Code));
+                }
+                catch
+                {
+                    issues.Add(new GlobalWikiFavoriteIssue(book.Id, book.Title, "favorite-database-unreadable"));
+                }
+            }
+
+            var ordered = items
+                .OrderByDescending(item => item.FavoritedAt)
+                .ThenBy(item => item.WikiId)
+                .ThenBy(item => item.PageTitle, StringComparer.Ordinal)
+                .ToArray();
+            return new GlobalWikiFavoritesResult(ordered, issues);
+        }, cancellationToken);
+    }
+
+    public async Task<bool> IsFavoriteAsync(
+        int wikiId,
+        string title,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateWikiIdentity(wikiId, title);
+        return await RunCoordinatedAsync(async () =>
+        {
+            var active = _state.RequireActiveBook();
+            if (active.Id == wikiId)
+                return await _state.ContentDatabase.ItemExistsAsync<WikiFavorite>(title, cancellationToken);
+            var book = await FindBookAsync(wikiId, cancellationToken);
+            return WikiFavoriteStore.IsFavorite(WikiDataPaths.Create(_state.DataRoot, book), title, cancellationToken);
+        }, cancellationToken);
+    }
+
+    public async Task<bool> SetFavoriteAsync(
+        int wikiId,
+        string title,
+        bool favorite,
+        CancellationToken cancellationToken = default)
+    {
+        ValidateWikiIdentity(wikiId, title);
+        return await RunCoordinatedAsync(async () =>
+        {
+            var active = _state.RequireActiveBook();
+            if (active.Id == wikiId)
+            {
+                var exists = await _state.ContentDatabase.ItemExistsAsync<WikiFavorite>(title, cancellationToken);
+                if (favorite && !exists)
+                {
+                    await _state.ContentDatabase.SaveItemAsync(new WikiFavorite
+                    {
+                        WikiTitle = title,
+                        FavoritedAt = _state.TimeProvider.GetLocalNow().DateTime,
+                    }, cancellationToken);
+                }
+                else if (!favorite && exists)
+                {
+                    await _state.ContentDatabase.DeleteItemAsync<WikiFavorite>(title, cancellationToken);
+                }
+                return favorite;
+            }
+
+            var book = await FindBookAsync(wikiId, cancellationToken);
+            try
+            {
+                return WikiFavoriteStore.SetFavorite(
+                    WikiDataPaths.Create(_state.DataRoot, book),
+                    title,
+                    favorite,
+                    _state.TimeProvider.GetLocalNow().DateTime,
+                    cancellationToken);
+            }
+            catch (WikiFavoriteStoreException exception)
+            {
+                throw new ApplicationUseCaseException(exception.Code, "The Wiki favorite could not be updated.", exception);
+            }
+        }, cancellationToken);
+    }
+
+    private async Task<IReadOnlyList<WikiFavorite>> ReadActiveFavoritesAsync(CancellationToken cancellationToken)
+    {
+        var total = await _state.ContentDatabase.GetCountAsync<WikiFavorite>(cancellationToken);
+        return total == 0
+            ? []
+            : await _state.ContentDatabase.GetWikiFavoritePagedAsync(0, total, cancellationToken);
+    }
+
+    private async Task<WikiBook> FindBookAsync(int wikiId, CancellationToken cancellationToken) =>
+        await _state.ManagerDatabase.GetItemAsync<WikiBook>(wikiId, cancellationToken)
+        ?? throw new ApplicationUseCaseException("unknown-wiki", $"WikiBook {wikiId} is not registered.");
+
+    private async Task<T> RunCoordinatedAsync<T>(Func<Task<T>> action, CancellationToken cancellationToken)
+    {
+        if (!await _state.CoordinationGate.WaitAsync(0, cancellationToken))
+            throw new ApplicationUseCaseException("operation-in-progress", "Another Wiki data operation is already running.");
+        try
+        {
+            using var operation = await EnterAsync(cancellationToken);
+            return await action();
+        }
+        finally
+        {
+            _state.CoordinationGate.Release();
+        }
+    }
+
+    private static void ValidateWikiIdentity(int wikiId, string title)
+    {
+        if (wikiId <= 0)
+            throw new ArgumentOutOfRangeException(nameof(wikiId));
+        if (string.IsNullOrWhiteSpace(title))
+            throw new ArgumentException("A page title is required.", nameof(title));
     }
 
     private async Task<WikiDataOperationGate.WikiDataOperationLease> EnterAsync(

@@ -41,6 +41,32 @@ public sealed class Phase09TakeoverTests
     }
 
     [Fact]
+    public async Task HostCoordinatedManagementSwitchDoesNotRequestASecondViewerRebind()
+    {
+        var first = Wiki(1, "泰拉瑞亚中文 Wiki");
+        var second = Wiki(2, "Terraria Wiki", folder: "Terraria_Wiki_en");
+        var active = first;
+        using var viewModel = new WikiManagementViewModel();
+        viewModel.Attach(Actions(
+            list: _ => Task.FromResult<IReadOnlyList<WikiBookSnapshot>>([first, second]),
+            active: _ => Task.FromResult(active),
+            switchWiki: (id, _) =>
+            {
+                active = id == second.Id ? second : first;
+                return Task.FromResult(active);
+            }) with { SwitchIncludesViewerRebind = true });
+        WikiDataChangedEventArgs? changed = null;
+        viewModel.DataChanged += (_, args) => changed = args;
+        await viewModel.RefreshAsync();
+
+        viewModel.RequestSwitch(second);
+        await viewModel.ConfirmAsync();
+
+        Assert.NotNull(changed);
+        Assert.False(changed!.RequiresViewerRebind);
+    }
+
+    [Fact]
     public async Task ImportInspectsBeforeConfirmationAndPassesLegacyConsentToken()
     {
         var active = Wiki(1, "泰拉瑞亚中文 Wiki");

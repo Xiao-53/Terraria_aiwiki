@@ -92,6 +92,80 @@ public sealed class WikiLibraryUseCaseTests
             () => fixture.Application.Library.GetFavoritesAsync(new PageRequest(0, 20), cancellation.Token));
     }
 
+    [Fact]
+    public async Task GlobalFavoritesIncludeEveryRegisteredWikiAndAreNotLimitedToTwoHundred()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        var books = await fixture.State.ManagerDatabase.GetItemsAsync<WikiBook>();
+        var active = fixture.State.RequireActiveBook();
+        var second = books.First(book => book.Id != active.Id);
+        await fixture.State.ContentDatabase.SaveItemsAsync(
+            Enumerable.Range(0, 205).Select(index => new WikiFavorite
+            {
+                WikiTitle = $"Active {index:000}",
+                FavoritedAt = new DateTime(2026, 8, 1).AddMinutes(index),
+            }));
+        var secondPaths = Terraria_Wiki.Core.Data.WikiDataPaths.Create(fixture.Root, second);
+        secondPaths.EnsureDataDirectory();
+        var secondDatabase = new ContentDbService(secondPaths.ContentDatabasePath);
+        await secondDatabase.Init(seedBook: second);
+        await secondDatabase.SaveItemAsync(new WikiFavorite
+        {
+            WikiTitle = "Active 000",
+            FavoritedAt = new DateTime(2026, 9, 1),
+        });
+        await secondDatabase.CloseConnection();
+
+        var result = await fixture.Application.Library.GetAllFavoritesAsync();
+
+        Assert.Equal(206, result.Items.Count);
+        Assert.Empty(result.Issues);
+        Assert.Equal(second.Id, result.Items[0].WikiId);
+        Assert.Equal(second.Title, result.Items[0].WikiDisplayTitle);
+        Assert.Equal(2, result.Items.Count(item => item.PageTitle == "Active 000"));
+    }
+
+    [Fact]
+    public async Task ExplicitWikiFavoriteOperationsDoNotSwitchTheActiveWikiOrPauseConsumers()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        var active = fixture.State.RequireActiveBook();
+        var second = (await fixture.State.ManagerDatabase.GetItemsAsync<WikiBook>())
+            .First(book => book.Id != active.Id);
+        var secondPaths = Terraria_Wiki.Core.Data.WikiDataPaths.Create(fixture.Root, second);
+        secondPaths.EnsureDataDirectory();
+        var secondDatabase = new ContentDbService(secondPaths.ContentDatabasePath);
+        await secondDatabase.Init(seedBook: second);
+        await secondDatabase.CloseConnection();
+        var pauseCount = fixture.Consumers.PauseCount;
+
+        Assert.True(await fixture.Application.Library.SetFavoriteAsync(second.Id, "Shared", true));
+        Assert.True(await fixture.Application.Library.IsFavoriteAsync(second.Id, "Shared"));
+        Assert.False(await fixture.Application.Library.SetFavoriteAsync(second.Id, "Shared", false));
+        Assert.Equal(active.Id, (await fixture.Application.ActiveWiki.GetActiveAsync()).Id);
+        Assert.Equal(pauseCount, fixture.Consumers.PauseCount);
+    }
+
+    [Fact]
+    public async Task UnreadableWikiReportsAnIssueWithoutDiscardingOtherFavorites()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        await fixture.Application.Library.AddFavoriteAsync("Healthy");
+        var active = fixture.State.RequireActiveBook();
+        var broken = (await fixture.State.ManagerDatabase.GetItemsAsync<WikiBook>())
+            .First(book => book.Id != active.Id);
+        var brokenPaths = Terraria_Wiki.Core.Data.WikiDataPaths.Create(fixture.Root, broken);
+        brokenPaths.EnsureDataDirectory();
+        await File.WriteAllTextAsync(brokenPaths.ContentDatabasePath, "not sqlite");
+
+        var result = await fixture.Application.Library.GetAllFavoritesAsync();
+
+        Assert.Equal("Healthy", Assert.Single(result.Items).PageTitle);
+        var issue = Assert.Single(result.Issues);
+        Assert.Equal(broken.Id, issue.WikiId);
+        Assert.Equal("favorite-database-unreadable", issue.Code);
+    }
+
     private static WikiPage Page(string title) => new()
     {
         Title = title,

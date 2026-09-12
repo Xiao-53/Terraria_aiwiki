@@ -13,8 +13,11 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ViewerEnvelope>> _pending = new(StringComparer.Ordinal);
     private readonly object _readyGate = new();
+    private readonly object _identityGate = new();
     private TaskCompletionSource _ready = NewReadyCompletion();
     private Uri? _baseUri;
+    private long _generation;
+    private ViewerPageIdentity? _currentPage;
     private int _isReady;
     private int _receivedMessageCount;
     private int _validMessageCount;
@@ -29,25 +32,43 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
         _bridge = bridge ?? throw new ArgumentNullException(nameof(bridge));
         _webView.WebMessageReceived += OnWebMessageReceived;
         _bridge.RequestCompleted += OnBridgeRequestCompleted;
+        _bridge.PageCommitted += OnBridgePageCommitted;
+        _bridge.HistoryChanged += OnBridgeHistoryChanged;
     }
 
     public event EventHandler<string>? StatusChanged;
     public event EventHandler<ViewerProtocolError>? ProtocolError;
     public event EventHandler<bool>? ReadyChanged;
+    public event EventHandler<ViewerPageIdentity>? PageCommitted;
+    public event EventHandler<bool>? HistoryChanged;
     public bool IsReady => Volatile.Read(ref _isReady) != 0;
     public int ReceivedMessageCount => Volatile.Read(ref _receivedMessageCount);
     public int ValidMessageCount => Volatile.Read(ref _validMessageCount);
     public string? LastRequestMethod => Volatile.Read(ref _lastRequestMethod);
     public string? LastCompletedMethod => Volatile.Read(ref _lastCompletedMethod);
     public string? LastBridgeErrorCode => Volatile.Read(ref _lastBridgeErrorCode);
+    public ViewerPageIdentity? CurrentPage
+    {
+        get { lock (_identityGate) return _currentPage; }
+    }
+    public bool HasHistory => _bridge.HasHistory;
 
-    public void Navigate(Uri baseUri, bool forceReload = false)
+    public void Navigate(Uri baseUri, int wikiId, string wikiDisplayTitle, bool forceReload = false)
     {
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
         ArgumentNullException.ThrowIfNull(baseUri);
         if (!forceReload && _baseUri == baseUri)
             return;
         _baseUri = baseUri;
+        var generation = Interlocked.Increment(ref _generation);
+        _bridge.BeginSession(wikiId, wikiDisplayTitle, generation);
+        foreach (var pending in _pending.Values)
+            pending.TrySetException(new ViewerProtocolException(
+                "viewer-session-reset",
+                "The Viewer session changed before the command completed."));
+        _pending.Clear();
+        lock (_identityGate)
+            _currentPage = null;
         lock (_readyGate)
             _ready = NewReadyCompletion();
         Interlocked.Exchange(ref _isReady, 0);
@@ -76,10 +97,19 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
         var command = _bridge.TryTakeBackCommand();
         if (command is null)
         {
-            ProtocolError?.Invoke(this, new ViewerProtocolError("viewer-history-empty", "There is no previous Viewer page."));
-            return;
+            var error = new ViewerProtocolError("viewer-history-empty", "There is no previous Viewer page.");
+            ProtocolError?.Invoke(this, error);
+            throw new ViewerProtocolException(error.Code, error.Message);
         }
-        await SendCommandAsync(command.Method, command.Data, cancellationToken).ConfigureAwait(false);
+        try
+        {
+            await SendCommandAsync(command.Method, command.Data, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            _bridge.RestoreBackCommand(command);
+            throw;
+        }
     }
 
     public async Task SendCommandAsync(
@@ -118,6 +148,8 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             return;
         _webView.WebMessageReceived -= OnWebMessageReceived;
         _bridge.RequestCompleted -= OnBridgeRequestCompleted;
+        _bridge.PageCommitted -= OnBridgePageCommitted;
+        _bridge.HistoryChanged -= OnBridgeHistoryChanged;
         _lifetime.Cancel();
         lock (_readyGate)
             _ready.TrySetCanceled();
@@ -140,7 +172,9 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
     {
         Volatile.Write(ref _lastCompletedMethod, completed.Method);
         Volatile.Write(ref _lastBridgeErrorCode, completed.Result.Error?.Code);
-        if (completed.Method != "ViewerReady" || completed.Result.Error is not null)
+        if (completed.Method != "ViewerReady"
+            || completed.Result.Error is not null
+            || completed.Generation != Volatile.Read(ref _generation))
             return;
         if (Interlocked.Exchange(ref _isReady, 1) == 0)
         {
@@ -149,6 +183,18 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             ReadyChanged?.Invoke(this, true);
         }
     }
+
+    private void OnBridgePageCommitted(object? sender, ViewerPageIdentity identity)
+    {
+        if (identity.Generation != Volatile.Read(ref _generation))
+            return;
+        lock (_identityGate)
+            _currentPage = identity;
+        PageCommitted?.Invoke(this, identity);
+    }
+
+    private void OnBridgeHistoryChanged(object? sender, bool hasHistory) =>
+        HistoryChanged?.Invoke(this, hasHistory);
 
     private void OnWebMessageReceived(object? sender, WebMessageReceivedEventArgs args)
     {
