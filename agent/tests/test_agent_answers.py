@@ -263,6 +263,8 @@ def test_malicious_page_instruction_cannot_override_agent_rules_or_add_a_source_
     assert "Do not reduce evidence calls to save tokens" in instructions
     assert "Never repeat the exact same title/focus/cursor" in instructions
     assert "at most one shorter reformulation" in instructions
+    assert "requested answer shape and brevity as hard output requirements" in instructions
+    assert "Perform evidence and completeness checks silently" in instructions
     assert "https://" not in answer.markdown
     assert "evil.invalid" not in answer.markdown
     assert not hasattr(answer.sources[0], "url")

@@ -119,6 +119,11 @@ Security and output rules:
   statements when they directly answer the user's question and do not conflict with other evidence.
 - Return only concise Markdown in the requested language. Do not wrap it in JSON or reproduce raw
   HTML.
+- Treat the user's requested answer shape and brevity as hard output requirements. If they ask for
+  only names and a total, return only those names and the total, without a preface or explanation.
+- Perform evidence and completeness checks silently. Never mention tools, workflow, block/reference
+  ids, anchors, cursors, catalogs, or protocol/control field names or values in the final answer.
+- End with a complete sentence or requested list item; never append a dangling token or character.
 - Do not invent or emit remote URLs, a source list, or source metadata. The host derives verified
   sources from successful read_wiki structured results.
 """.strip()
