@@ -1,12 +1,12 @@
 # AI 证据流程与 Token 效率优化
 
-- 状态：completed；源码、自动回归和用户指定的新版两个五轮真实验收完成；保留两项输出质量观察，不作新旧对照或Token下降结论
+- 状态：archived；源码、自动回归和用户指定的新版两个五轮真实验收完成；保留两项输出质量观察，不作新旧对照或Token下降结论
 - Phase：无；独立 AI / Wiki Tools 变更
 - 执行环境：WSL2 Codex CLI 负责阅读、编辑和平台无关验证；Windows 11 x64 负责 .NET、真实 C# MCP→Python 离线链路与开发输出验证
 - 创建日期：2026-09-09
-- 最后更新：2026-09-11
+- 最后更新：2026-09-12
 - 范围：工具说明与模型证据投影、定向读取、单次运行内重复证据处理、证据流程约束与质量评测
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/specs/wiki-query-boundary/spec.md`、`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`、`docs/adr/0010-use-bounded-local-ai-conversations.md`、`openspec/changes/ai-conversation-token-optimization/plan.md`
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/wiki-tools/spec.md`、`openspec/specs/wiki-query-boundary/spec.md`、`docs/adr/0004-use-loopback-mcp-wiki-tool-transport.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`、`docs/adr/0010-use-bounded-local-ai-conversations.md`、`openspec/changes/archive/ai-conversation-token-optimization/plan.md`
 
 ## 背景与当前证据
 
@@ -200,6 +200,7 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 
 ## 进度记录
 
+- 2026-09-12：复核计划状态、全部执行项、验证结果与遗留观察；确认满足 `.agent/PLANS.md` 的归档门槛，随同 `evaluation.md` 移入 `openspec/changes/archive/optimize-ai-evidence-flow/`。
 - 2026-09-12：用户要求修正真实验收发现的孤立尾字、列表冗长和内部协议字段泄漏。已在原分支追加最小输出约束：用户格式/篇幅视为硬要求，完整性核验保持内部，最终正文不得暴露工具/协议元数据，并要求完整收尾。未采用完整输出后的自动重试或删字，因为这会破坏既有增量流式契约或误删合法答案；不增加硬限位、不追加付费调用。定向12项、完整离线109项、ruff与mypy均通过。
 - 2026-09-11：用户明确授权读取应用现有 DeepSeek 配置和 Credential Manager 密钥，执行两个新会话、每个5轮的真实 provider 验收，不设费用上限；不据此扩大会话/轮数或更改原运行硬限位。密钥仅进入测试进程内存，结果只保存脱敏指标与评分。开始准备基线/优化后对照，原无付费授权的描述为此前状态。
 - 2026-09-11：用户纠正为**仅测试优化后版本，两个独立新会话各5轮，不测试旧版**。已停止基线准备，不作前后 Token 下降结论。采用当前 C# TestHost 固定合成数据便于逐项核对，测试脚本为 `agent/tests/manual_evidence_acceptance.py`，不会进入默认 pytest；严格保留应用的 DeepSeek V4 Flash / Responses / low 配置、原运行限位与真实会话历史，不因验收结论继续追加新的付费会话。
@@ -244,4 +245,4 @@ KEEP：`models.py` 公共 answer/source/usage、Sidecar v2、Windows Chat/BuildH
 
 ## 完成摘要
 
-已在独立分支实现并自动验证：严格校验后精简模型证据、显式定向章节及父条件、绑定续读、运行内安全重复引用和程序强制Search→Read；最近最多4轮、24000字符策略及原限位不变。用户后续授权并收窄为仅新版两个五轮真实验收，该范围已完成，数据与结论见evaluation.md。核心事实/完整列表/来源/流式通过本题集核对；其后针对孤立尾字、冗余说明和协议字段观察追加了格式优先、静默核验、禁止内部元数据及完整收尾提示，离线回归通过，但未再付费复跑，不能宣称真实provider已消除全部随机表达问题。formatter过滤了本次注入指令，不能外推为模型层注入抵抗。未测试旧版，不作节费/Token下降结论；测试脚本前期11次用量未知请求可能产生额外费用，已明确披露。计划按更新后的验收范围标为completed，不打包、不push、不发布。
+已在独立分支实现并自动验证：严格校验后精简模型证据、显式定向章节及父条件、绑定续读、运行内安全重复引用和程序强制Search→Read；最近最多4轮、24000字符策略及原限位不变。用户后续授权并收窄为仅新版两个五轮真实验收，该范围已完成，数据与结论见evaluation.md。核心事实/完整列表/来源/流式通过本题集核对；其后针对孤立尾字、冗余说明和协议字段观察追加了格式优先、静默核验、禁止内部元数据及完整收尾提示，离线回归通过，但未再付费复跑，不能宣称真实provider已消除全部随机表达问题。formatter过滤了本次注入指令，不能外推为模型层注入抵抗。未测试旧版，不作节费/Token下降结论；测试脚本前期11次用量未知请求可能产生额外费用，已明确披露。计划按更新后的验收范围完成并归档，不打包、不push、不发布。
