@@ -7,7 +7,7 @@ html.dark .hp>div .text-golden {
 }
 
 html.dark {
-    --theme-site-background: #000 url(/images/main/Site-background-underground.jpg) center top / cover no-repeat fixed;
+    --theme-site-background: #5A433A url(/images/main/Site-background-underground.jpg) center top / cover no-repeat fixed;
 }
 
 html.dark {

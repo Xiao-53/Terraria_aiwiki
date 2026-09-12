@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Avalonia.Controls;
@@ -20,6 +21,19 @@ namespace Terraria_Wiki.Windows;
 
 internal sealed partial class MainWindow : Window
 {
+    private const int DwmwaUseImmersiveDarkMode = 20;
+    private const int DwmwaUseImmersiveDarkModeLegacy = 19;
+    private const int DwmwaBorderColor = 34;
+    private const int DwmwaCaptionColor = 35;
+    private const int DwmwaTextColor = 36;
+
+    [DllImport("dwmapi.dll")]
+    private static extern int DwmSetWindowAttribute(
+        nint hwnd,
+        int attribute,
+        ref int value,
+        int valueSize);
+
     private static readonly Uri WebView2DownloadUri = new(
         "https://developer.microsoft.com/microsoft-edge/webview2/",
         UriKind.Absolute);
@@ -90,6 +104,7 @@ internal sealed partial class MainWindow : Window
 
         Opened += OnOpened;
         Closing += OnClosing;
+        ActualThemeVariantChanged += (_, _) => ApplyNativeWindowTheme();
 
         var managedEntry = WindowsStartupClock.ManagedEntryMilliseconds;
         RecordStartupStage(
@@ -120,6 +135,7 @@ internal sealed partial class MainWindow : Window
 
     private async void OnOpened(object? sender, EventArgs args)
     {
+        ApplyNativeWindowTheme();
         var opened = ElapsedFromProcessStart();
         RecordStartupStage(
             WindowsStartupStage.WindowOpened,
@@ -186,6 +202,7 @@ internal sealed partial class MainWindow : Window
                 "light" => ThemeVariant.Light,
                 _ => ThemeVariant.Default,
             };
+            ApplyNativeWindowTheme();
 
             var viewerTimer = Stopwatch.StartNew();
             try
@@ -353,6 +370,70 @@ internal sealed partial class MainWindow : Window
     private bool IsDarkTheme() =>
         RequestedThemeVariant == ThemeVariant.Dark
         || (RequestedThemeVariant == ThemeVariant.Default && ActualThemeVariant == ThemeVariant.Dark);
+
+    private void ApplyNativeWindowTheme()
+    {
+        if (!OperatingSystem.IsWindows())
+            return;
+
+        var handle = TryGetPlatformHandle()?.Handle;
+        if (handle is null || handle == 0)
+            return;
+
+        var isDark = IsDarkTheme();
+        var darkMode = isDark ? 1 : 0;
+        var captionColor = isDark
+            ? ToColorRef(0x22, 0x26, 0x1F)
+            : ToColorRef(0xFF, 0xFF, 0xFF);
+        var borderColor = isDark
+            ? ToColorRef(0x34, 0x3A, 0x32)
+            : ToColorRef(0xDC, 0xE5, 0xD7);
+        var textColor = isDark
+            ? ToColorRef(0xFF, 0xFF, 0xFF)
+            : ToColorRef(0x00, 0x00, 0x00);
+
+        try
+        {
+            var darkModeResult = DwmSetWindowAttribute(
+                handle.Value,
+                DwmwaUseImmersiveDarkMode,
+                ref darkMode,
+                sizeof(int));
+            if (darkModeResult != 0)
+            {
+                _ = DwmSetWindowAttribute(
+                    handle.Value,
+                    DwmwaUseImmersiveDarkModeLegacy,
+                    ref darkMode,
+                    sizeof(int));
+            }
+
+            _ = DwmSetWindowAttribute(
+                handle.Value,
+                DwmwaCaptionColor,
+                ref captionColor,
+                sizeof(int));
+            _ = DwmSetWindowAttribute(
+                handle.Value,
+                DwmwaBorderColor,
+                ref borderColor,
+                sizeof(int));
+            _ = DwmSetWindowAttribute(
+                handle.Value,
+                DwmwaTextColor,
+                ref textColor,
+                sizeof(int));
+        }
+        catch (DllNotFoundException)
+        {
+        }
+        catch (EntryPointNotFoundException)
+        {
+        }
+    }
+
+    private static int ToColorRef(byte red, byte green, byte blue) =>
+        red | (green << 8) | (blue << 16);
 
     private void OnViewerNavigationCompleted(object? sender, WebViewNavigationCompletedEventArgs args)
     {
@@ -851,6 +932,7 @@ internal sealed partial class MainWindow : Window
             "light" => ThemeVariant.Light,
             _ => ThemeVariant.Default,
         };
+        ApplyNativeWindowTheme();
 
         if (!string.Equals(previous.ContentTheme, preferences.ContentTheme, StringComparison.Ordinal))
         {

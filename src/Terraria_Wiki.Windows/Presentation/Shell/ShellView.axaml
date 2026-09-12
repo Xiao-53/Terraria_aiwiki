@@ -180,22 +180,25 @@
                     IsVisible="{Binding Reader.IsWikiFavorite}" />
             </Grid>
           </Button>
-          <TextBox x:Name="WikiSearchInput" Grid.Column="4"
-                   MinWidth="180" MaxWidth="300" Margin="8,0,0,0"
-                   HorizontalAlignment="Stretch" VerticalAlignment="Center"
-                   Text="{Binding Wiki.Query, Mode=TwoWay}"
-                   IsEnabled="{Binding Wiki.IsAvailable}"
-                   PlaceholderText="输入关键词搜索…"
-                   AutomationProperties.AutomationId="WikiSearchInput"
-                   AutomationProperties.Name="Wiki 本地搜索" />
-          <Button Grid.Column="5" Classes="icon-button"
-                  Command="{Binding Wiki.SearchCommand}"
-                  ToolTip.Tip="搜索本地 Wiki"
-                  AutomationProperties.AutomationId="WikiSearchButton"
-                  AutomationProperties.Name="搜索本地 Wiki">
-            <PathIcon Width="18" Height="18"
-                      Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
-          </Button>
+          <StackPanel Grid.Column="5" Orientation="Horizontal" Spacing="4"
+                      HorizontalAlignment="Right" VerticalAlignment="Center">
+            <TextBox x:Name="WikiSearchInput"
+                     Width="300" MinWidth="180" MaxWidth="300"
+                     HorizontalAlignment="Right" VerticalAlignment="Center"
+                     Text="{Binding Wiki.Query, Mode=TwoWay}"
+                     IsEnabled="{Binding Wiki.IsAvailable}"
+                     PlaceholderText="输入关键词搜索…"
+                     AutomationProperties.AutomationId="WikiSearchInput"
+                     AutomationProperties.Name="Wiki 本地搜索" />
+            <Button Classes="icon-button"
+                    Command="{Binding Wiki.SearchCommand}"
+                    ToolTip.Tip="搜索本地 Wiki"
+                    AutomationProperties.AutomationId="WikiSearchButton"
+                    AutomationProperties.Name="搜索本地 Wiki">
+              <PathIcon Width="18" Height="18"
+                        Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
+            </Button>
+          </StackPanel>
         </Grid>
         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="8"
                     VerticalAlignment="Center" MaxWidth="560"
