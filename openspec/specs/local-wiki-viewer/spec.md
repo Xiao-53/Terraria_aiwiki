@@ -37,10 +37,10 @@
 
 - Windows 使用动态 `127.0.0.1:0` loopback，只接受精确当前 Host 的 GET/HEAD；拒绝 absolute target、路径穿越、反斜线、冒号和 NUL，不提供宽松 CORS。
 - build/publish 只从产品仓库的受控快照复制 Viewer HTML/CSS/JS、公共资源和 `iframe-bridge.js`。快照必须记录来源、固定提交、数量/hash 与许可提示；任何上游参考 checkout 不得成为 build/runtime 依赖。
-- `/src/*` 只通过 Application `Query.ReadAssetAsync`；页面与 Redirect 只通过 `Query.ReadAsync`。Application 与 Viewer 不再读写持久 `WikiHistory`；旧表/旧行只为数据兼容保留，返回仅使用按可信已提交页 token 校验的宿主内存栈。
+- `/src/*` 只通过 Application `Query.ReadAssetAsync`；页面与 Redirect 只通过 `Query.ReadAsync`。Application 与 Viewer 不再读写持久 `WikiHistory`；旧表/旧行只为数据兼容保留，页面导航仅使用按可信已提交页 token 校验的宿主内存后退/前进双栈。
 - outer host 与 C# 分别校验精确 origin/source、`req/res`、request ID 和方法；HTTP(S) 外链交给系统浏览器，未知或未支持方法返回可观察错误。
 - pause lease 停止 listener；释放后仅在宿主仍存活时按当前活动 Wiki 重启。退出后不得遗留 listener 或继续访问已释放 Application。
-- Avalonia 站点先通过内部 `ViewerPageCommitted` 报告实际 DOM 页面身份，再以 `ViewerReady` 报告首屏可交互；两者不扩展公共 Viewer 业务能力。WebView stop 最多等待 500 ms，listener 主动关闭活动连接并最多排空 1 秒。
+- Avalonia 站点先通过内部 `ViewerPageCommitted` 报告实际 DOM 页面身份，再以 `ViewerReady` 报告首屏可交互；两者不扩展公共 Viewer 业务能力。Viewer 普通新导航成功提交后清空前进栈；后退/前进分别在两栈之间移动当前页，目标渲染失败或取消时恢复原栈，重新绑定 session 时清空两栈。WebView stop 最多等待 500 ms，listener 主动关闭活动连接并最多排空 1 秒。
 - Windows 默认依赖系统 Evergreen WebView2；self-contained .NET 不等于捆绑 WebView2。Velopack Setup 声明官方 `webview2` bootstrap 前置；portable/Host probe 缺失时只提供 Microsoft 官方下载/修复入口，不捆绑 Fixed Version Chromium 或从未知 URL 下载。WebView2 profile/cache 固定在 `%LocalAppData%\Terraria AI Wiki\WebView2`，不得写入安装或 portable `current` payload。
 - 以上行为由 Windows 11 x64 验证支持；Android transport 仍保持开放，不能从 Windows 结论外推。
 

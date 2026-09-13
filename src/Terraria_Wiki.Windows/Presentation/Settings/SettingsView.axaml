@@ -107,15 +107,15 @@
               <TextBlock Text="阅读与搜索" Classes="section-title" />
               <Grid Classes="setting-row" ColumnDefinitions="*,Auto" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="鼠标侧键返回" FontWeight="SemiBold" />
+                  <TextBlock Text="鼠标侧键导航（后退/前进）" FontWeight="SemiBold" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                             VerticalAlignment="Center" HorizontalAlignment="Right">
                   <ToggleSwitch IsChecked="{Binding IsSideButtonBackEnabled, Mode=TwoWay}"
                                 OnContent="" OffContent=""
-                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="鼠标侧键返回" />
+                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="鼠标侧键导航（后退/前进）" />
                   <TextBlock Text="{Binding SideButtonStateText}" MinWidth="16"
-                             VerticalAlignment="Center" AutomationProperties.Name="鼠标侧键返回状态" />
+                             VerticalAlignment="Center" AutomationProperties.Name="鼠标侧键导航状态" />
                 </StackPanel>
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">

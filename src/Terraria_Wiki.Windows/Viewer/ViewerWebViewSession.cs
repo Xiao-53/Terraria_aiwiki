@@ -12,6 +12,7 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
     private readonly ViewerBridge _bridge;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly ConcurrentDictionary<string, TaskCompletionSource<ViewerEnvelope>> _pending = new(StringComparer.Ordinal);
+    private readonly SemaphoreSlim _historyNavigationGate = new(1, 1);
     private readonly object _readyGate = new();
     private readonly object _identityGate = new();
     private TaskCompletionSource _ready = NewReadyCompletion();
@@ -52,6 +53,7 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
         get { lock (_identityGate) return _currentPage; }
     }
     public bool HasHistory => _bridge.HasHistory;
+    public bool HasForwardHistory => _bridge.HasForwardHistory;
 
     public void Navigate(Uri baseUri, int wikiId, string wikiDisplayTitle, bool forceReload = false)
     {
@@ -94,21 +96,43 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
 
     public async Task BackAsync(CancellationToken cancellationToken = default)
     {
-        var command = _bridge.TryTakeBackCommand();
-        if (command is null)
-        {
-            var error = new ViewerProtocolError("viewer-history-empty", "There is no previous Viewer page.");
-            ProtocolError?.Invoke(this, error);
-            throw new ViewerProtocolException(error.Code, error.Message);
-        }
+        await _historyNavigationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
-            await SendCommandAsync(command.Method, command.Data, cancellationToken).ConfigureAwait(false);
+            var current = await ReadCurrentHistoryEntryAsync(cancellationToken).ConfigureAwait(false);
+            var command = _bridge.TryTakeBackCommand(current);
+            if (command is null)
+            {
+                var error = new ViewerProtocolError("viewer-history-empty", "There is no previous Viewer page.");
+                ProtocolError?.Invoke(this, error);
+                throw new ViewerProtocolException(error.Code, error.Message);
+            }
+            await SendHistoryCommandAsync(command, cancellationToken).ConfigureAwait(false);
         }
-        catch
+        finally
         {
-            _bridge.RestoreBackCommand(command);
-            throw;
+            _historyNavigationGate.Release();
+        }
+    }
+
+    public async Task ForwardAsync(CancellationToken cancellationToken = default)
+    {
+        await _historyNavigationGate.WaitAsync(cancellationToken).ConfigureAwait(false);
+        try
+        {
+            var current = await ReadCurrentHistoryEntryAsync(cancellationToken).ConfigureAwait(false);
+            var command = _bridge.TryTakeForwardCommand(current);
+            if (command is null)
+            {
+                var error = new ViewerProtocolError("viewer-forward-history-empty", "There is no next Viewer page.");
+                ProtocolError?.Invoke(this, error);
+                throw new ViewerProtocolException(error.Code, error.Message);
+            }
+            await SendHistoryCommandAsync(command, cancellationToken).ConfigureAwait(false);
+        }
+        finally
+        {
+            _historyNavigationGate.Release();
         }
     }
 
@@ -116,6 +140,25 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
         string method,
         string data,
         CancellationToken cancellationToken = default)
+    {
+        await SendRequestAsync(method, data, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task<string?> SendCommandDataAsync(
+        string method,
+        string data,
+        CancellationToken cancellationToken = default)
+    {
+        var response = await SendRequestAsync(method, data, cancellationToken).ConfigureAwait(false);
+        return response.Data.ValueKind == JsonValueKind.String
+            ? response.Data.GetString()
+            : response.Data.GetRawText();
+    }
+
+    private async Task<ViewerEnvelope> SendRequestAsync(
+        string method,
+        string data,
+        CancellationToken cancellationToken)
     {
         ObjectDisposedException.ThrowIf(_disposed != 0, this);
         if (_baseUri is null || !IsReady)
@@ -135,6 +178,7 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             var response = await completion.Task.ConfigureAwait(false);
             if (response.Error is not null)
                 throw new ViewerProtocolException(response.Error.Code, response.Error.Message);
+            return response;
         }
         finally
         {
@@ -223,17 +267,42 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             return;
         }
 
-        var result = await _bridge.HandleOuterMessageAsync(body, baseUri, _lifetime.Token).ConfigureAwait(false);
-        if (result is null)
-            return;
-
+        var holdsHistoryGate = envelope.Method is "WikiBackAsync" or "WikiForwardAsync";
+        if (holdsHistoryGate)
+            await _historyNavigationGate.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         try
         {
-            await InvokeScriptOnUiThreadAsync($"window.terrariaWikiHost?.receive({result.ResponseJson})").ConfigureAwait(false);
-            if (result.Error is not null)
-                ProtocolError?.Invoke(this, result.Error);
+            var result = await _bridge.HandleOuterMessageAsync(body, baseUri, _lifetime.Token).ConfigureAwait(false);
+            if (result is null)
+                return;
+
+            var responseJson = result.ResponseJson;
+            var error = result.Error;
             if (result.Command is not null)
-                await SendCommandAsync(result.Command.Method, result.Command.Data, _lifetime.Token).ConfigureAwait(false);
+            {
+                try
+                {
+                    await SendCommandAsync(result.Command.Method, result.Command.Data, _lifetime.Token).ConfigureAwait(false);
+                }
+                catch (OperationCanceledException) when (!_lifetime.IsCancellationRequested)
+                {
+                    RestoreFailedHistoryCommand(result.Command);
+                    error = new ViewerProtocolError("viewer-navigation-cancelled", "The Viewer navigation was cancelled.");
+                    responseJson = ViewerBridge.CreateErrorResponse(envelope.Id, error);
+                }
+                catch (Exception exception)
+                {
+                    RestoreFailedHistoryCommand(result.Command);
+                    error = exception is ViewerProtocolException protocol
+                        ? new ViewerProtocolError(protocol.Code, protocol.Message)
+                        : new ViewerProtocolError("viewer-navigation-failed", "The Viewer navigation failed.");
+                    responseJson = ViewerBridge.CreateErrorResponse(envelope.Id, error);
+                }
+            }
+
+            await InvokeScriptOnUiThreadAsync($"window.terrariaWikiHost?.receive({responseJson})").ConfigureAwait(false);
+            if (error is not null)
+                ProtocolError?.Invoke(this, error);
         }
         catch (OperationCanceledException)
         {
@@ -241,6 +310,50 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
         catch (Exception exception)
         {
             StatusChanged?.Invoke(this, $"Viewer bridge failed: {exception.Message}");
+        }
+        finally
+        {
+            if (holdsHistoryGate)
+                _historyNavigationGate.Release();
+        }
+    }
+
+    private async Task SendHistoryCommandAsync(
+        ViewerOutboundCommand command,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            await SendCommandAsync(command.Method, command.Data, cancellationToken).ConfigureAwait(false);
+        }
+        catch
+        {
+            RestoreFailedHistoryCommand(command);
+            throw;
+        }
+    }
+
+    private void RestoreFailedHistoryCommand(ViewerOutboundCommand command)
+    {
+        if (command.Transition is { } transition)
+            _bridge.RestoreNavigation(transition);
+        else
+            _bridge.RestoreBackCommand(command);
+    }
+
+    private async Task<ViewerHistoryEntry> ReadCurrentHistoryEntryAsync(CancellationToken cancellationToken)
+    {
+        var data = await SendCommandDataAsync("GetCurrentNavigationState", "", cancellationToken).ConfigureAwait(false);
+        if (string.IsNullOrWhiteSpace(data) || string.Equals(data, "null", StringComparison.Ordinal))
+            throw new ViewerProtocolException("viewer-history-state-invalid", "The current Viewer page state is unavailable.");
+        try
+        {
+            return JsonSerializer.Deserialize<ViewerHistoryEntry>(data, JsonOptions)
+                ?? throw new ViewerProtocolException("viewer-history-state-invalid", "The current Viewer page state is invalid.");
+        }
+        catch (JsonException exception)
+        {
+            throw new ViewerProtocolException("viewer-history-state-invalid", exception.Message);
         }
     }
 

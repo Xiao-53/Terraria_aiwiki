@@ -581,6 +581,7 @@ internal sealed partial class MainWindow : Window
             await session.OpenPageAsync("Smoke Alias", _lifetime.Token);
             await session.ChangeThemeAsync(isDark: true, _lifetime.Token);
             await session.BackAsync(_lifetime.Token);
+            await session.ForwardAsync(_lifetime.Token);
             await _shellView.WebView.InvokeScript(
                 "fetch('/src/smoke.ogg').then(r=>r.arrayBuffer()).then(b=>b.byteLength.toString())");
 

@@ -33,12 +33,12 @@ except `Viewer/Web/_common/wiki-app-common.js`, whose product copy comes from `d
 includes the later bounded lifecycle behavior introduced by product commit `5d1d52f`. The current
 product override additionally reports a one-time read token and navigation version only after the
 latest page DOM is committed, allowing the Windows host to publish trusted canonical page identity;
-its SHA-256 is `c5cd8fac92a395df8685f1392d9ec3864be6b4178d46782bf2f35c20e0bb02e8`.
+its SHA-256 is `bbac8f177255d2bbfc3153d4040d3e886703fa670d6a3992b74363cc6fa50997`.
 
 For the current checkout, hashing the LF-delimited sequence of per-file SHA-256 values in ordinal
-repository-path order gives `ca4f78dbc48ffa2d2b61c7324ca5b5534bc777598c9782b3d583ed7e78c2f27c`
+repository-path order gives `89abf0d0fdcc9fece423642bd63b6b4dd5d46ec2ada25769af3b075d2d36f4c8`
 for the 94-file runtime asset set and
-`abecefdca1496042d2c88d6d078dfe7fd1cf2761ffea73c1b3e8146fece28c98` for the complete 96-file
+`f764fa1fd505a8db279a168f5cf639bdae892480e99ec05e0e9412915b412f03` for the complete 96-file
 support set. The original migration values and the pre-commit product values remain recorded in
 ADR 0007 and the archived migration/icon plans. Paths determine ordering but are not themselves
 hashed; content changes alter the recorded value.

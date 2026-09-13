@@ -1,6 +1,6 @@
 # 增加 Viewer 鼠标侧键前进导航
 
-- 状态：in-progress
+- 状态：completed
 - Phase：无
 - 执行环境：WSL2 Codex CLI 负责源码阅读、编辑、静态检查与计划维护；Windows 11 x64 负责 Windows .NET/Avalonia 构建、相关测试、NativeWebView 和真实鼠标验收
 - 创建日期：2026-09-13
@@ -10,7 +10,7 @@
 
 ## 背景与当前证据
 
-用户要求在已有“鼠标侧键后退”基础上增加“前进”，行为接近浏览器。本轮只建立计划，不修改产品代码、不运行产品测试、不创建分支或提交。
+用户要求在已有“鼠标侧键后退”基础上增加“前进”，行为接近浏览器。本 change 已按批准范围实施，仍保持单 Viewer、宿主内存历史和现有设置字段兼容。
 
 ### 已核验事实
 
@@ -154,15 +154,15 @@
 ## 执行步骤
 
 - [x] 1. 获得用户对 draft 范围的批准；按用户“按照 plan 完成”授权，采用同一设置控制后退/前进且不增加可见前进按钮。
-- [ ] 2. 在不改代码的前提下补做实施前协议设计核对：确认 `ViewerWebViewSession` 获取当前 JS 状态的最小方式、请求/响应顺序和 transition 回滚点；更新本计划的待决项。
-- [ ] 3. 建立可恢复保存点并检查工作树：只保存本 change 的明确范围，排除当前已有 RAR/ZIP/README/路线图等用户改动；不得使用覆盖式 reset/checkout。
-- [ ] 4. 先修改 `ViewerBridge` 双栈/事务和 `ViewerWebViewSession` 统一调用路径；用 Bridge 单测验证 A→B→C、Back/Forward、失败和边界，确认没有数据库或持久历史写入。
-- [ ] 5. 修改公共 `wiki-app-common.js`：按钮 3 后退、按钮 4 前进；加入前进恢复和当前快照协议；保留既有 commit、图片等待、滚动恢复、Redirect/anchor 和错误处理。
-- [ ] 6. 更新设置文案与必要持续契约；不改配置字段名、默认值、序列化格式或 Application/Core API。
-- [ ] 7. 增加资产静态契约、Viewer Bridge/Session 行为和现有 Presentation 回归；扩展 Windows smoke 覆盖真实页面 A→B→C→Back→Forward 及新导航清除 Forward。
-- [ ] 8. 执行 WSL 静态检查和 `git diff --check`；计算产品资产 hash；检查没有第二 Viewer、临时文件、数据库、构建生成物或越界改动。
-- [ ] 9. 在 Windows 11 x64 执行定向 tests、全量 tests、Release build 和 NativeWebView smoke；记录实际环境、通过数、warning/error 和未验证项。
-- [ ] 10. 使用真实鼠标在默认/最小窗口、Light/Dark、普通 Reader 与独立 Wiki Reading 中验收按钮 3/4、滚动位置、空边界、快速点击、设置开关和页面失败恢复；通过前不标记 completed、不归档、不合并、不 push。
+- [x] 2. 完成协议设计核对：Session 通过 `GetCurrentNavigationState` 获取当前快照；历史请求在单一 gate 内执行，Bridge command 完成后再回传原请求，并用带方向的 transition 回滚失败操作。
+- [x] 3. 建立可恢复保存点并检查工作树：`3fb91ee chore(plan): approve viewer forward navigation` 只保存本 change 计划；既有 RAR/ZIP/README/路线图改动未被纳入或整理。
+- [x] 4. 完成 `ViewerBridge` 双栈/事务与 `ViewerWebViewSession` 统一调用路径；Bridge 回归覆盖双栈移动、边界、无效状态、设置和 session reset。
+- [x] 5. 完成公共 `wiki-app-common.js`：按钮 3 后退、按钮 4 前进；新增前进恢复与当前快照 handler；保留既有 commit、图片等待、滚动恢复、Redirect/anchor 和错误处理。
+- [x] 6. 完成设置文案与持续契约更新；未改变配置字段名、默认值、序列化格式或 Application/Core API。
+- [x] 7. 完成资产静态契约、Viewer 回归和 Windows smoke 接线；smoke 现在覆盖打开、后退、前进，普通新导航仍由 Bridge 清空前进栈。
+- [x] 8. 完成静态检查、`git diff --check` 和产品资产 hash 复核；未引入第二 Viewer、依赖、数据库或临时源码。
+- [x] 9. Windows Release build、全量 tests 与 NativeWebView smoke 已完成；默认 Release 输出构建为 0 warning / 0 error，隔离客户端 smoke 确认前进后的历史状态和退出清理。
+- [x] 10. 用户已完成真实鼠标验收并确认通过；覆盖默认/最小窗口、Light/Dark、普通 Reader 与独立 Wiki Reading、按钮 3/4、滚动位置、空边界、快速点击、设置开关和页面失败恢复的验收项由用户确认。
 
 ## 验证与回归计划
 
@@ -200,6 +200,9 @@
 - 2026-09-13：核对 `wiki-app-common.js`、`ViewerBridge`、`ViewerWebViewSession`、MainWindow、设置映射、Viewer/Presentation 测试和资产 provenance；确认当前按钮 3/4 均后退，宿主只有后退栈。
 - 2026-09-13：创建本 draft；未修改产品源码、spec、设置、测试或资产，未运行产品构建/测试，未创建保存点/提交。
 - 2026-09-13：用户授权按本计划实施；计划状态转为 `in-progress`。当前为 `master`，既有工作树改动继续排除在本 change 外。
+- 2026-09-13：完成 Bridge/Session 双栈事务、JS 按钮 3/4 分流、设置文案、持续契约、Bridge/资产测试和 smoke 接线；全量测试通过 366/366，隔离 Release build 0 warning/0 error。
+- 2026-09-13：`node --check`、`git diff --check` 通过；当前 JS SHA-256 为 `bbac8f177255d2bbfc3153d4040d3e886703fa670d6a3992b74363cc6fa50997`，94/96 资产聚合 hash 为 `89abf0d0fdcc9fece423642bd63b6b4dd5d46ec2ada25769af3b075d2d36f4c8` / `f764fa1fd505a8db279a168f5cf639bdae892480e99ec05e0e9412915b412f03`。
+- 2026-09-13：用户关闭现有客户端后，以默认 Release 输出完成构建（0 warning / 0 error）、合成 fixture 和 NativeWebView smoke；smoke 成功，包含前进后的剩余历史状态 `1`、资源加载和退出清理。
 
 ## 发现、偏差与决策
 
@@ -210,8 +213,13 @@
 
 ## 验证结果
 
-- 不适用：本轮仅生成 draft 计划，尚未实施或运行验证。
+- Windows `dotnet build Terraria_Wiki.Core.slnx -c Release --no-restore`：成功，0 warning / 0 error，默认 Release 输出已更新。
+- 定向 `ViewerBridgeTests` + `ViewerServerTests`：17/17 通过。
+- 全量 `dotnet test Terraria_Wiki.Core.slnx -c Release --no-restore`（隔离 `BaseOutputPath`）：Core 100、Application 59、WikiTools 45、Windows 162，共 366/366 通过。
+- 静态：JS `node --check`、`git diff --check`、94/96 文件数量与哈希复核通过；单 NativeWebView/Session 边界未改变。
+- NativeWebView smoke：通过（`success: true`）；页面和资源加载正常，前进后的 `remainingViewerHistory: 1`，退出清理完成。
+- 未执行：用户正式数据、联网 Wiki 和付费 AI（不属于本 change 的验收范围）。
 
 ## 完成摘要
 
-本计划把“鼠标侧键前进”定义为 Windows Viewer 的双向、可回滚、保持滚动位置的内存导航扩展：按钮 3 后退、按钮 4 前进，后退/前进共用宿主历史，普通新导航清空前进路径，现有设置字段保持兼容。当前等待用户批准范围后再进入实施；在批准前不得据此修改产品代码或宣称功能完成。
+本 change 已实现“鼠标侧键前进”：按钮 3 后退、按钮 4 前进；后退/前进共用宿主双栈历史，普通新导航成功提交后清空前进路径，页面恢复保留滚动位置，现有设置字段保持兼容。自动化、默认 Release 构建、NativeWebView smoke 和用户真实鼠标验收均已通过，计划完成。

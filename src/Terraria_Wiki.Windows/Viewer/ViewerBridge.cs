@@ -36,15 +36,17 @@ internal sealed class ViewerBridge
     private readonly ConcurrentDictionary<string, byte> _activeRequestIds = new(StringComparer.Ordinal);
     private readonly ConcurrentDictionary<string, PendingPageIdentity> _pendingPages = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<string> _pendingPageOrder = new();
-    private readonly ConcurrentDictionary<string, byte> _committedPageTokens = new(StringComparer.Ordinal);
+    private readonly ConcurrentDictionary<string, string> _committedPageTokens = new(StringComparer.Ordinal);
     private readonly ConcurrentQueue<string> _committedTokenOrder = new();
     private readonly object _historyGate = new();
     private readonly object _commitGate = new();
     private readonly List<ViewerHistoryEntry> _history = [];
+    private readonly List<ViewerHistoryEntry> _forwardHistory = [];
     private long _generation;
     private int _wikiId;
     private string _wikiDisplayTitle = string.Empty;
     private long _lastCommittedNavigationVersion;
+    private long _lastSavedNavigationVersion;
     private string? _currentPageToken;
 
     public ViewerBridge(
@@ -64,6 +66,14 @@ internal sealed class ViewerBridge
     public bool HasHistory
     {
         get { lock (_historyGate) return _history.Count > 0; }
+    }
+    public IReadOnlyList<ViewerHistoryEntry> ForwardHistory
+    {
+        get { lock (_historyGate) return _forwardHistory.ToArray(); }
+    }
+    public bool HasForwardHistory
+    {
+        get { lock (_historyGate) return _forwardHistory.Count > 0; }
     }
 
     public event EventHandler<ViewerBridgeRequestCompleted>? RequestCompleted;
@@ -85,6 +95,7 @@ internal sealed class ViewerBridge
             Volatile.Write(ref _wikiDisplayTitle, wikiDisplayTitle.Trim());
             Volatile.Write(ref _generation, generation);
             Volatile.Write(ref _lastCommittedNavigationVersion, 0);
+            Volatile.Write(ref _lastSavedNavigationVersion, 0);
             Volatile.Write(ref _currentPageToken, null);
             _pendingPages.Clear();
             _pendingPageOrder.Clear();
@@ -92,7 +103,10 @@ internal sealed class ViewerBridge
             _committedTokenOrder.Clear();
         }
         lock (_historyGate)
+        {
             _history.Clear();
+            _forwardHistory.Clear();
+        }
         HistoryChanged?.Invoke(this, false);
     }
 
@@ -117,6 +131,12 @@ internal sealed class ViewerBridge
         catch (OperationCanceledException)
         {
             var result = Error(envelope.Id, "cancelled", "The Viewer operation was cancelled.");
+            RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
+            return result;
+        }
+        catch (ViewerProtocolException exception)
+        {
+            var result = Error(envelope.Id, exception.Code, exception.Message);
             RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
@@ -208,7 +228,7 @@ internal sealed class ViewerBridge
                         return Error(envelope.Id, "viewer-page-commit-stale", "The Viewer page commit is older than the displayed page.");
                     Volatile.Write(ref _lastCommittedNavigationVersion, commit.NavigationVersion);
                     Volatile.Write(ref _currentPageToken, commit.ReadToken);
-                    _committedPageTokens[commit.ReadToken] = 0;
+                    _committedPageTokens[commit.ReadToken] = pending.CanonicalTitle;
                     _committedTokenOrder.Enqueue(commit.ReadToken);
                     while (_committedPageTokens.Count > 64 && _committedTokenOrder.TryDequeue(out var expiredToken))
                         _committedPageTokens.TryRemove(expiredToken, out _);
@@ -229,27 +249,42 @@ internal sealed class ViewerBridge
                     ?? throw new InvalidDataException("The Viewer history entry is invalid.");
                 lock (_commitGate)
                 {
-                    if (string.IsNullOrWhiteSpace(entry.ReadToken)
-                        || !_committedPageTokens.ContainsKey(entry.ReadToken)
-                        || entry.NavigationVersion != _lastCommittedNavigationVersion)
+                    if (!TryNormalizeHistoryEntry(entry, requireCurrentNavigation: true, out var normalized))
                         return Error(envelope.Id, "viewer-history-expired", "The Viewer history entry belongs to an expired page.");
-                    if (!string.IsNullOrWhiteSpace(entry.Title))
+                    if (normalized.Title is not null
+                        && entry.NavigationVersion != Volatile.Read(ref _lastSavedNavigationVersion))
                     {
                         lock (_historyGate)
-                            _history.Add(entry);
+                        {
+                            _history.Add(normalized);
+                            _forwardHistory.Clear();
+                        }
+                        Volatile.Write(ref _lastSavedNavigationVersion, entry.NavigationVersion);
+                        HistoryChanged?.Invoke(this, true);
                     }
                 }
-                if (!string.IsNullOrWhiteSpace(entry.Title))
-                    HistoryChanged?.Invoke(this, true);
                 return Success(envelope.Id, "true");
             }
             case "WikiBackAsync":
             {
                 if (Volatile.Read(ref _sideButtonBackEnabled) == 0)
                     return Error(envelope.Id, "side-button-back-disabled", "Mouse side-button navigation is disabled in Application settings.");
-                var command = TryTakeBackCommand();
+                var command = string.IsNullOrWhiteSpace(data)
+                    ? TryTakeBackCommand()
+                    : TryTakeBackCommand(ParseCurrentHistoryEntry(data!, envelope.Method));
                 if (command is null)
                     return Error(envelope.Id, "viewer-history-empty", "There is no previous Viewer page.");
+                return Success(envelope.Id, "true", command);
+            }
+            case "WikiForwardAsync":
+            {
+                if (Volatile.Read(ref _sideButtonBackEnabled) == 0)
+                    return Error(envelope.Id, "side-button-forward-disabled", "Mouse side-button navigation is disabled in Application settings.");
+                if (string.IsNullOrWhiteSpace(data))
+                    return Error(envelope.Id, "viewer-forward-state-invalid", "The current Viewer page state is required for forward navigation.");
+                var command = TryTakeForwardCommand(ParseCurrentHistoryEntry(data!, envelope.Method));
+                if (command is null)
+                    return Error(envelope.Id, "viewer-forward-history-empty", "There is no next Viewer page.");
                 return Success(envelope.Id, "true", command);
             }
             case "OpenExternalWebsite":
@@ -301,9 +336,54 @@ internal sealed class ViewerBridge
             : new ViewerOutboundCommand("BackToPage", JsonSerializer.Serialize(entry, JsonOptions));
     }
 
+    public ViewerOutboundCommand? TryTakeBackCommand(ViewerHistoryEntry currentEntry)
+    {
+        var current = ValidateCurrentHistoryEntry(currentEntry);
+        ViewerHistoryEntry? target;
+        lock (_historyGate)
+        {
+            if (_history.Count == 0)
+                return null;
+            target = _history[^1];
+            _history.RemoveAt(_history.Count - 1);
+            _forwardHistory.Add(current);
+        }
+
+        HistoryChanged?.Invoke(this, HasHistory);
+        return new ViewerOutboundCommand(
+            "BackToPage",
+            JsonSerializer.Serialize(target, JsonOptions),
+            new ViewerNavigationTransition("back", current, target, Volatile.Read(ref _generation)));
+    }
+
+    public ViewerOutboundCommand? TryTakeForwardCommand(ViewerHistoryEntry currentEntry)
+    {
+        var current = ValidateCurrentHistoryEntry(currentEntry);
+        ViewerHistoryEntry? target;
+        lock (_historyGate)
+        {
+            if (_forwardHistory.Count == 0)
+                return null;
+            target = _forwardHistory[^1];
+            _forwardHistory.RemoveAt(_forwardHistory.Count - 1);
+            _history.Add(current);
+        }
+
+        HistoryChanged?.Invoke(this, HasHistory);
+        return new ViewerOutboundCommand(
+            "ForwardToPage",
+            JsonSerializer.Serialize(target, JsonOptions),
+            new ViewerNavigationTransition("forward", current, target, Volatile.Read(ref _generation)));
+    }
+
     public void RestoreBackCommand(ViewerOutboundCommand command)
     {
         ArgumentNullException.ThrowIfNull(command);
+        if (command.Transition is not null)
+        {
+            RestoreNavigation(command.Transition);
+            return;
+        }
         if (!string.Equals(command.Method, "BackToPage", StringComparison.Ordinal))
             return;
         var entry = JsonSerializer.Deserialize<ViewerHistoryEntry>(command.Data, JsonOptions);
@@ -318,6 +398,40 @@ internal sealed class ViewerBridge
                 _history.Add(entry);
         }
         HistoryChanged?.Invoke(this, true);
+    }
+
+    public void RestoreNavigation(ViewerNavigationTransition transition)
+    {
+        ArgumentNullException.ThrowIfNull(transition);
+        lock (_commitGate)
+        {
+            if (transition.Generation != Volatile.Read(ref _generation)
+                || !string.Equals(Volatile.Read(ref _currentPageToken), transition.Current.ReadToken, StringComparison.Ordinal)
+                || string.IsNullOrWhiteSpace(transition.Current.ReadToken)
+                || !_committedPageTokens.ContainsKey(transition.Current.ReadToken))
+            {
+                return;
+            }
+
+            lock (_historyGate)
+            {
+                if (string.Equals(transition.Direction, "back", StringComparison.Ordinal))
+                {
+                    RemoveLastMatching(_forwardHistory, transition.Current);
+                    _history.Add(transition.Target);
+                }
+                else if (string.Equals(transition.Direction, "forward", StringComparison.Ordinal))
+                {
+                    RemoveLastMatching(_history, transition.Current);
+                    _forwardHistory.Add(transition.Target);
+                }
+                else
+                {
+                    return;
+                }
+            }
+        }
+        HistoryChanged?.Invoke(this, HasHistory);
     }
 
     private void TrimPendingPages()
@@ -336,8 +450,74 @@ internal sealed class ViewerBridge
     private static string? GetStringData(JsonElement data) =>
         data.ValueKind == JsonValueKind.String ? data.GetString() : null;
 
+    private ViewerHistoryEntry ParseCurrentHistoryEntry(string data, string method)
+    {
+        try
+        {
+            return JsonSerializer.Deserialize<ViewerHistoryEntry>(data, JsonOptions)
+                ?? throw new ViewerProtocolException(
+                    "viewer-history-current-invalid",
+                    "The current Viewer page state is invalid.");
+        }
+        catch (JsonException)
+        {
+            throw new ViewerProtocolException(
+                "viewer-history-current-invalid",
+                $"Viewer method '{method}' received invalid page state.");
+        }
+    }
+
+    private ViewerHistoryEntry ValidateCurrentHistoryEntry(ViewerHistoryEntry entry)
+    {
+        lock (_commitGate)
+        {
+            if (!TryNormalizeHistoryEntry(entry, requireCurrentNavigation: true, out var normalized)
+                || !string.Equals(entry.ReadToken, Volatile.Read(ref _currentPageToken), StringComparison.Ordinal))
+            {
+                throw new ViewerProtocolException(
+                    "viewer-history-current-expired",
+                    "The current Viewer page state is expired.");
+            }
+            return normalized;
+        }
+    }
+
+    private bool TryNormalizeHistoryEntry(
+        ViewerHistoryEntry entry,
+        bool requireCurrentNavigation,
+        out ViewerHistoryEntry normalized)
+    {
+        normalized = entry;
+        if (string.IsNullOrWhiteSpace(entry.ReadToken)
+            || !double.IsFinite(entry.Position)
+            || entry.Position < 0
+            || !_committedPageTokens.TryGetValue(entry.ReadToken, out var canonicalTitle))
+            return false;
+        if (requireCurrentNavigation && entry.NavigationVersion != _lastCommittedNavigationVersion)
+            return false;
+        normalized = entry with
+        {
+            Title = canonicalTitle,
+            NavigationVersion = _lastCommittedNavigationVersion,
+        };
+        return true;
+    }
+
+    private static void RemoveLastMatching(
+        List<ViewerHistoryEntry> entries,
+        ViewerHistoryEntry expected)
+    {
+        if (entries.Count > 0 && entries[^1] == expected)
+            entries.RemoveAt(entries.Count - 1);
+    }
+
     private static ViewerDispatchResult Success(string id, string data, ViewerOutboundCommand? command = null) =>
         new(JsonSerializer.Serialize(new ViewerResponseEnvelope("res", id, data, null), JsonOptions), command, null);
+
+    internal static string CreateErrorResponse(string id, ViewerProtocolError error) =>
+        JsonSerializer.Serialize(
+            new ViewerResponseEnvelope("res", id, "null", error),
+            JsonOptions);
 
     private static ViewerDispatchResult Error(string id, string code, string message) =>
         new(
@@ -391,7 +571,15 @@ internal sealed record ViewerResponseEnvelope(string Type, string Id, string Dat
 internal sealed record ViewerProtocolError(string Code, string Message);
 internal sealed record ViewerDispatchResult(string ResponseJson, ViewerOutboundCommand? Command, ViewerProtocolError? Error);
 internal sealed record ViewerBridgeRequestCompleted(string Method, ViewerDispatchResult Result, long Generation);
-internal sealed record ViewerOutboundCommand(string Method, string Data);
+internal sealed record ViewerOutboundCommand(
+    string Method,
+    string Data,
+    ViewerNavigationTransition? Transition = null);
+internal sealed record ViewerNavigationTransition(
+    string Direction,
+    ViewerHistoryEntry Current,
+    ViewerHistoryEntry Target,
+    long Generation);
 internal sealed record ViewerPage(string Title, string Content, string LastModified, string ReadToken);
 internal sealed record ViewerTitleAnchor(string Title, string? Anchor);
 internal sealed record ViewerHistoryEntry(

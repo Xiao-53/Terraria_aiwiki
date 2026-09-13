@@ -131,6 +131,10 @@ public sealed class ViewerServerTests
         Assert.True(handlers < ready && ready < redirect);
         Assert.True(redirect < contentWritten && contentWritten < committed && committed < rendered && rendered < refresh);
         Assert.Contains("navigationVersion: navigationId", script, StringComparison.Ordinal);
+        Assert.Contains("e.button === 3 ? \"WikiBackAsync\" : \"WikiForwardAsync\"", script, StringComparison.Ordinal);
+        Assert.Contains("registerHandler(\"ForwardToPage\"", script, StringComparison.Ordinal);
+        Assert.Contains("registerHandler(\"GetCurrentNavigationState\"", script, StringComparison.Ordinal);
+        Assert.Contains("JSON.stringify(getCurrentNavigationState())", script, StringComparison.Ordinal);
         Assert.Contains("urlParams.get('host') === 'Avalonia'", script, StringComparison.Ordinal);
         Assert.Contains("window.parent.terrariaWikiHost", script, StringComparison.Ordinal);
     }

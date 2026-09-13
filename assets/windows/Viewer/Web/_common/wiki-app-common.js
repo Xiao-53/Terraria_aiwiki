@@ -3,13 +3,14 @@
  *
  * 该脚本运行在 MAUI 应用内嵌的 WebView 中，负责：
  * 1. 通过 iframeBridge 与 C# 原生代码通信（页面加载、历史记录、主题切换等）；
- * 2. 处理页面内的链接点击、鼠标侧键返回、图片查看等交互；
+ * 2. 处理页面内的链接点击、鼠标侧键前进后退、图片查看等交互；
  * 3. 桌面端（非移动端）提供自定义右键菜单（复制文本/图片、打开源码页面）。
  */
 (function () {
     // 导航版本号：每次发起导航都会自增。
     // 用于丢弃过期导航的异步结果，避免快速连续点击时旧页面覆盖新页面。
     let navigationVersion = 0;
+    let sideNavigationInFlight = false;
 
     /**
      * 调用 C# 原生方法（异步）。
@@ -104,6 +105,17 @@
             return null;
         });
 
+        // 前进历史中的某一页：msg 为 JSON 字符串，包含 Title（标题）与 Position（滚动位置）
+        window.iframeBridge.registerHandler("ForwardToPage", async (msg) => {
+            const args = JSON.parse(msg);
+            await forwardToPage(args.title, args.position, config);
+            return null;
+        });
+
+        // 返回当前页面的宿主历史快照，供 Reader 顶部后退与侧键导航共用同一历史栈。
+        window.iframeBridge.registerHandler("GetCurrentNavigationState", () =>
+            JSON.stringify(getCurrentNavigationState()));
+
         // 返回首页并滚到顶部
         window.iframeBridge.registerHandler("BackHome", async () => {
             // 显示加载遮罩，避免内容替换瞬间的视觉跳跃
@@ -143,7 +155,7 @@
     }
 
     /**
-     * 绑定页面内的导航交互：链接点击与鼠标侧键返回。
+     * 绑定页面内的导航交互：链接点击与鼠标侧键前进后退。
      * @param {object} config 配置对象
      */
     function bindNavigation(config) {
@@ -182,13 +194,43 @@
             }
         });
 
-        // 鼠标侧键（前进/后退键）按下 -> 通知 C# 执行返回操作
+        // 鼠标侧键按下：button 3 为后退，button 4 为前进。
         document.addEventListener('mouseup', function (e) {
             if (e.button === 3 || e.button === 4) {
                 e.preventDefault();
-                callCSharpAsync("WikiBackAsync", "");
+                const method = e.button === 3 ? "WikiBackAsync" : "WikiForwardAsync";
+                requestSideNavigation(method);
             }
         });
+    }
+
+    /**
+     * 请求宿主执行一次侧键导航；等待宿主完成页面恢复，避免快速点击并行改写两套历史。
+     * @param {string} method C# 侧的后退或前进方法名
+     */
+    async function requestSideNavigation(method) {
+        if (sideNavigationInFlight) return;
+        sideNavigationInFlight = true;
+        try {
+            await callCSharpAsync(method, JSON.stringify(getCurrentNavigationState()));
+        } catch (error) {
+            console.error('Viewer side-button navigation failed:', error);
+        } finally {
+            sideNavigationInFlight = false;
+        }
+    }
+
+    /**
+     * 获取当前页面的历史快照。规范标题和 readToken 会由宿主 Bridge 校验。
+     * @returns {{title: string|null, position: number, readToken: string|null, navigationVersion: number}}
+     */
+    function getCurrentNavigationState() {
+        return {
+            title: window.pageTitle,
+            position: window.pageYOffset || document.documentElement.scrollTop || document.body.scrollTop || 0,
+            readToken: window.pageReadToken,
+            navigationVersion
+        };
     }
 
     /**
@@ -275,6 +317,28 @@
      * @param {number} [navigationId] 导航版本号
      */
     async function backToPage(title, position, config, navigationId = beginNavigation()) {
+        return restorePage(title, position, config, navigationId);
+    }
+
+    /**
+     * 前进到历史记录中的某一页：渲染该页并恢复其滚动位置。
+     * @param {string} title 目标词条标题
+     * @param {number} position 需要恢复的滚动位置（像素）
+     * @param {object} config 页面配置
+     * @param {number} [navigationId] 导航版本号
+     */
+    async function forwardToPage(title, position, config, navigationId = beginNavigation()) {
+        return restorePage(title, position, config, navigationId);
+    }
+
+    /**
+     * 恢复历史页面并恢复其滚动位置。
+     * @param {string} title 目标词条标题
+     * @param {number} position 需要恢复的滚动位置（像素）
+     * @param {object} config 页面配置
+     * @param {number} navigationId 导航版本号
+     */
+    async function restorePage(title, position, config, navigationId) {
         // 显示加载遮罩：页面内容替换与滚动定位在遮罩下完成，避免视觉跳跃
         const loadingMask = document.getElementById("loading-mask");
         if (loadingMask && isCurrentNavigation(navigationId)) {

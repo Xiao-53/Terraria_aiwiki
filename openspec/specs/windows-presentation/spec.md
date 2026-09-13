@@ -44,7 +44,7 @@
 - 左侧“Wiki 资料库”在同一主页面内提供“全部页面”和“对话历史”。全部页面只经 Application；对话历史只经同一宿主会话库，因此当前 Wiki 数据源不可用时仍可使用。Presentation 不直接访问 SQLite 或 Core。
 - 全部页面按标题过滤并通过 `PageRequest` 每批加载 100 项；对话历史按首问标题在本地筛选、按更新时间倒序显示标题、时间、轮数与收藏状态。输入变化、切换或刷新必须取消过期请求。
 - 对话可直接打开完整 transcript。逐项删除（包括收藏会话）必须页内确认；删除当前会话后 Chat 进入空白新对话。清空只删除未收藏会话并须页内确认，收藏会话保留。
-- Wiki 页面阅读不再写持久 WikiHistory；旧表/旧行只为数据兼容保留。Reader 的内存返回栈、`SaveToTabHistory`、`WikiBackAsync` 和鼠标侧键返回保持不变。
+- Wiki 页面阅读不再写持久 WikiHistory；旧表/旧行只为数据兼容保留。Reader 与独立 Wiki Reading 共用宿主内存双向历史：`SaveToTabHistory` 记录普通导航的后退项，`WikiBackAsync`/`WikiForwardAsync` 与鼠标侧键按钮 3/4 分别后退/前进；后退、前进和普通新导航成功提交后都保持浏览器式栈语义，失败不破坏当前页面。
 
 ## 数据管理与迁移
 
@@ -59,8 +59,8 @@
 
 ## 设置
 
-- 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键返回、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。
-- 保存成功后，应用主题、Viewer 内容主题和鼠标侧键返回在当前 Windows Runtime 生效；搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
+- 左侧“设置”加载并显式保存 Application 的全部强类型偏好：语言、应用主题、Wiki 内容主题、鼠标侧键导航（后退/前进）、搜索上限、页面/资源下载并发数和失败重试次数；验证与持久化仍由 `ApplicationSettingsUseCases` 负责。既有 `IsSideButtonBackEnabled` 配置字段保持兼容，但其开关语义覆盖两个鼠标侧键方向。
+- 保存成功后，应用主题、Viewer 内容主题和鼠标侧键导航在当前 Windows Runtime 生效；Reader 顶部后退命令继续独立于该开关。搜索和下载参数由后续 Application 调用读取。若持久化成功但实时应用失败，页面必须如实提示下次启动生效，不把已保存结果误报为失败。
 - 当前 Windows Presentation 以简体中文交付，同时保留并可保存既有语言偏好；本阶段不承诺完整英文界面。
 - 设置页使用“常规设置 / AI 配置”二级菜单；AI 配置仍留在设置内部，不增加第七个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
 - DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。“模型服务”是唯一 AI 配置区域，合并提供商字段、API Key、思考强度和数据发送说明；普通用户界面不显示 Python 版本或路径。API key 保存到 Windows Credential Manager，不回显真实值或长度；已有凭据以固定长度遮蔽标记和“已保存”文字显示，空底层输入仍表示保留，输入新值表示替换，并另有显式清除操作。思考强度提供服务默认、关闭、低、高、最大五档。
