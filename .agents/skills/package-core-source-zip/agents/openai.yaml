@@ -1,0 +1,4 @@
+interface:
+  display_name: "Package Core Source ZIP"
+  short_description: "Package tracked product source into a verified Windows ZIP"
+  default_prompt: "Use $package-core-source-zip to create a verified source-only ZIP backup for this repository using Windows' built-in ZIP compression."
