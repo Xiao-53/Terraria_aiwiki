@@ -38,6 +38,8 @@ internal sealed class ExistingWikiLayout
 
 public static class LegacyWikiCompatibility
 {
+    private static readonly string[] DatabaseSidecarSuffixes = ["-journal", "-wal", "-shm"];
+
     public const string LegacyDataFolder = "Terraria_Wiki";
     public const string LegacyDatabaseName = "Terraria_Wiki.db";
     public const string CurrentDatabaseName = "data.db";
@@ -486,6 +488,7 @@ public static class LegacyWikiCompatibility
         // inspected consistently by SQLite, so migration-only checkpoint work is
         // deferred until the shared predicate confirms that a migration is needed.
         RecoverPendingAnchorMigration(target);
+        RejectRollbackJournal(target);
         if (!await RequiresAnchorMigrationAsync(target, defaultPageTitle, cancellationToken))
             return new LegacyAnchorMigrationResult(false, 0, 0);
 
@@ -622,7 +625,7 @@ public static class LegacyWikiCompatibility
     {
         var target = ValidateDatabasePath(databasePath, mustExist: false);
         var journalPath = target + ".anchor-migration.json";
-        if (!File.Exists(journalPath)) return false;
+        if (!File.Exists(journalPath)) return CleanupOrphanedAnchorStaging(target);
 
         var journal = ReadAndValidateAnchorJournal(journalPath, target);
         RejectDatabaseSidecars(journal.TargetPath);
@@ -836,11 +839,18 @@ public static class LegacyWikiCompatibility
 
     private static void RejectDatabaseSidecars(string databasePath)
     {
-        if (File.Exists(databasePath + "-wal") || File.Exists(databasePath + "-shm"))
-            throw Error(
-                "database-not-checkpointed",
-                "The database must be closed without WAL/SHM sidecars before anchor migration.");
+        if (DatabaseSidecarSuffixes.Any(suffix => File.Exists(databasePath + suffix)))
+            throw DatabaseNotCheckpointed();
     }
+
+    private static void RejectRollbackJournal(string databasePath)
+    {
+        if (File.Exists(databasePath + "-journal")) throw DatabaseNotCheckpointed();
+    }
+
+    private static WikiCompatibilityException DatabaseNotCheckpointed() => Error(
+        "database-not-checkpointed",
+        "The database must be closed without rollback-journal/WAL/SHM sidecars before anchor migration.");
 
     private static WikiCompatibilityException CheckpointFailed(Exception? innerException = null) => Error(
         "database-checkpoint-failed",
@@ -849,17 +859,17 @@ public static class LegacyWikiCompatibility
 
     private static void DeleteDatabaseFamilyFiles(string databasePath)
     {
+        foreach (var suffix in DatabaseSidecarSuffixes)
+            TryDeleteFile(databasePath + suffix);
         TryDeleteFile(databasePath);
-        TryDeleteFile(databasePath + "-wal");
-        TryDeleteFile(databasePath + "-shm");
     }
 
     private static void DeleteOrphanedDatabaseSidecars(string databasePath)
     {
         if (File.Exists(databasePath)) return;
-        TryDeleteFile(databasePath + "-wal");
-        TryDeleteFile(databasePath + "-shm");
-        if (File.Exists(databasePath + "-wal") || File.Exists(databasePath + "-shm"))
+        foreach (var suffix in DatabaseSidecarSuffixes)
+            TryDeleteFile(databasePath + suffix);
+        if (DatabaseSidecarSuffixes.Any(suffix => File.Exists(databasePath + suffix)))
             throw Error(
                 "anchor-migration-cleanup-failed",
                 "An orphaned anchor-migration sidecar could not be removed.");
@@ -867,8 +877,74 @@ public static class LegacyWikiCompatibility
 
     private static bool DatabaseFamilyExists(string databasePath) =>
         File.Exists(databasePath)
-        || File.Exists(databasePath + "-wal")
-        || File.Exists(databasePath + "-shm");
+        || DatabaseSidecarSuffixes.Any(suffix => File.Exists(databasePath + suffix));
+
+    private static bool CleanupOrphanedAnchorStaging(string target)
+    {
+        if (!File.Exists(target)) return false;
+
+        var directory = Path.GetDirectoryName(target)!;
+        var stagingPrefix = Path.GetFileName(target) + ".anchor-staging-";
+        try
+        {
+            var stagingPaths = Directory
+                .EnumerateFiles(directory, stagingPrefix + "*", SearchOption.TopDirectoryOnly)
+                .Select(path => TryGetAnchorStagingPath(path, directory, stagingPrefix, out var staging)
+                    ? staging
+                    : null)
+                .Where(path => path is not null)
+                .Distinct(StringComparer.OrdinalIgnoreCase)
+                .Cast<string>()
+                .ToArray();
+
+            foreach (var staging in stagingPaths)
+            {
+                DeleteDatabaseFamilyFiles(staging);
+                if (DatabaseFamilyExists(staging))
+                    throw Error(
+                        "anchor-migration-cleanup-failed",
+                        "An orphaned anchor-migration staging database could not be removed.");
+            }
+
+            return stagingPaths.Length > 0;
+        }
+        catch (WikiCompatibilityException)
+        {
+            throw;
+        }
+        catch (Exception exception) when (exception is IOException or UnauthorizedAccessException)
+        {
+            throw Error(
+                "anchor-migration-cleanup-failed",
+                "Orphaned anchor-migration staging databases could not be inspected or removed.",
+                exception);
+        }
+    }
+
+    private static bool TryGetAnchorStagingPath(
+        string candidate,
+        string directory,
+        string stagingPrefix,
+        out string staging)
+    {
+        staging = string.Empty;
+        var fileName = Path.GetFileName(candidate);
+        if (!fileName.StartsWith(stagingPrefix, StringComparison.OrdinalIgnoreCase)) return false;
+
+        var migrationId = fileName[stagingPrefix.Length..];
+        foreach (var suffix in DatabaseSidecarSuffixes)
+        {
+            if (!migrationId.EndsWith(suffix, StringComparison.OrdinalIgnoreCase)) continue;
+            migrationId = migrationId[..^suffix.Length];
+            break;
+        }
+
+        if (migrationId.Length != 32 || migrationId.Any(character => !char.IsAsciiHexDigit(character)))
+            return false;
+
+        staging = Path.Combine(directory, stagingPrefix + migrationId);
+        return true;
+    }
 
     private static void WriteDatabaseFamilyJournal(DatabaseFamilyJournal journal)
     {

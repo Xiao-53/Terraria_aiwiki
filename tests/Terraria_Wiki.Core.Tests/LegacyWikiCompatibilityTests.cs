@@ -523,7 +523,36 @@ public sealed class LegacyWikiCompatibilityTests
         writer.Rollback();
     }
 
+    [Fact]
+    public async Task Prepared_anchor_migration_rejects_a_target_rollback_journal_before_fast_path_read()
+    {
+        using var temp = new TestDirectory();
+        var database = temp.File("data.db");
+        var content = new ContentDbService(database);
+        await content.Init(seedBook: new WikiBook
+        {
+            DefaultPageTitle = "Home",
+            DefaultPageContent = "placeholder",
+        });
+        await content.SaveItemAsync(new WikiPage
+        {
+            Title = "Home",
+            Content = "<a title=\"Guide\" data-wiki=\"Guide\">Guide</a>",
+        });
+        await content.CloseConnection();
+        File.WriteAllText(database + "-journal", "unfinished");
+
+        var error = await Assert.ThrowsAsync<WikiCompatibilityException>(() =>
+            LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(database, "Home"));
+
+        Assert.Equal("database-not-checkpointed", error.Code);
+        Assert.True(File.Exists(database));
+        Assert.Equal("unfinished", File.ReadAllText(database + "-journal"));
+        Assert.Empty(Directory.EnumerateFileSystemEntries(temp.Path, "*.anchor-*"));
+    }
+
     [Theory]
+    [InlineData("-journal")]
     [InlineData("-wal")]
     [InlineData("-shm")]
     public async Task Safe_anchor_migration_rejects_any_database_sidecar(string suffix)
@@ -539,6 +568,51 @@ public sealed class LegacyWikiCompatibilityTests
         Assert.Equal("database-not-checkpointed", error.Code);
         Assert.Equal("original", File.ReadAllText(database));
         Assert.True(File.Exists(database + suffix));
+    }
+
+    [Fact]
+    public void Anchor_recovery_without_swap_journal_cleans_only_strict_orphaned_staging_families()
+    {
+        using var temp = new TestDirectory();
+        var target = temp.File("data.db");
+        const string migrationId = "1234567890abcdef1234567890abcdef";
+        var staging = target + $".anchor-staging-{migrationId}";
+        var invalidId = target + ".anchor-staging-not-a-migration";
+        var unknownSuffix = staging + ".keep";
+        File.WriteAllText(target, "current");
+        File.WriteAllText(staging, "staged");
+        File.WriteAllText(staging + "-journal", "rollback");
+        File.WriteAllText(staging + "-wal", "wal");
+        File.WriteAllText(staging + "-shm", "shm");
+        File.WriteAllText(invalidId, "keep");
+        File.WriteAllText(unknownSuffix, "keep");
+
+        Assert.True(LegacyWikiCompatibility.RecoverPendingAnchorMigration(target));
+
+        Assert.Equal("current", File.ReadAllText(target));
+        Assert.False(File.Exists(staging));
+        Assert.False(File.Exists(staging + "-journal"));
+        Assert.False(File.Exists(staging + "-wal"));
+        Assert.False(File.Exists(staging + "-shm"));
+        Assert.Equal("keep", File.ReadAllText(invalidId));
+        Assert.Equal("keep", File.ReadAllText(unknownSuffix));
+        Assert.False(LegacyWikiCompatibility.RecoverPendingAnchorMigration(target));
+    }
+
+    [Fact]
+    public void Anchor_recovery_without_target_preserves_unjournaled_staging_family()
+    {
+        using var temp = new TestDirectory();
+        var target = temp.File("data.db");
+        const string migrationId = "abcdefabcdefabcdefabcdefabcdefab";
+        var staging = target + $".anchor-staging-{migrationId}";
+        File.WriteAllText(staging, "staged");
+        File.WriteAllText(staging + "-journal", "rollback");
+
+        Assert.False(LegacyWikiCompatibility.RecoverPendingAnchorMigration(target));
+
+        Assert.Equal("staged", File.ReadAllText(staging));
+        Assert.Equal("rollback", File.ReadAllText(staging + "-journal"));
     }
 
     [Fact]
@@ -643,6 +717,7 @@ public sealed class LegacyWikiCompatibilityTests
         var backup = target + $".anchor-backup-{migrationId}";
         var journal = target + ".anchor-migration.json";
         File.WriteAllText(target, "migrated");
+        File.WriteAllBytes(staging + "-journal", []);
         File.WriteAllBytes(staging + "-wal", []);
         File.WriteAllText(backup, "original");
         File.WriteAllText(journal, JsonSerializer.Serialize(new
@@ -658,6 +733,7 @@ public sealed class LegacyWikiCompatibilityTests
         Assert.True(LegacyWikiCompatibility.RecoverPendingAnchorMigration(target));
 
         Assert.Equal("migrated", File.ReadAllText(target));
+        Assert.False(File.Exists(staging + "-journal"));
         Assert.False(File.Exists(staging + "-wal"));
         Assert.False(File.Exists(backup));
         Assert.False(File.Exists(journal));
