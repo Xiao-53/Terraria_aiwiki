@@ -58,6 +58,8 @@
 - 下载、资源下载、更新、失败重试/清理、统计、VACUUM、删除资源和删除整库仅作用于活动 Wiki。
 - export 可指定任一已注册 Wiki；文件选择、输出命名、覆盖策略、确认、日志和本地化由调用方负责。
 - import 固定为 Inspect → inspection token → 调用方显式 legacy confirmation → Import 两阶段流程；Application 不静默确认旧包。
+- raw database export 固定作用于活动 Wiki，并通过 Core SQLite backup 返回独立 `.db` 快照；raw database import 固定为 Inspect → inspection token → 调用方确认 → 当前活动 Wiki 覆盖，不从文件猜测 Wiki 身份。
+- 活动 raw database import 与 package import 使用同一消费者 pause、数据操作 gate、staging/backup/journal/rollback 边界；成功后返回刷新后的 Wiki 统计，失败不得改变活动数据源。
 - 活动库 import、整库删除、热切换和旧数据迁移在消费者 pause lease 下执行；操作结束或失败都必须恢复消费者。
 - Application 保留 Core 取消和稳定错误语义；`OperationCanceledException` 不得转换为空结果或普通失败 DTO。
 

@@ -14,7 +14,7 @@ internal enum ManagementConfirmation
     ClearFailures,
     DeleteResources,
     DeleteWikiData,
-    ImportPackage,
+    ImportDatabase,
 }
 
 internal sealed class WikiDataChangedEventArgs(bool requiresViewerRebind) : EventArgs
@@ -51,19 +51,19 @@ internal sealed record class WikiManagementActions
         _ => Unavailable<WikiOperationSummary>();
     public Func<CancellationToken, Task<WikiOperationSummary>> DeleteWikiData { get; init; } =
         _ => Unavailable<WikiOperationSummary>();
-    public Func<CancellationToken, Task<string?>> PickImportPackage { get; init; } =
+    public Func<CancellationToken, Task<string?>> PickImportDatabase { get; init; } =
         _ => Task.FromResult<string?>(null);
-    public Func<string, CancellationToken, Task<WikiPackageInspection>> InspectPackage { get; init; } =
-        (_, _) => Unavailable<WikiPackageInspection>();
-    public Func<string, string, bool, CancellationToken, Task<WikiPackageImportResponse>> ImportPackage { get; init; } =
-        (_, _, _, _) => Unavailable<WikiPackageImportResponse>();
-    public Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> ExportPackage { get; init; } =
-        (_, _) => Task.FromResult<WikiPackageExportResponse?>(null);
+    public Func<string, CancellationToken, Task<WikiDatabaseInspection>> InspectDatabase { get; init; } =
+        (_, _) => Unavailable<WikiDatabaseInspection>();
+    public Func<string, string, CancellationToken, Task<WikiDatabaseImportResponse>> ImportDatabase { get; init; } =
+        (_, _, _) => Unavailable<WikiDatabaseImportResponse>();
+    public Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>> ExportDatabase { get; init; } =
+        (_, _) => Task.FromResult<WikiDatabaseExportResponse?>(null);
 
     public static WikiManagementActions From(
         WikiApplication application,
-        Func<CancellationToken, Task<string?>> pickImportPackage,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> exportPackage,
+        Func<CancellationToken, Task<string?>> pickImportDatabase,
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>> exportDatabase,
         Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
         ArgumentNullException.ThrowIfNull(application);
@@ -83,15 +83,10 @@ internal sealed record class WikiManagementActions
             Vacuum = application.Data.VacuumAsync,
             DeleteResources = application.Data.DeleteResourcesAsync,
             DeleteWikiData = application.Data.DeleteWikiDataAsync,
-            PickImportPackage = pickImportPackage,
-            InspectPackage = application.Data.InspectPackageAsync,
-            ImportPackage = (path, token, allowLegacy, cancellationToken) =>
-                application.Data.ImportPackageAsync(
-                    path,
-                    token,
-                    allowLegacyPackage: allowLegacy,
-                    cancellationToken: cancellationToken),
-            ExportPackage = exportPackage,
+            PickImportDatabase = pickImportDatabase,
+            InspectDatabase = application.Data.InspectDatabaseAsync,
+            ImportDatabase = application.Data.ImportDatabaseAsync,
+            ExportDatabase = exportDatabase,
         };
     }
 
@@ -125,15 +120,14 @@ internal sealed class WikiBookItemViewModel
 
 internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 {
-    private readonly Func<CancellationToken, Task<string?>> _pickImportPackage;
-    private readonly Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>> _exportPackage;
-    private readonly Action _requestDataRootSelection;
+    private readonly Func<CancellationToken, Task<string?>> _pickImportDatabase;
+    private readonly Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>> _exportDatabase;
     private WikiManagementActions? _actions;
     private CancellationTokenSource? _operationCancellation;
     private WikiBookSnapshot? _activeWiki;
     private ManagementConfirmation _confirmation;
     private WikiBookSnapshot? _pendingSwitch;
-    private WikiPackageInspection? _pendingImport;
+    private WikiDatabaseInspection? _pendingImport;
     private string _statusMessage = "正在准备数据管理…";
     private bool _isAvailable;
     private bool _isBusy;
@@ -141,21 +135,14 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     private double _progressValue;
     private double _progressMaximum = 1;
     private bool _isProgressIndeterminate = true;
-    private string _dataRootPath = "尚未选择";
-    private bool _isSelectingDataRoot;
     private bool _disposed;
 
     public WikiManagementViewModel(
-        Func<CancellationToken, Task<string?>>? pickImportPackage = null,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
-        Action? requestDataRootSelection = null)
+        Func<CancellationToken, Task<string?>>? pickImportDatabase = null,
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>>? exportDatabase = null)
     {
-        _pickImportPackage = pickImportPackage ?? (_ => Task.FromResult<string?>(null));
-        _exportPackage = exportPackage ?? ((_, _) => Task.FromResult<WikiPackageExportResponse?>(null));
-        _requestDataRootSelection = requestDataRootSelection ?? (() => { });
-        SelectDataRootCommand = new RelayCommand(
-            _ => _requestDataRootSelection(),
-            _ => CanSelectDataRoot);
+        _pickImportDatabase = pickImportDatabase ?? (_ => Task.FromResult<string?>(null));
+        _exportDatabase = exportDatabase ?? ((_, _) => Task.FromResult<WikiDatabaseExportResponse?>(null));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => CanOperate);
         DownloadAllCommand = new AsyncCommand(_ => DownloadAsync(includeResources: true), _ => CanOperate && !HasPageData);
         DownloadPagesCommand = new AsyncCommand(_ => DownloadAsync(includeResources: false), _ => CanOperate && !HasPageData);
@@ -237,8 +224,6 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             if (!SetProperty(ref _isBusy, value))
                 return;
             OnPropertyChanged(nameof(CanOperate));
-            OnPropertyChanged(nameof(CanSelectDataRoot));
-            SelectDataRootCommand.NotifyCanExecuteChanged();
             OnPropertyChanged(nameof(IsIdle));
             CancelOperationCommand.NotifyCanExecuteChanged();
             RefreshCommands();
@@ -273,41 +258,13 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         private set => SetProperty(ref _isProgressIndeterminate, value);
     }
 
-    public string DataRootPath
-    {
-        get => _dataRootPath;
-        private set
-        {
-            if (!SetProperty(ref _dataRootPath, value))
-                return;
-            OnPropertyChanged(nameof(DataRootActionText));
-        }
-    }
-
-    public bool IsSelectingDataRoot
-    {
-        get => _isSelectingDataRoot;
-        private set
-        {
-            if (!SetProperty(ref _isSelectingDataRoot, value))
-                return;
-            OnPropertyChanged(nameof(CanSelectDataRoot));
-            OnPropertyChanged(nameof(DataRootActionText));
-            SelectDataRootCommand.NotifyCanExecuteChanged();
-        }
-    }
-
     public bool HasActiveWiki => ActiveWiki is not null;
     public bool HasPageData => ActiveWiki?.IsPageDownloaded == true;
     public bool HasResources => ActiveWiki?.IsResourceDownloaded == true;
     public bool NeedsPageData => HasActiveWiki && !HasPageData;
     public bool NeedsResources => HasPageData && !HasResources;
     public bool CanOperate => IsAvailable && !IsBusy && HasActiveWiki;
-    public bool CanSelectDataRoot => !IsBusy && !IsSelectingDataRoot;
     public bool IsIdle => !IsBusy;
-    public string DataRootActionText => IsSelectingDataRoot
-        ? "正在选择…"
-        : DataRootPath == "尚未选择" ? "选择文件夹" : "更改文件夹";
     public string ActiveWikiTitle => ActiveWiki?.Title ?? "未选择 Wiki";
     public string ActiveWikiDescription => ActiveWiki?.Description ?? "本地 Wiki 数据源不可用。";
     public string PageCountText => (ActiveWiki?.PageCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
@@ -325,7 +282,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "清理失败记录？",
         ManagementConfirmation.DeleteResources => "删除全部资源？",
         ManagementConfirmation.DeleteWikiData => "删除当前 Wiki 数据？",
-        ManagementConfirmation.ImportPackage => "导入此 Wiki 数据包？",
+        ManagementConfirmation.ImportDatabase => "导入此数据库？",
         _ => string.Empty,
     };
     public string ConfirmationMessage => _confirmation switch
@@ -334,7 +291,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "仅清理页面与资源下载失败列表；不会删除已经下载的 Wiki 内容。",
         ManagementConfirmation.DeleteResources => $"将删除“{ActiveWikiTitle}”的全部本地图片和音频资源，页面文字仍保留。",
         ManagementConfirmation.DeleteWikiData => $"将删除“{ActiveWikiTitle}”的页面、资源、历史与收藏数据。此操作不可撤销，可稍后重新下载或导入。",
-        ManagementConfirmation.ImportPackage => BuildImportConfirmation(),
+        ManagementConfirmation.ImportDatabase => BuildImportConfirmation(),
         _ => string.Empty,
     };
     public string ConfirmationActionText => _confirmation switch
@@ -343,14 +300,14 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "确认清理",
         ManagementConfirmation.DeleteResources => "删除资源",
         ManagementConfirmation.DeleteWikiData => "删除全部数据",
-        ManagementConfirmation.ImportPackage => "确认导入",
+        ManagementConfirmation.ImportDatabase => "确认导入",
         _ => "确认",
     };
     public bool IsDangerousConfirmation => _confirmation is
         ManagementConfirmation.ClearFailures or
         ManagementConfirmation.DeleteResources or
         ManagementConfirmation.DeleteWikiData or
-        ManagementConfirmation.ImportPackage;
+        ManagementConfirmation.ImportDatabase;
     public bool IsStandardConfirmation => IsConfirmationVisible && !IsDangerousConfirmation;
 
     public AsyncCommand RefreshCommand { get; }
@@ -368,33 +325,14 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public RelayCommand CancelOperationCommand { get; }
     public RelayCommand CancelConfirmationCommand { get; }
     public AsyncCommand ConfirmCommand { get; }
-    public RelayCommand SelectDataRootCommand { get; }
-
-    internal void SetDataRoot(string? dataRoot)
-    {
-        DataRootPath = string.IsNullOrWhiteSpace(dataRoot)
-            ? "尚未选择"
-            : Path.TrimEndingDirectorySeparator(Path.GetFullPath(dataRoot));
-    }
-
-    internal void BeginDataRootSelection()
-    {
-        IsSelectingDataRoot = true;
-        StatusMessage = "请选择包含有效 Manager.db 的 Wiki 数据文件夹。";
-    }
-
-    internal void ReportDataRootSelection(string message) => StatusMessage = message;
-
     internal void ShowEmptyWikiOnboarding() =>
-        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入本地数据包。";
-
-    internal void EndDataRootSelection() => IsSelectingDataRoot = false;
+        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入 data.db。";
 
     public void Attach(
         WikiApplication application,
         Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
-        Attach(WikiManagementActions.From(application, _pickImportPackage, _exportPackage, switchWiki));
+        Attach(WikiManagementActions.From(application, _pickImportDatabase, _exportDatabase, switchWiki));
     }
 
     internal void Attach(WikiManagementActions actions)
@@ -414,9 +352,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ActiveWiki = null;
         Wikis.Clear();
         CancelConfirmation();
-        StatusMessage = DataRootPath == "尚未选择"
-            ? "尚未选择 Wiki 数据文件夹；请先选择包含 Manager.db 的文件夹。"
-            : "当前 Wiki 数据库未连接；可以重新选择数据文件夹。";
+        StatusMessage = "当前 Wiki 数据库未连接；请恢复默认数据目录后重试。";
     }
 
     internal async Task RefreshAsync()
@@ -430,7 +366,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         {
             await ReloadAsync(current.Token);
             StatusMessage = NeedsPageData
-                ? "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入本地数据包。"
+                ? "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入 data.db。"
                 : "Wiki 数据状态已刷新。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
@@ -499,8 +435,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             case ManagementConfirmation.DeleteWikiData:
                 await DeleteWikiDataAsync();
                 break;
-            case ManagementConfirmation.ImportPackage:
-                await ImportPackageAsync();
+            case ManagementConfirmation.ImportDatabase:
+                await ImportDatabaseAsync();
                 break;
         }
     }
@@ -554,23 +490,23 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null)
             return;
-        var current = BeginOperation("请选择要导入的 .pkg Wiki 数据包…");
+        var current = BeginOperation("请选择要导入的 data.db 数据库文件…");
         if (current is null)
             return;
         try
         {
-            var path = await _actions.PickImportPackage(current.Token);
+            var path = await _actions.PickImportDatabase(current.Token);
             current.Token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(path))
             {
-                StatusMessage = "未选择数据包；本地数据未被修改。";
+                StatusMessage = "未选择数据库；本地数据未被修改。";
                 return;
             }
-            StatusMessage = "正在检查数据包完整性…";
-            _pendingImport = await _actions.InspectPackage(path, current.Token);
+            StatusMessage = "正在检查数据库完整性…";
+            _pendingImport = await _actions.InspectDatabase(path, current.Token);
             current.Token.ThrowIfCancellationRequested();
-            SetConfirmation(ManagementConfirmation.ImportPackage);
-            StatusMessage = "数据包检查通过；确认后才会写入本地数据。";
+            SetConfirmation(ManagementConfirmation.ImportDatabase);
+            StatusMessage = "数据库检查通过；确认后才会替换当前 Wiki 数据。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
@@ -579,7 +515,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         catch
         {
             _pendingImport = null;
-            StatusMessage = "无法检查此数据包；本地数据未被修改。";
+            StatusMessage = "无法检查此数据库；本地数据未被修改。";
         }
         finally
         {
@@ -591,16 +527,16 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null || ActiveWiki is null)
             return;
-        var current = BeginOperation("请选择数据包保存位置…");
+        var current = BeginOperation("请选择数据库保存位置…");
         if (current is null)
             return;
         try
         {
-            var result = await _actions.ExportPackage(ActiveWiki, current.Token);
+            var result = await _actions.ExportDatabase(ActiveWiki, current.Token);
             current.Token.ThrowIfCancellationRequested();
             StatusMessage = result is null
-                ? "未选择保存位置；没有创建数据包。"
-                : $"导出完成：{Path.GetFileName(result.PackagePath)}（{FormatBytes(result.PackageBytes)}）。";
+                ? "未选择保存位置；没有创建数据库文件。"
+                : $"导出完成：{Path.GetFileName(result.DatabasePath)}（{FormatBytes(result.DatabaseBytes)}）。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
@@ -660,24 +596,21 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             dataChanged: true,
             requiresViewerRebind: true);
 
-    private async Task ImportPackageAsync()
+    private async Task ImportDatabaseAsync()
     {
         var inspection = _pendingImport;
         _pendingImport = null;
         if (inspection is null)
             return;
-        var legacy = RequiresLegacyConfirmation(inspection.Metadata.AppVersion);
-        var activeId = ActiveWiki?.Id;
         await RunOperationAsync(
-            "数据包导入",
+            "数据库导入",
             async (_, token) =>
             {
-                var result = await _actions!.ImportPackage(
-                    inspection.PackagePath,
+                var result = await _actions!.ImportDatabase(
+                    inspection.DatabasePath,
                     inspection.InspectionToken,
-                    legacy,
                     token);
-                return ($"已导入“{result.WikiBook.Title}”。", result.WikiBook.Id == activeId);
+                return ($"已导入“{result.WikiBook.Title}”的数据库。", true);
             },
             dataChanged: true,
             requiresViewerRebind: true,
@@ -756,7 +689,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         }
         catch
         {
-            StatusMessage = $"{label}失败；请确认网络、磁盘空间或数据包后重试。";
+            StatusMessage = $"{label}失败；请确认网络、磁盘空间或数据库文件后重试。";
         }
         finally
         {
@@ -854,12 +787,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (_pendingImport is null)
             return string.Empty;
-        var metadata = _pendingImport.Metadata;
-        var title = string.IsNullOrWhiteSpace(metadata.Title) ? $"Wiki #{metadata.Id}" : metadata.Title;
-        var legacy = RequiresLegacyConfirmation(metadata.AppVersion)
-            ? " 这是 0.4 之前的数据包，确认后会执行既有兼容迁移。"
-            : string.Empty;
-        return $"“{title}” · {FormatBytes(_pendingImport.PackageBytes)} · 版本 {metadata.AppVersion ?? "未知"}。导入会替换目标 Wiki 的现有本地数据；失败时由既有回滚恢复。{legacy}";
+        return $"{Path.GetFileName(_pendingImport.DatabasePath)} · {FormatBytes(_pendingImport.DatabaseBytes)}。导入会替换“{ActiveWikiTitle}”的页面、资源、收藏与搜索数据；失败时会恢复原数据库。";
     }
 
     private void RefreshCommands()
@@ -877,11 +805,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ImportCommand.NotifyCanExecuteChanged();
         ExportCommand.NotifyCanExecuteChanged();
         ConfirmCommand.NotifyCanExecuteChanged();
-        SelectDataRootCommand.NotifyCanExecuteChanged();
     }
-
-    private static bool RequiresLegacyConfirmation(string? version) =>
-        version is not null && Version.TryParse(version, out var parsed) && parsed < new Version(0, 4);
 
     private static string FormatSummary(string label, WikiOperationSummary summary) =>
         $"{label}完成：页面 {summary.Pages:N0}、重定向 {summary.Redirects:N0}、资源 {summary.Resources:N0}、失败 {summary.Failed:N0}。";

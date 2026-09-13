@@ -354,6 +354,93 @@ public sealed class WikiPackageTransferTests : IAsyncLifetime
         Assert.True(File.Exists(package));
     }
 
+    [Fact]
+    public async Task Raw_database_export_uses_a_consistent_single_file_snapshot()
+    {
+        var book = CreateBook();
+        var paths = WikiDataPaths.Create(_root, book);
+        var transfer = await CreateTransferAsync(book, paths);
+        await _content!.SaveItemAsync(new WikiPage
+        {
+            Title = "Latest WAL Page",
+            Content = "latest",
+            LastModified = DateTime.UtcNow,
+        });
+        var exportPath = Path.Combine(_root, "exports", "wiki.db");
+
+        var result = await transfer.ExportDatabaseAsync(paths, exportPath, _content);
+
+        Assert.Equal(exportPath, result.DatabasePath);
+        Assert.True(result.DatabaseBytes > 0);
+        Assert.False(File.Exists(exportPath + "-wal"));
+        Assert.False(File.Exists(exportPath + "-shm"));
+        using var exported = new SQLiteConnection(exportPath, SQLiteOpenFlags.ReadOnly | SQLiteOpenFlags.FullMutex);
+        Assert.Equal("latest", exported.Find<WikiPage>("Latest WAL Page")?.Content);
+    }
+
+    [Fact]
+    public async Task Raw_database_import_replaces_active_database_and_preserves_auxiliary_files()
+    {
+        var book = CreateBook();
+        var paths = WikiDataPaths.Create(_root, book);
+        var transfer = await CreateTransferAsync(book, paths);
+        await _content!.SaveItemAsync(new WikiPage
+        {
+            Title = "Snapshot Page",
+            Content = "snapshot",
+            LastModified = DateTime.UtcNow,
+        });
+        await File.WriteAllTextAsync(paths.ResourceListPath, "keep auxiliary data");
+        var exportPath = Path.Combine(_root, "exports", "wiki.db");
+        await transfer.ExportDatabaseAsync(paths, exportPath, _content);
+        var inspection = await transfer.InspectDatabaseAsync(exportPath);
+        await _content.SaveItemAsync(new WikiPage
+        {
+            Title = "After Export",
+            Content = "remove",
+            LastModified = DateTime.UtcNow,
+        });
+
+        var result = await transfer.ImportDatabaseAsync(new WikiDatabaseImportRequest(
+            exportPath,
+            _root,
+            book.Id,
+            inspection.InspectionToken));
+
+        Assert.True(result.ReplacedExistingData);
+        Assert.Equal("snapshot", (await _content.GetItemAsync<WikiPage>("Snapshot Page"))?.Content);
+        Assert.Null(await _content.GetItemAsync<WikiPage>("After Export"));
+        Assert.Equal("keep auxiliary data", await File.ReadAllTextAsync(paths.ResourceListPath));
+        var refreshed = await _manager!.GetItemAsync<WikiBook>(book.Id);
+        Assert.True(refreshed!.IsPageDownloaded);
+        Assert.Equal(await _content.GetCountAsync<WikiPage>(), refreshed.PageCount);
+        Assert.Empty(Directory.EnumerateDirectories(_root, "*.import-backup-*"));
+        Assert.Empty(Directory.EnumerateFiles(paths.StagingRoot, "*.journal.json"));
+    }
+
+    [Fact]
+    public async Task Raw_database_import_rejects_a_changed_source_before_target_swap()
+    {
+        var book = CreateBook();
+        var paths = WikiDataPaths.Create(_root, book);
+        var transfer = await CreateTransferAsync(book, paths);
+        await _content!.SaveItemAsync(new WikiPage { Title = "Keep", Content = "safe" });
+        var exportPath = Path.Combine(_root, "exports", "wiki.db");
+        await transfer.ExportDatabaseAsync(paths, exportPath, _content);
+        var inspection = await transfer.InspectDatabaseAsync(exportPath);
+
+        var error = await Assert.ThrowsAsync<WikiPackageException>(() =>
+            transfer.ImportDatabaseAsync(new WikiDatabaseImportRequest(
+                exportPath,
+                _root,
+                book.Id,
+                "wrong-token")));
+
+        Assert.Equal("inspection-token-mismatch", error.Code);
+        Assert.Equal("safe", (await _content.GetItemAsync<WikiPage>("Keep"))?.Content);
+        Assert.Empty(Directory.EnumerateDirectories(_root, "*.import-backup-*"));
+    }
+
     public Task InitializeAsync()
     {
         Directory.CreateDirectory(_root);

@@ -1,4 +1,6 @@
+using System.Security.Cryptography;
 using System.Text.Json;
+using SQLite;
 using Terraria_Wiki.Core.Compatibility;
 using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Operations;
@@ -47,6 +49,51 @@ public sealed class WikiPackageTransferService
         WikiPackageOptions? options = null,
         CancellationToken cancellationToken = default) =>
         WikiPackageReader.InspectAsync(packagePath, options, cancellationToken);
+
+    public async Task<WikiDatabaseInspection> InspectDatabaseAsync(
+        string databasePath,
+        CancellationToken cancellationToken = default)
+    {
+        var path = ValidateStandaloneDatabasePath(databasePath);
+        ValidateDatabase(path);
+        var token = await ComputeSha256Async(path, cancellationToken);
+        return new WikiDatabaseInspection(path, new FileInfo(path).Length, token);
+    }
+
+    public async Task<WikiDatabaseExportResult> ExportDatabaseAsync(
+        WikiDataPaths paths,
+        string databasePath,
+        DatabaseService sourceDatabase,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(paths);
+        ArgumentNullException.ThrowIfNull(sourceDatabase);
+        var target = ValidateNewDatabaseTarget(databasePath);
+        if (PathsEqual(target, paths.ContentDatabasePath)
+            || IsPathWithinDirectory(target, paths.DataDirectory))
+        {
+            throw Error("database-export-target-invalid", "The export target must be outside the managed Wiki data directory.");
+        }
+
+        using var lease = await EnterAsync(cancellationToken);
+        try
+        {
+            if (!File.Exists(paths.ContentDatabasePath))
+                throw Error("content-database-not-found", $"Content database does not exist: {paths.ContentDatabasePath}.");
+            if (!PathsEqual(sourceDatabase.DatabasePath, paths.ContentDatabasePath))
+                throw Error("database-source-mismatch", "The snapshot source does not match the selected Wiki data directory.");
+
+            await sourceDatabase.BackupExistingAsync(target, cancellationToken);
+            await FinalizeStandaloneDatabaseAsync(target, cancellationToken);
+            ValidateDatabase(target);
+            return new WikiDatabaseExportResult(target, new FileInfo(target).Length);
+        }
+        catch
+        {
+            TryDeleteFile(target);
+            throw;
+        }
+    }
 
     public async Task<WikiPackageWriteResult> ExportAsync(
         WikiBook book,
@@ -221,6 +268,110 @@ public sealed class WikiPackageTransferService
         }
     }
 
+    public async Task<WikiDatabaseImportResult> ImportDatabaseAsync(
+        WikiDatabaseImportRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        using var lease = await EnterAsync(cancellationToken);
+        ImportJournal? journal = null;
+        WikiBook? previousBook = null;
+        var activeTarget = false;
+        try
+        {
+            var sourcePath = ValidateStandaloneDatabasePath(request.DatabasePath);
+            var sourceBytes = new FileInfo(sourcePath).Length;
+
+            var book = await _managerDatabase.GetItemAsync<WikiBook>(request.WikiId, cancellationToken)
+                ?? throw Error("unknown-wiki", $"WikiBook {request.WikiId} is not registered in Manager.db.");
+            previousBook = CloneBook(book);
+            var paths = WikiDataPaths.Create(request.DataRoot, book);
+            if (!PathsEqual(_activeContentDatabase.DatabasePath, paths.ContentDatabasePath))
+                throw Error("database-target-not-active", "Raw database import is limited to the active Wiki.");
+            if (PathsEqual(sourcePath, paths.ContentDatabasePath)
+                || IsPathWithinDirectory(sourcePath, paths.DataDirectory))
+            {
+                throw Error("database-import-source-invalid", "The import source must be outside the managed Wiki data directory.");
+            }
+
+            EnsureImportSpace(paths, sourceBytes);
+            var staging = paths.CreateUniqueStagingDirectory("import");
+            var importId = Path.GetFileName(staging)["import-".Length..];
+            var backup = paths.DataDirectory + $".import-backup-{importId}";
+            var journalPath = Path.Combine(paths.StagingRoot, $"import-{book.Id}.journal.json");
+            journal = new ImportJournal(
+                journalPath,
+                paths.RootPath,
+                book.Id,
+                importId,
+                paths.DataDirectory,
+                staging,
+                backup,
+                ImportPhase.Created,
+                CloneBook(book));
+            WriteJournal(journal);
+
+            CopyAuxiliaryFiles(paths, staging, cancellationToken);
+            var stagedDatabase = Path.Combine(staging, LegacyWikiCompatibility.CurrentDatabaseName);
+            var copiedToken = await CopyAndHashAsync(sourcePath, stagedDatabase, cancellationToken);
+            if (!string.Equals(copiedToken, request.InspectionToken, StringComparison.Ordinal))
+                throw Error("inspection-token-mismatch", "The database file changed after it was inspected.");
+            var inspection = new WikiDatabaseInspection(sourcePath, sourceBytes, copiedToken);
+            ValidateDatabase(stagedDatabase);
+            var anchorMigration = await LegacyWikiCompatibility.MigrateAnchorDataAsync(
+                stagedDatabase,
+                book.DefaultPageTitle,
+                cancellationToken);
+
+            journal = UpdateJournal(journal, ImportPhase.Validated);
+            activeTarget = true;
+            await _activeContentDatabase.CloseConnection(cancellationToken);
+
+            var replaced = Directory.Exists(paths.DataDirectory);
+            if (replaced)
+            {
+                Directory.Move(paths.DataDirectory, backup);
+                journal = UpdateJournal(journal, ImportPhase.TargetBackedUp);
+            }
+
+            Directory.Move(staging, paths.DataDirectory);
+            journal = UpdateJournal(journal, ImportPhase.TargetInstalled);
+
+            await _activeContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
+            await _activeContentDatabase.Init(seedBook: book, cancellationToken: cancellationToken);
+            book.PageCount = await _activeContentDatabase.GetCountAsync<WikiPage>(cancellationToken);
+            book.RedirectCount = await _activeContentDatabase.GetCountAsync<WikiRedirect>(cancellationToken);
+            book.ResourceCount = await _activeContentDatabase.GetCountAsync<WikiAsset>(cancellationToken);
+            book.DataSize = new FileInfo(paths.ContentDatabasePath).Length;
+            book.IsPageDownloaded = book.PageCount > 1;
+            book.IsResourceDownloaded = book.ResourceCount > 0;
+            await _managerDatabase.SaveItemAsync(book, cancellationToken);
+            journal = UpdateJournal(journal, ImportPhase.ManagerUpdated);
+
+            journal = UpdateJournal(journal, ImportPhase.Committed);
+            CompleteCommittedImport(journal);
+            return new WikiDatabaseImportResult(book, inspection, replaced, anchorMigration.Required);
+        }
+        catch (Exception importException)
+        {
+            if (journal is not null)
+            {
+                try
+                {
+                    await RollBackAsync(journal, previousBook, activeTarget, CancellationToken.None);
+                }
+                catch (Exception rollbackException)
+                {
+                    throw Error(
+                        "import-rollback-failed",
+                        "Database import failed and rollback did not complete.",
+                        new AggregateException(importException, rollbackException));
+                }
+            }
+            throw;
+        }
+    }
+
     public async Task RecoverPendingImportAsync(
         string dataRoot,
         WikiBook book,
@@ -310,6 +461,137 @@ public sealed class WikiPackageTransferService
         }
     }
 
+    private static string ValidateStandaloneDatabasePath(string databasePath)
+    {
+        if (string.IsNullOrWhiteSpace(databasePath) || !Path.IsPathFullyQualified(databasePath))
+            throw new ArgumentException("An absolute database path is required.", nameof(databasePath));
+        var path = Path.GetFullPath(databasePath);
+        if (!File.Exists(path))
+            throw Error("content-database-not-found", "The selected database file does not exist.");
+        if ((File.GetAttributes(path) & FileAttributes.ReparsePoint) != 0)
+            throw Error("database-file-invalid", "A reparse-point database file cannot be imported.");
+        if (new[] { "-journal", "-wal", "-shm" }.Any(suffix => File.Exists(path + suffix)))
+            throw Error("database-sidecar-present", "The selected database must be a standalone SQLite file without sidecars.");
+        return path;
+    }
+
+    private static string ValidateNewDatabaseTarget(string databasePath)
+    {
+        if (string.IsNullOrWhiteSpace(databasePath) || !Path.IsPathFullyQualified(databasePath))
+            throw new ArgumentException("An absolute database path is required.", nameof(databasePath));
+        var path = Path.GetFullPath(databasePath);
+        _ = Path.GetDirectoryName(path)
+            ?? throw new ArgumentException("The database path does not have a parent directory.", nameof(databasePath));
+        if (File.Exists(path))
+            throw Error("database-export-target-exists", "The export target already exists.");
+        return path;
+    }
+
+    private static async Task<string> ComputeSha256Async(
+        string path,
+        CancellationToken cancellationToken)
+    {
+        await using var stream = new FileStream(
+            path,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            1024 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        return Convert.ToHexString(await SHA256.HashDataAsync(stream, cancellationToken)).ToLowerInvariant();
+    }
+
+    private static Task FinalizeStandaloneDatabaseAsync(
+        string databasePath,
+        CancellationToken cancellationToken) =>
+        Task.Run(() =>
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            using (var connection = new SQLiteConnection(
+                       databasePath,
+                       SQLiteOpenFlags.ReadWrite | SQLiteOpenFlags.FullMutex))
+            {
+                var journalMode = connection.ExecuteScalar<string>("PRAGMA journal_mode = DELETE;");
+                if (!string.Equals(journalMode, "delete", StringComparison.OrdinalIgnoreCase))
+                    throw Error("database-export-finalization-failed", "The exported database could not be finalized as a standalone file.");
+            }
+            if (new[] { "-journal", "-wal", "-shm" }.Any(suffix => File.Exists(databasePath + suffix)))
+                throw Error("database-export-finalization-failed", "The exported database still has SQLite sidecars.");
+        }, cancellationToken);
+
+    private static async Task<string> CopyAndHashAsync(
+        string sourcePath,
+        string destinationPath,
+        CancellationToken cancellationToken)
+    {
+        Directory.CreateDirectory(Path.GetDirectoryName(destinationPath)!);
+        await using var source = new FileStream(
+            sourcePath,
+            FileMode.Open,
+            FileAccess.Read,
+            FileShare.Read,
+            1024 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        await using var destination = new FileStream(
+            destinationPath,
+            FileMode.CreateNew,
+            FileAccess.Write,
+            FileShare.None,
+            1024 * 1024,
+            FileOptions.Asynchronous | FileOptions.SequentialScan);
+        using var hash = IncrementalHash.CreateHash(HashAlgorithmName.SHA256);
+        var buffer = new byte[1024 * 1024];
+        while (true)
+        {
+            var read = await source.ReadAsync(buffer, cancellationToken);
+            if (read == 0) break;
+            hash.AppendData(buffer, 0, read);
+            await destination.WriteAsync(buffer.AsMemory(0, read), cancellationToken);
+        }
+        await destination.FlushAsync(cancellationToken);
+        destination.Flush(flushToDisk: true);
+        return Convert.ToHexString(hash.GetHashAndReset()).ToLowerInvariant();
+    }
+
+    private static void CopyAuxiliaryFiles(
+        WikiDataPaths paths,
+        string staging,
+        CancellationToken cancellationToken)
+    {
+        if (!Directory.Exists(paths.DataDirectory)) return;
+        foreach (var sourcePath in new[]
+                 {
+                     paths.ResourceListPath,
+                     paths.TemporaryResourceListPath,
+                     paths.PageListPath,
+                     paths.FailedPageListPath,
+                     paths.TemporaryFailedPageListPath,
+                     paths.FailedResourceListPath,
+                     paths.TemporaryFailedResourceListPath,
+                     paths.UpdatePageListPath,
+                     paths.UpdateResourceListPath,
+                 })
+        {
+            cancellationToken.ThrowIfCancellationRequested();
+            if (!File.Exists(sourcePath))
+            {
+                continue;
+            }
+            var relative = Path.GetRelativePath(paths.DataDirectory, sourcePath);
+            var destination = Path.Combine(staging, relative);
+            Directory.CreateDirectory(Path.GetDirectoryName(destination)!);
+            File.Copy(sourcePath, destination, overwrite: false);
+        }
+    }
+
+    private static void EnsureImportSpace(WikiDataPaths paths, long databaseBytes)
+    {
+        var root = Path.GetPathRoot(paths.StagingRoot)
+            ?? throw Error("database-import-space-unavailable", "The managed data drive could not be resolved.");
+        if (new DriveInfo(root).AvailableFreeSpace < databaseBytes)
+            throw Error("database-import-space-unavailable", "There is not enough free space to stage the database import.");
+    }
+
     private static bool IsDatabaseFamilyMember(string path, string databasePath) =>
         PathsEqual(path, databasePath)
         || PathsEqual(path, databasePath + "-wal")
@@ -317,6 +599,13 @@ public sealed class WikiPackageTransferService
 
     private static bool PathsEqual(string left, string right) =>
         string.Equals(Path.GetFullPath(left), Path.GetFullPath(right), StringComparison.OrdinalIgnoreCase);
+
+    private static bool IsPathWithinDirectory(string path, string directory)
+    {
+        var fullPath = Path.GetFullPath(path);
+        var fullDirectory = Path.TrimEndingDirectorySeparator(Path.GetFullPath(directory));
+        return fullPath.StartsWith(fullDirectory + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+    }
 
     private static ImportJournal UpdateJournal(ImportJournal journal, ImportPhase phase)
     {

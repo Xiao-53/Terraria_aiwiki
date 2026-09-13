@@ -1,9 +1,9 @@
 # ADR 0009：Windows 使用宿主管理的默认数据根
 
-- 状态：accepted
+- 状态：accepted；数据管理页显示/更改数据根的用户流程已由 ADR 0011 替代，其余默认根与兼容解析决策继续有效
 - 日期：2026-09-04
-- 决策范围：Windows 首次运行的数据根创建、恢复与用户更改行为
-- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`docs/adr/0002-portable-core-and-data-root.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/changes/archive/phase-11-windows-productization/plan.md`
+- 决策范围：Windows 首次运行的数据根创建与兼容解析；用户更改行为已被 ADR 0011 替代
+- 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`docs/adr/0002-portable-core-and-data-root.md`、`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/changes/archive/phase-11-windows-productization/plan.md`
 
 ## 背景
 

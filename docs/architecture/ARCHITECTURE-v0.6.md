@@ -47,7 +47,7 @@
 | Wiki 获取与同步 | 页面列表、页面下载、更新时间比较、增量更新、Redirect、失败任务与重试 |
 | 内容处理与存储 | 页面解析与清理、SQLite 持久化、现有数据语义与兼容性 |
 | 搜索 | 搜索索引生成、SQLite FTS5、标题与 Redirect 检索、手动搜索 |
-| 数据可移植性 | 数据包导入、导出、完整性检查、旧数据迁移与兼容逻辑 |
+| 数据可移植性 | 数据包兼容、活动 Wiki 单文件数据库导入导出、完整性检查、旧数据迁移与兼容逻辑 |
 | 资源与维护 | Wiki 资源、数据库维护、状态与容量统计 |
 | 数据源 | 多 WikiBook 身份、配置和数据目录语义 |
 | 离线阅读 | Local Wiki Viewer 的页面、资源、导航和消息桥能力 |
@@ -207,7 +207,7 @@ Phase 11 关闭后的候选队列和遗留项见 `openspec/changes/post-phase-11
 | 产品平台范围 | Windows 当前；Android 未来；除此之外全部为明确非目标 |
 | 源码所有权 | 当前仓库统一拥有产品源码/测试/Agent/构建资产；旧 MAUI gitlink 已退休，上游固定来源由 ADR/资产记录追溯 |
 | Core | 外层产品仓库中的单一平台无关 .NET 10 Wiki Core；不复制第二套实现 |
-| 数据根 | Core 只接收宿主提供的绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`；Windows 无已保存地址时由宿主创建 LocalAppData 默认根，数据管理页可更改到已有有效根或新的空目录 |
+| 数据根 | Core 只接收宿主提供的绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`；Windows 使用 LocalAppData 宿主管理默认根，普通 UI 不切换地址，数据管理页以当前 Wiki 的单文件 `data.db` 导入导出提供可移植性 |
 | 数据库与搜索 | 保留现有 SQLite/FTS5 并局部修正 |
 | 客户端首选 | Avalonia + NativeWebView；Phase 00 Windows 11 x64 门槛已通过 |
 | Application | 保持薄，只表达真实用例和必要 ports |

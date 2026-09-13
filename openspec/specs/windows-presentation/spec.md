@@ -51,11 +51,11 @@
 - 左侧“数据管理”只经 Application `ActiveWikiUseCases` 与 `WikiDataUseCases` 列出/切换 Wiki、刷新统计，并执行页面/资源下载、更新、失败项重试或清理、数据库整理、资源删除和整库删除；Presentation 不直接访问 SQLite 或复制 Core 生命周期实现。
 - 下载、更新、重试和维护等长操作显示页内进度、当前动作与取消入口。失败只显示不含本机路径的安全状态，不阻塞 Chat、资料库和离线设置访问。
 - 切换 Wiki、清理失败项、删除资源、删除整库和导入覆盖必须先显示目标与影响范围，再经页内确认调用既有 Application 用例。活动数据变化后刷新搜索、收藏和资料库；需要时让同一个 Viewer/Reader 重新绑定动态 loopback，AI 继续通过同一个 Application 查询边界读取新内容，不创建第二个会话或要求重启应用。
-- Windows `.pkg` 导入先调用 `InspectPackageAsync`，保存 inspection token 并显示元数据；用户确认后才调用 `ImportPackageAsync`。0.4 之前的数据包必须明确提示兼容迁移并传递 legacy consent，包格式与既有 staging/backup/rollback 不变。
-- Windows 导出由原生保存文件选择器决定目标。若目标已存在，宿主先在同目录写唯一临时包，完整成功后才替换目标；失败或取消清理临时文件并保留旧目标。
-- 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；启动完成后自动选择数据管理页，Reader 保持关闭，并明确提示应用不会自动联网、用户可执行“下载页面与资源”或导入本地数据包。无内容状态不得升级为整应用启动失败。
+- Windows 数据管理页只交换当前活动 Wiki 的完整 SQLite `data.db`。导入先调用 `InspectDatabaseAsync` 完整检查并保存 inspection token，显示文件名、大小、当前目标 Wiki 与覆盖范围；用户确认后才调用 `ImportDatabaseAsync`。成功后刷新统计并重绑唯一 Viewer，失败或中断由既有 staging/backup/journal 恢复原库。
+- Windows 导出调用 `ExportDatabaseAsync` 从活动连接生成包含 WAL 最新提交的独立单文件快照。原生保存选择器决定 `.db` 目标；若目标已存在，宿主先在同目录写唯一临时文件，完整成功后才替换目标，失败或取消清理临时文件并保留旧目标。
+- 当前 Wiki 尚未下载页面时，Runtime 仍可进入数据管理和设置；启动完成后自动选择数据管理页，Reader 保持关闭，并明确提示应用不会自动联网、用户可执行“下载页面与资源”或导入本地 `data.db`。无内容状态不得升级为整应用启动失败。
 - 没有已保存数据根时，Windows 宿主不得自动打开系统文件夹选择器；它在 `%LocalAppData%\Terraria AI Wiki\WikiData` 创建默认数据根并把绝对路径交给现有 Application/Core，由既有初始化流程创建 `Manager.db` 与活动 Wiki 数据库。已有有效保存根与显式命令行根优先；已有无效保存根不得被默认根静默覆盖，而应直接进入数据管理页恢复。
-- 数据管理页始终在带边框的单行只读区域显示当前数据库文件夹，显示层使用 `PathSegmentEllipsis` 折叠中间目录、悬停显示完整路径并允许选择复制；完整值仍用于保存和重组。右侧保留次级“更改文件夹”入口。更改时可选择包含有效 `Manager.db` 的已有数据根，或选择空文件夹作为新数据根；非空且不含有效数据库的目录必须拒绝。取消、选错或后续数据库初始化失败都保留页面和再次选择入口，只有路径验证通过后才保存并重新组合 Runtime。
+- 数据管理页不显示内部数据根，也不提供文件夹选择或地址切换。原区域显示“数据库文件”及“导入数据库 / 导出数据库”；`.pkg` Core/Application 兼容能力继续保留，但 Windows 普通 UI 不再暴露 `.pkg` 操作。
 
 ## 设置
 
@@ -65,9 +65,9 @@
 - 设置页使用“常规设置 / AI 配置”二级菜单；AI 配置仍留在设置内部，不增加第七个全局导航。AI 配置只公开 DeepSeek 官方 API 与自定义 OpenAI-compatible 两种 provider，并按 Windows AI Runtime spec 编辑同一个 `ai-runtime.json` v3。
 - DeepSeek 预设固定官方 endpoint 与 Responses API，只允许选择当前受支持的 Flash/Pro 模型；自定义项显式填写 endpoint、model 与 Responses / Chat Completions。“模型服务”是唯一 AI 配置区域，合并提供商字段、API Key、思考强度和数据发送说明；普通用户界面不显示 Python 版本或路径。API key 保存到 Windows Credential Manager，不回显真实值或长度；已有凭据以固定长度遮蔽标记和“已保存”文字显示，空底层输入仍表示保留，输入新值表示替换，并另有显式清除操作。思考强度提供服务默认、关闭、低、高、最大五档。
 - AI 保存统一验证并原子写入后，显式重启当前 AI Runtime；Chat 继续经既有状态事件收到结果。保存或重启失败只能显示安全页内状态，不弹阻塞对话框、不泄漏 key/provider 原始响应，也不影响常规设置与离线能力。
-- AI 配置与 Credential Manager 不依赖 Wiki 数据库 Runtime 才可编辑。没有有效数据根时 API Key 输入、provider 载入与保存仍可用；保存成功后明确提示 AI 将在选定有效数据根后启动，不把暂时无法重启误报成凭据保存失败。
+- AI 配置与 Credential Manager 不依赖 Wiki 数据库 Runtime 才可编辑。Wiki 数据库暂不可用时 API Key 输入、provider 载入与保存仍可用；保存成功后明确提示 AI 将在数据库恢复连接后启动，不把暂时无法重启误报成凭据保存失败。
 - 常规页同级“关于与更新”区域显示应用版本、安装/portable 形态、Windows/WebView2 状态、unsigned 告知和有界诊断。只有用户点击后才检查公开 GitHub stable Releases；检查、可用、下载、取消、待重启、失败与禁用均为页内状态，失败不影响离线功能。
-- 启动错误只显示当前适用的恢复动作：数据根或数据兼容失败自动进入数据管理页并使用页内选择/重选，WebView2 缺失提供 Microsoft 官方获取入口，Viewer 静态资产、loopback bind、导航或 DOM Ready 失败明确归为 Viewer 阶段并保留重试，其他失败保留通用重试；不得让无关按钮暗示错误恢复方式。`data-directory-conflict` 必须说明检测到两套 Wiki 数据且均未修改，不显示完整目录、文件大小、记录数量或底层异常。
+- 启动错误只显示当前适用的恢复动作：数据根或数据兼容失败说明需恢复默认数据目录/清理冲突并提供重试，不再提供文件夹选择；WebView2 缺失提供 Microsoft 官方获取入口，Viewer 静态资产、loopback bind、导航或 DOM Ready 失败明确归为 Viewer 阶段并保留重试，其他失败保留通用重试。`data-directory-conflict` 必须说明检测到两套 Wiki 数据且均未修改，不显示完整目录、文件大小、记录数量或底层异常。
 
 ## 安全 Markdown
 
@@ -90,6 +90,6 @@
 
 Core、`ai-runtime.json`、SQLite schema、Wiki 数据包和 Viewer 内容协议不因 Presentation 改变。会话状态/存储模型保持在 Windows assembly 内部；不得把它升级为 Application port。Python Agent history 与 NDJSON v2 的对应边界分别由 AI Backend 和 Windows AI Runtime specs 管理。
 
-首次启动自动创建宿主管理的默认数据根，不弹出选择器；创建或数据库初始化失败时不提供无效的通用重试，而是进入数据管理页提供“选择/更改 Wiki 数据文件夹”。空文件夹可由既有 Application/Core 初始化，非空错误目录、无效数据库或取消都不替换已保存路径，页面保持可操作。WebView2 缺失时提供“重试”和 Microsoft 官方获取入口；其他启动失败只保留适用的安全恢复动作。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
+首次启动自动创建宿主管理的默认数据根，不弹出选择器；普通 UI 不显示或更改该路径。创建、解析或数据库初始化失败时显示安全原因并允许在恢复默认目录后重试。WebView2 缺失时提供“重试”和 Microsoft 官方获取入口；其他启动失败只保留适用的安全恢复动作。兼容旧数据根时，若内容数据库遗留 WAL/SHM，必须通过 SQLite checkpoint 安全合并后再执行既有迁移；不得直接删除 sidecar。
 
 若增加云同步、超过 4 轮的模型上下文、模型生成历史摘要、第二个 Viewer、可点击模型链接、Markdown HTML/WebView、窗口状态持久化或 Android UI，必须建立独立变更并更新相应能力契约。

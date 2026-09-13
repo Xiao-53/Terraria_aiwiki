@@ -84,8 +84,8 @@ internal sealed partial class MainWindow : Window
         _diagnostics.Write(ProductDiagnosticEvent.ApplicationStarted);
         _shellViewModel = new ShellViewModel(
             CreateChatConversationStore(_chatFavoritesPath),
-            PickImportPackageAsync,
-            ExportPackageAsync,
+            PickImportDatabaseAsync,
+            ExportDatabaseAsync,
             ApplyPreferencesAsync,
             LoadAiConfigurationDraftAsync,
             SaveAiConfigurationAsync,
@@ -97,7 +97,6 @@ internal sealed partial class MainWindow : Window
             _diagnostics);
         _shellView.DataContext = _shellViewModel;
         _shellViewModel.RetryStartupRequested += OnRetryStartupRequested;
-        _shellViewModel.SelectDataRootRequested += OnSelectDataRootRequested;
         _shellViewModel.GetWebView2Requested += OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged += OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted += OnViewerNavigationCompleted;
@@ -145,8 +144,6 @@ internal sealed partial class MainWindow : Window
     }
 
     private async void OnRetryStartupRequested(object? sender, EventArgs args) => await RetryStartupAsync();
-
-    private async void OnSelectDataRootRequested(object? sender, EventArgs args) => await SelectDataRootAsync();
 
     private async void OnGetWebView2Requested(object? sender, EventArgs args) =>
         await OpenWebView2DownloadAsync();
@@ -323,50 +320,6 @@ internal sealed partial class MainWindow : Window
         }
     }
 
-    private async Task SelectDataRootAsync()
-    {
-        if (_closing || _isRestarting)
-            return;
-        _isRestarting = true;
-        _shellViewModel.Management.BeginDataRootSelection();
-        try
-        {
-            var selected = await new AvaloniaDataRootPicker(this).PickAsync(_lifetime.Token);
-            if (string.IsNullOrWhiteSpace(selected))
-            {
-                _shellViewModel.Management.ReportDataRootSelection(
-                    "已取消选择；当前数据文件夹没有改变，可以随时重新选择。");
-                return;
-            }
-            if (!DataRootResolver.TryPrepareForInitialization(selected, out var normalized, out _))
-            {
-                _shellViewModel.Management.ReportDataRootSelection(
-                    "所选文件夹不可用；请选择空文件夹或包含有效 Manager.db 的 Wiki 数据文件夹。你可以立即重新选择。");
-                return;
-            }
-
-            _runtimeArguments = WithDataRoot(_arguments, normalized!);
-            _shellViewModel.Management.SetDataRoot(normalized);
-            _shellViewModel.Management.ReportDataRootSelection("正在切换 Wiki 数据文件夹…");
-            _shellViewModel.SetStartupStatus("正在切换 Wiki 数据文件夹…");
-            await DisposeRuntimeAsync();
-            await StartAsync();
-        }
-        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
-        {
-        }
-        catch
-        {
-            _shellViewModel.Management.ReportDataRootSelection(
-                "无法打开或读取所选文件夹；当前数据没有改变，可以重新选择。");
-        }
-        finally
-        {
-            _shellViewModel.Management.EndDataRootSelection();
-            _isRestarting = false;
-        }
-    }
-
     private bool IsDarkTheme() =>
         RequestedThemeVariant == ThemeVariant.Dark
         || (RequestedThemeVariant == ThemeVariant.Default && ActualThemeVariant == ThemeVariant.Dark);
@@ -469,11 +422,6 @@ internal sealed partial class MainWindow : Window
     {
         var presentation = ClassifyStartupFailure(exception);
         _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
-        if (presentation.Recovery == StartupRecoveryKind.SelectDataRoot)
-        {
-            _shellViewModel.ShowDataRootRecovery(presentation.Message);
-            return;
-        }
         _shellViewModel.SetStartupStatus(
             presentation.Message + " 处理后点击“重试”。",
             isError: true,
@@ -486,23 +434,23 @@ internal sealed partial class MainWindow : Window
             StartupRecoveryKind.InstallWebView2,
             "未检测到 Microsoft Edge WebView2 Runtime；请从 Microsoft 官方页面安装或修复 Evergreen Runtime。"),
         DataRootResolutionException { Code: "data-root-required" } => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。"),
+            StartupRecoveryKind.Retry,
+            "Wiki 数据目录当前不可用。请恢复默认数据目录后重试。"),
         DataRootResolutionException { Code: "default-data-root-unavailable" } => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他空文件夹或已有数据库文件夹。"),
+            StartupRecoveryKind.Retry,
+            "无法创建默认 Wiki 数据目录。请检查本机存储权限和可用空间。"),
         DataRootResolutionException => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "Wiki 数据文件夹不可用。请在数据管理页面选择空文件夹或包含有效 Manager.db 的文件夹。"),
+            StartupRecoveryKind.Retry,
+            "Wiki 数据目录不可用。请恢复默认数据目录后重试。"),
         ApplicationUseCaseException { Code: "data-directory-conflict" } => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "检测到旧目录与目标目录中同时存在 Wiki 数据；应用未修改任何一套数据。请在数据管理页面选择已准备好的有效数据文件夹。"),
+            StartupRecoveryKind.Retry,
+            "检测到旧目录与目标目录中同时存在 Wiki 数据；应用未修改任何一套数据。请清理冲突的旧目录后重试。"),
         ApplicationUseCaseException { Code: "database-family-conflict" } => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "检测到相互冲突的 Wiki 数据库文件；应用未修改这些文件。请在数据管理页面选择已准备好的有效数据文件夹。"),
+            StartupRecoveryKind.Retry,
+            "检测到相互冲突的 Wiki 数据库文件；应用未修改这些文件。请清理冲突文件后重试。"),
         ApplicationUseCaseException => new(
-            StartupRecoveryKind.SelectDataRoot,
-            "Wiki 数据库无法初始化。请在数据管理页面更改到空文件夹或包含有效 Manager.db 的文件夹。"),
+            StartupRecoveryKind.Retry,
+            "Wiki 数据库无法初始化。请恢复默认数据目录中的数据库后重试。"),
         WindowsClientStartupException { Code: "viewer-assets-missing" } => new(
             StartupRecoveryKind.Retry,
             "本地 Viewer 静态资源缺失，请修复应用文件。"),
@@ -747,7 +695,6 @@ internal sealed partial class MainWindow : Window
         await DisposeRuntimeAsync();
         _shellViewModel.Dispose();
         _shellViewModel.RetryStartupRequested -= OnRetryStartupRequested;
-        _shellViewModel.SelectDataRootRequested -= OnSelectDataRootRequested;
         _shellViewModel.GetWebView2Requested -= OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged -= OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted -= OnViewerNavigationCompleted;
@@ -821,16 +768,16 @@ internal sealed partial class MainWindow : Window
         }
     }
 
-    private async Task<string?> PickImportPackageAsync(CancellationToken cancellationToken)
+    private async Task<string?> PickImportDatabaseAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "选择 Wiki 数据包",
+            Title = "选择 Wiki 数据库",
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("Wiki 数据包") { Patterns = ["*.pkg"] },
+                new FilePickerFileType("SQLite 数据库") { Patterns = ["*.db"] },
             ],
         });
         cancellationToken.ThrowIfCancellationRequested();
@@ -854,7 +801,7 @@ internal sealed partial class MainWindow : Window
         {
             return new WindowsAiRuntimeStatus(
                 WindowsAiRuntimeState.Disabled,
-                "AI 配置已保存；选择有效的 Wiki 数据文件夹后即可启动 AI。",
+                "AI 配置已保存；Wiki 数据库恢复连接后即可启动 AI。",
                 "data-root-required");
         }
         await runtime.RetryAiAsync(cancellationToken);
@@ -875,7 +822,7 @@ internal sealed partial class MainWindow : Window
         return new AiRuntimeConfigurationStore(path);
     }
 
-    private async Task<WikiPackageExportResponse?> ExportPackageAsync(
+    private async Task<WikiDatabaseExportResponse?> ExportDatabaseAsync(
         WikiBookSnapshot wiki,
         CancellationToken cancellationToken)
     {
@@ -886,12 +833,12 @@ internal sealed partial class MainWindow : Window
         cancellationToken.ThrowIfCancellationRequested();
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "导出 Wiki 数据包",
-            SuggestedFileName = SanitizeFileName(wiki.Title) + "-" + DateTime.Now.ToString("yyyyMMdd") + ".pkg",
-            DefaultExtension = "pkg",
+            Title = "导出 Wiki 数据库",
+            SuggestedFileName = SanitizeFileName(wiki.Title) + "-" + DateTime.Now.ToString("yyyyMMdd") + ".db",
+            DefaultExtension = "db",
             FileTypeChoices =
             [
-                new FilePickerFileType("Wiki 数据包") { Patterns = ["*.pkg"] },
+                new FilePickerFileType("SQLite 数据库") { Patterns = ["*.db"] },
             ],
         });
         cancellationToken.ThrowIfCancellationRequested();
@@ -902,16 +849,11 @@ internal sealed partial class MainWindow : Window
         var exportPath = File.Exists(targetPath) ? CreateTemporaryExportPath(targetPath) : targetPath;
         try
         {
-            var version = typeof(App).Assembly.GetName().Version?.ToString(3) ?? "0.0.0";
-            var result = await runtime.Application.Data.ExportPackageAsync(
-                wiki.Id,
-                exportPath,
-                version,
-                cancellationToken);
+            var result = await runtime.Application.Data.ExportDatabaseAsync(exportPath, cancellationToken);
             cancellationToken.ThrowIfCancellationRequested();
             if (!string.Equals(exportPath, targetPath, StringComparison.OrdinalIgnoreCase))
                 CompleteExportTarget(exportPath, targetPath);
-            return result with { PackagePath = targetPath };
+            return result with { DatabasePath = targetPath };
         }
         finally
         {

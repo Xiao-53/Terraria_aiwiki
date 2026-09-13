@@ -27,6 +27,7 @@ codex
 - 客户端技术决策：[`docs/adr/0001-use-avalonia-client.md`](./docs/adr/0001-use-avalonia-client.md)
 - Core 与数据根决策：[`docs/adr/0002-portable-core-and-data-root.md`](./docs/adr/0002-portable-core-and-data-root.md)
 - Windows 默认数据根决策：[`docs/adr/0009-use-managed-default-windows-data-root.md`](./docs/adr/0009-use-managed-default-windows-data-root.md)
+- Windows 单文件数据库交换决策：[`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`](./docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md)
 - 已完成 Phase 00 记录：[`openspec/changes/archive/phase-00-migration-baseline/plan.md`](./openspec/changes/archive/phase-00-migration-baseline/plan.md)
 - 已完成 Phase 01 记录：[`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`](./openspec/changes/archive/phase-01-portable-wiki-core/plan.md)
 - 已完成 Phase 02 记录：[`openspec/changes/archive/phase-02-search-fix/plan.md`](./openspec/changes/archive/phase-02-search-fix/plan.md)
@@ -56,7 +57,7 @@ codex
 - 已归档的全宽本地 Wiki 搜索页记录：[`openspec/changes/archive/add-local-wiki-search-page/plan.md`](./openspec/changes/archive/add-local-wiki-search-page/plan.md)
 - Windows UI 规范与新页面工作流：[`.agents/skills/terraria-ui/SKILL.md`](./.agents/skills/terraria-ui/SKILL.md)
 - 已归档的 AI 会话 Token 优化记录：[`openspec/changes/archive/ai-conversation-token-optimization/plan.md`](./openspec/changes/archive/ai-conversation-token-optimization/plan.md)
-- 核心源码 RAR 打包 Skill：[`.agents/skills/package-core-source-rar/SKILL.md`](./.agents/skills/package-core-source-rar/SKILL.md)
+- 核心源码 ZIP 打包 Skill：[`.agents/skills/package-core-source-zip/SKILL.md`](./.agents/skills/package-core-source-zip/SKILL.md)
 - 已归档的核心源码 RAR 打包记录：[`openspec/changes/archive/package-core-source-rar/plan.md`](./openspec/changes/archive/package-core-source-rar/plan.md)
 - 已完成 Windows 启动可靠性与性能优化：[`openspec/changes/archive/optimize-windows-startup/plan.md`](./openspec/changes/archive/optimize-windows-startup/plan.md)
 - 已完成旧/目标 Wiki 布局冲突恢复：[`openspec/changes/archive/resolve-superseded-wiki-layout/plan.md`](./openspec/changes/archive/resolve-superseded-wiki-layout/plan.md)
@@ -103,7 +104,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 
 - Wiki 获取、Redirect、增量更新和失败处理；
 - 内容清理、SQLite、搜索索引和现有 FTS5 搜索；
-- 数据包导入、导出、迁移和维护；
+- 数据包兼容、单文件数据库导入导出、迁移和维护；
 - Wiki 资源、多数据源和 Local Viewer backend；
 - 手动搜索、离线阅读和未来 AI 对同一份本地数据的复用。
 
@@ -169,7 +170,8 @@ terraria_aiwiki/
 │     ├─ 0007-separate-product-source-from-reference.md # 源码所有权
 │     ├─ 0008-use-github-releases-windows-distribution.md # Windows 分发
 │     ├─ 0009-use-managed-default-windows-data-root.md # Windows 默认数据根
-│     └─ 0010-use-bounded-local-ai-conversations.md # 本地会话与模型历史边界
+│     ├─ 0010-use-bounded-local-ai-conversations.md # 本地会话与模型历史边界
+│     └─ 0011-use-managed-data-root-and-raw-database-transfer.md # Windows 数据根与数据库文件交换
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约

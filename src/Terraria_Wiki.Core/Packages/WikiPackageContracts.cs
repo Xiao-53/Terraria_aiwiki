@@ -1,4 +1,5 @@
 using System.Text.Json.Serialization;
+using Terraria_Wiki.Models;
 
 namespace Terraria_Wiki.Core.Packages;
 
@@ -102,3 +103,24 @@ public sealed record WikiPackageWriteResult(
     int MetadataBytes,
     long PayloadBytes,
     WikiPackageMetadata Metadata);
+
+public sealed record WikiDatabaseInspection(
+    string DatabasePath,
+    long DatabaseBytes,
+    string InspectionToken);
+
+public sealed record WikiDatabaseExportResult(
+    string DatabasePath,
+    long DatabaseBytes);
+
+public sealed record WikiDatabaseImportRequest(
+    string DatabasePath,
+    string DataRoot,
+    int WikiId,
+    string InspectionToken);
+
+public sealed record WikiDatabaseImportResult(
+    WikiBook WikiBook,
+    WikiDatabaseInspection Inspection,
+    bool ReplacedExistingData,
+    bool MigratedLegacyAnchors);

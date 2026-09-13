@@ -39,7 +39,6 @@ internal enum StartupRecoveryKind
 {
     None,
     Retry,
-    SelectDataRoot,
     InstallWebView2,
 }
 
@@ -61,8 +60,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public ShellViewModel(
         IChatConversationStore? chatConversationStore = null,
-        Func<CancellationToken, Task<string?>>? pickImportPackage = null,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiPackageExportResponse?>>? exportPackage = null,
+        Func<CancellationToken, Task<string?>>? pickImportDatabase = null,
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>>? exportDatabase = null,
         Func<ApplicationPreferences, Task>? applyPreferences = null,
         Func<CancellationToken, Task<AiRuntimeConfigurationDraft>>? loadAiConfiguration = null,
         Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
@@ -91,9 +90,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             OpenChatConversationAsync,
             Chat.MarkConversationDeleted);
         Management = new WikiManagementViewModel(
-            pickImportPackage,
-            exportPackage,
-            () => SelectDataRootRequested?.Invoke(this, EventArgs.Empty));
+            pickImportDatabase,
+            exportDatabase);
         Settings = new SettingsViewModel(
             applyPreferences,
             loadAiConfiguration,
@@ -127,7 +125,6 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     }
 
     public event EventHandler? RetryStartupRequested;
-    public event EventHandler? SelectDataRootRequested;
     public event EventHandler? GetWebView2Requested;
 
     public ChatViewModel Chat { get; }
@@ -224,7 +221,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         }
     }
 
-    public bool CanRetryStartup => HasStartupError && StartupRecovery != StartupRecoveryKind.SelectDataRoot;
+    public bool CanRetryStartup => HasStartupError;
     public bool CanGetWebView2 => HasStartupError && StartupRecovery == StartupRecoveryKind.InstallWebView2;
     public bool CanOpenWikiReader => Reader.IsReady;
 
@@ -299,7 +296,6 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Wiki.Attach((query, token) => runtime.Application.Query.SearchAsync(query, cancellationToken: token));
         Favorites.AttachWikiLibrary(runtime.Application.Library);
         Library.Attach(runtime.Application.Library);
-        Management.SetDataRoot(runtime.DataRoot);
         Management.Attach(runtime.Application, switchWiki);
         Settings.Attach(runtime.Application.Settings);
         Reader.AttachFavorites(Favorites.IsWikiFavoriteAsync, Favorites.SetWikiFavoriteAsync);
@@ -337,16 +333,6 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         StartupStatus = message;
         StartupRecovery = isError ? recovery : StartupRecoveryKind.None;
         HasStartupError = isError;
-    }
-
-    public void ShowDataRootRecovery(string message)
-    {
-        Management.ReportDataRootSelection(message);
-        SetStartupStatus(
-            message,
-            isError: true,
-            recovery: StartupRecoveryKind.SelectDataRoot);
-        NavigateManagement();
     }
 
     public void ShowEmptyWikiOnboarding()

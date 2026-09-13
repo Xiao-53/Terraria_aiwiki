@@ -265,6 +265,65 @@ public sealed class WikiDataUseCases
         }
     }
 
+    public async Task<WikiDatabaseInspection> InspectDatabaseAsync(
+        string databasePath,
+        CancellationToken cancellationToken = default)
+    {
+        _state.RequireActiveBook();
+        return await _state.Packages.InspectDatabaseAsync(databasePath, cancellationToken);
+    }
+
+    public async Task<WikiDatabaseImportResponse> ImportDatabaseAsync(
+        string databasePath,
+        string inspectionToken,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(inspectionToken))
+            throw new ArgumentException("An inspection token is required.", nameof(inspectionToken));
+        if (!await _state.CoordinationGate.WaitAsync(0, cancellationToken))
+            throw OperationInProgress();
+        try
+        {
+            var active = _state.RequireActiveBook();
+            await using var consumers = await _state.ConsumerCoordinator.PauseAsync(cancellationToken);
+            var result = await _state.Packages.ImportDatabaseAsync(
+                new WikiDatabaseImportRequest(
+                    databasePath,
+                    _state.DataRoot,
+                    active.Id,
+                    inspectionToken),
+                cancellationToken);
+            _state.ActiveBook = ApplicationState.CloneBook(result.WikiBook);
+            return ApplicationMapper.ToResponse(result);
+        }
+        finally
+        {
+            _state.CoordinationGate.Release();
+        }
+    }
+
+    public async Task<WikiDatabaseExportResponse> ExportDatabaseAsync(
+        string databasePath,
+        CancellationToken cancellationToken = default)
+    {
+        if (!await _state.CoordinationGate.WaitAsync(0, cancellationToken))
+            throw OperationInProgress();
+        try
+        {
+            var active = _state.RequireActiveBook();
+            var result = await _state.Packages.ExportDatabaseAsync(
+                Paths(active),
+                databasePath,
+                _state.ContentDatabase,
+                cancellationToken);
+            return ApplicationMapper.ToResponse(result);
+        }
+        finally
+        {
+            _state.CoordinationGate.Release();
+        }
+    }
+
     private WikiOperationOptions Options()
     {
         var preferences = _state.RequirePreferences();

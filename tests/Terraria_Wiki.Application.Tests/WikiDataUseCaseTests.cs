@@ -144,6 +144,33 @@ public sealed class WikiDataUseCaseTests
     }
 
     [Fact]
+    public async Task ActiveDatabaseExportInspectAndImportUseTokenAndConsumerLease()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        await fixture.State.ContentDatabase.SaveItemAsync(Page("Database Snapshot Page"));
+        var databasePath = PackagePath(fixture, "active.db");
+
+        var written = await fixture.Application.Data.ExportDatabaseAsync(databasePath);
+        var inspection = await fixture.Application.Data.InspectDatabaseAsync(databasePath);
+        await fixture.State.ContentDatabase.SaveItemAsync(Page("After Database Export"));
+        var pauses = fixture.Consumers.PauseCount;
+        var resumes = fixture.Consumers.ResumeCount;
+
+        var imported = await fixture.Application.Data.ImportDatabaseAsync(
+            databasePath,
+            inspection.InspectionToken);
+
+        Assert.Equal(databasePath, written.DatabasePath);
+        Assert.Equal(1, imported.WikiBook.Id);
+        Assert.Equal(inspection.InspectionToken, imported.Inspection.InspectionToken);
+        Assert.Equal(pauses + 1, fixture.Consumers.PauseCount);
+        Assert.Equal(resumes + 1, fixture.Consumers.ResumeCount);
+        Assert.True((await fixture.Application.Query.ReadAsync("Database Snapshot Page")).IsFound);
+        Assert.False((await fixture.Application.Query.ReadAsync("After Database Export")).IsFound);
+        Assert.True(imported.WikiBook.PageCount > 1);
+    }
+
+    [Fact]
     public async Task TokenMismatchAndLegacyConfirmationAreExplicitAndAlwaysResumeActiveConsumers()
     {
         await using var fixture = await ApplicationFixture.CreateAsync();

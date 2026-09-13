@@ -43,4 +43,14 @@ internal static class ApplicationMapper
         result.PackageBytes,
         result.MetadataBytes,
         result.PayloadBytes);
+
+    public static WikiDatabaseImportResponse ToResponse(WikiDatabaseImportResult result) => new(
+        ToSnapshot(result.WikiBook),
+        result.Inspection,
+        result.ReplacedExistingData,
+        result.MigratedLegacyAnchors);
+
+    public static WikiDatabaseExportResponse ToResponse(WikiDatabaseExportResult result) => new(
+        result.DatabasePath,
+        result.DatabaseBytes);
 }

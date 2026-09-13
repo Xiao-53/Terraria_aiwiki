@@ -17,7 +17,7 @@
 - “成功打开旧库”与“成功执行迁移/初始化”是两个不同验收项，不得用读写初始化代替只读兼容检查。
 - 搜索修复可以改变已确认的问题行为，但必须通过独立 Phase 和回归证据，不得借物理迁移静默改变查询语义。
 - 旧数据目录与目标目录同时含数据库家族时，只有目标内容库在只读检查中覆盖旧库全部页面、Redirect、资源、收藏和历史，全部同名页面的 `LastModified` 不倒退，并且存在明确新增或更新证据时，才允许把旧目录原子退役后继续使用目标库；目标 Content 初始化失败必须恢复旧目录，成功后才清理退役目录。任一覆盖条件、结构读取或 sidecar 安全条件不能证明时必须以 `data-directory-conflict` 失败关闭，两个目录、Manager 及其数据库家族不得被自动选择、删除、改名、覆盖、合并或 checkpoint。
-- 未完成迁移恢复优先于快速路径。正常 WAL 数据库使用 SQLite 一致读取执行轻量迁移预检；无需迁移时不得为兼容检查执行 checkpoint、staging 复制或完整迁移产物校验，确需迁移时仍须 checkpoint 后重新判定并沿用既有 staging/backup/journal/rollback。
+- 未完成迁移恢复优先于快速路径。正常 WAL 数据库使用 SQLite 一致读取执行轻量迁移预检；无需迁移时不得为兼容检查执行 checkpoint、staging 复制或完整迁移产物校验，确需迁移时仍须 checkpoint 后重新判定并沿用既有 staging/backup/journal/rollback。交换 journal 产生前中断且正式目标库仍存在时，后续恢复只清理名称严格匹配 `anchor-staging-<32 hex>` 的一次性 `.db/-journal/-wal/-shm` 家族；目标库缺失、名称不匹配或清理不能完成时必须保留恢复线索或失败关闭，不得静默继续累积暂存副本。
 
 ### 数据包兼容
 
@@ -25,6 +25,14 @@
 - 扩展名不是格式兼容的唯一判据。兼容验证必须检查 header、metadata、文件清单、长度、内容 hash 和目标数据语义。
 - 新导出包不得只由同一套新导入代码自证兼容；必须使用 golden fixture 与独立兼容 oracle。
 - 改变包字节格式、字段语义或旧版本迁移规则，需要独立决策、迁移方案和回退，不得作为 UI 迁移附带变更。
+
+### 单文件数据库交换
+
+- Windows 普通 UI 导入/导出当前活动 Wiki 的完整 `data.db`；这不替代或删除 `.pkg` 格式及其兼容 API。
+- 导出必须从 SQLite 活动连接创建一致快照，并把快照收口为无 `-journal/-wal/-shm` 的独立 `.db`；不得直接复制 WAL 模式主文件。
+- 导入文件必须是无 sidecar 的独立 SQLite 数据库。检查必须覆盖完整 integrity、既有内容表/主键/索引与真实 FTS5 trigram 能力，并以内容 hash 绑定 inspection token。
+- 导入只覆盖用户确认时的当前活动 Wiki；在生产替换前把来源复制到同卷 staging、重新核对 token 并再次验证。目录级 backup/journal/rollback 保护原目标，非数据库下载辅助文件保持。
+- 导入成功后 Manager 的页面、Redirect、资源、大小与下载状态必须来自新库；失败、中断或 token 变化不得留下部分生产数据。
 
 ### 安全导入
 

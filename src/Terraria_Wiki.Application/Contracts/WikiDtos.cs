@@ -66,3 +66,13 @@ public sealed record WikiPackageExportResponse(
     long PackageBytes,
     int MetadataBytes,
     long PayloadBytes);
+
+public sealed record WikiDatabaseImportResponse(
+    WikiBookSnapshot WikiBook,
+    WikiDatabaseInspection Inspection,
+    bool ReplacedExistingData,
+    bool MigratedLegacyAnchors);
+
+public sealed record WikiDatabaseExportResponse(
+    string DatabasePath,
+    long DatabaseBytes);

@@ -23,20 +23,16 @@ public sealed class PresentationFlowTests
     public void StartupRecoveryOnlyExposesTheActionForTheCurrentFailure()
     {
         using var shell = new ShellViewModel();
-        var selectRequested = false;
         var webViewRequested = false;
-        shell.SelectDataRootRequested += (_, _) => selectRequested = true;
         shell.GetWebView2Requested += (_, _) => webViewRequested = true;
 
         shell.SetStartupStatus(
             "数据目录不可用。",
             isError: true,
-            StartupRecoveryKind.SelectDataRoot);
-        Assert.False(shell.CanRetryStartup);
+            StartupRecoveryKind.Retry);
+        Assert.True(shell.CanRetryStartup);
         Assert.False(shell.CanGetWebView2);
         Assert.False(shell.GetWebView2Command.CanExecute(null));
-        shell.Management.SelectDataRootCommand.Execute(null);
-        Assert.True(selectRequested);
         Assert.False(webViewRequested);
 
         shell.SetStartupStatus(
@@ -55,27 +51,12 @@ public sealed class PresentationFlowTests
     }
 
     [Fact]
-    public void DataRootRecoveryOpensManagementAndSelectionCanBeRetried()
+    public void DatabaseTransferCommandsStayDisabledUntilRuntimeIsAttached()
     {
         using var shell = new ShellViewModel();
 
-        shell.ShowDataRootRecovery("请选择有效的数据文件夹。");
-
-        Assert.Equal(ShellSection.Management, shell.CurrentSection);
-        Assert.True(shell.IsManagementVisible);
-        Assert.Contains("请选择", shell.Management.StatusMessage, StringComparison.Ordinal);
-        Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
-
-        shell.Management.BeginDataRootSelection();
-        Assert.False(shell.Management.SelectDataRootCommand.CanExecute(null));
-        shell.Management.ReportDataRootSelection("所选文件夹不可用；可以重新选择。");
-        shell.Management.EndDataRootSelection();
-
-        Assert.True(shell.Management.SelectDataRootCommand.CanExecute(null));
-        Assert.Contains("重新选择", shell.Management.StatusMessage, StringComparison.Ordinal);
-        shell.Management.SetDataRoot(@"C:\WikiData");
-        Assert.Equal(@"C:\WikiData", shell.Management.DataRootPath);
-        Assert.Equal("更改文件夹", shell.Management.DataRootActionText);
+        Assert.False(shell.Management.ImportCommand.CanExecute(null));
+        Assert.False(shell.Management.ExportCommand.CanExecute(null));
     }
 
     [Fact]
@@ -90,7 +71,7 @@ public sealed class PresentationFlowTests
         var dom = MainWindow.ClassifyStartupFailure(
             new WindowsClientStartupException("viewer-dom-ready-timeout", "unsafe detail"));
 
-        Assert.Equal(StartupRecoveryKind.SelectDataRoot, conflict.Recovery);
+        Assert.Equal(StartupRecoveryKind.Retry, conflict.Recovery);
         Assert.Contains("未修改", conflict.Message, StringComparison.Ordinal);
         Assert.DoesNotContain("secret", conflict.Message, StringComparison.OrdinalIgnoreCase);
         Assert.Equal(StartupRecoveryKind.Retry, assets.Recovery);

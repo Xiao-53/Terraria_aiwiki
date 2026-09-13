@@ -67,43 +67,30 @@ public sealed class Phase09TakeoverTests
     }
 
     [Fact]
-    public async Task ImportInspectsBeforeConfirmationAndPassesLegacyConsentToken()
+    public async Task DatabaseImportInspectsBeforeConfirmationAndPassesInspectionToken()
     {
         var active = Wiki(1, "泰拉瑞亚中文 Wiki");
-        var metadata = new WikiPackageMetadata
-        {
-            Id = active.Id,
-            Title = active.Title,
-            AppVersion = "0.3.0.3",
-            IsPageDownloaded = true,
-            Files = [],
-        };
-        var inspection = new WikiPackageInspection(
-            @"C:\packages\legacy.pkg",
+        var inspection = new WikiDatabaseInspection(
+            @"C:\backups\terraria.db",
             4096,
-            128,
-            3968,
-            "inspection-token",
-            metadata);
+            "inspection-token");
         string? importedToken = null;
-        bool? legacyConsent = null;
         WikiDataChangedEventArgs? changed = null;
         using var viewModel = new WikiManagementViewModel();
         var actions = Actions(
             list: _ => Task.FromResult<IReadOnlyList<WikiBookSnapshot>>([active]),
             active: _ => Task.FromResult(active)) with
         {
-            PickImportPackage = _ => Task.FromResult<string?>(inspection.PackagePath),
-            InspectPackage = (path, _) =>
+            PickImportDatabase = _ => Task.FromResult<string?>(inspection.DatabasePath),
+            InspectDatabase = (path, _) =>
             {
-                Assert.Equal(inspection.PackagePath, path);
+                Assert.Equal(inspection.DatabasePath, path);
                 return Task.FromResult(inspection);
             },
-            ImportPackage = (_, token, allowLegacy, _) =>
+            ImportDatabase = (_, token, _) =>
             {
                 importedToken = token;
-                legacyConsent = allowLegacy;
-                return Task.FromResult(new WikiPackageImportResponse(active, inspection, true, true));
+                return Task.FromResult(new WikiDatabaseImportResponse(active, inspection, true, true));
             },
         };
         viewModel.Attach(actions);
@@ -114,12 +101,12 @@ public sealed class Phase09TakeoverTests
 
         Assert.True(viewModel.IsConfirmationVisible);
         Assert.Null(importedToken);
-        Assert.Contains("兼容迁移", viewModel.ConfirmationMessage, StringComparison.Ordinal);
+        Assert.Contains(active.Title, viewModel.ConfirmationMessage, StringComparison.Ordinal);
+        Assert.Contains("替换", viewModel.ConfirmationMessage, StringComparison.Ordinal);
 
         await viewModel.ConfirmAsync();
 
         Assert.Equal(inspection.InspectionToken, importedToken);
-        Assert.True(legacyConsent);
         Assert.NotNull(changed);
         Assert.True(changed!.RequiresViewerRebind);
         Assert.Contains("已导入", viewModel.StatusMessage, StringComparison.Ordinal);
@@ -236,7 +223,7 @@ public sealed class Phase09TakeoverTests
     public void CompletedExportReplacesExistingTargetOnlyAfterTemporaryFileExists()
     {
         using var directory = new TestDirectory();
-        var target = Path.Combine(directory.Path, "wiki.pkg");
+        var target = Path.Combine(directory.Path, "wiki.db");
         File.WriteAllText(target, "old");
         var temporary = MainWindow.CreateTemporaryExportPath(target);
         File.WriteAllText(temporary, "new-complete-package");
@@ -269,8 +256,9 @@ public sealed class Phase09TakeoverTests
         Assert.Equal(1, Count(shell, "Settings.RefreshAsync()"));
         Assert.Matches("Content=\"检查并更新\"[\\s\\S]*?IsVisible=\"\\{Binding HasPageData\\}\"", managementXaml);
         Assert.Matches("Content=\"下载缺失资源\"[\\s\\S]*?IsVisible=\"\\{Binding NeedsResources\\}\"", managementXaml);
-        Assert.Contains("Command=\"{Binding SelectDataRootCommand}\"", managementXaml, StringComparison.Ordinal);
-        Assert.Contains("AutomationProperties.AutomationId=\"SelectDataRoot\"", managementXaml, StringComparison.Ordinal);
+        Assert.DoesNotContain("SelectDataRoot", managementXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ImportDatabase\"", managementXaml, StringComparison.Ordinal);
+        Assert.Contains("AutomationProperties.AutomationId=\"ExportDatabase\"", managementXaml, StringComparison.Ordinal);
         Assert.DoesNotContain("using SQLite", presentation, StringComparison.Ordinal);
         Assert.DoesNotContain("DatabaseService", presentation, StringComparison.Ordinal);
         Assert.Equal(1, Count(allXaml, "<NativeWebView"));

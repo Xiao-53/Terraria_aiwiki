@@ -39,7 +39,7 @@ internal sealed class DataRootResolver
         {
             throw new DataRootResolutionException(
                 "data-root-required",
-                "已保存的 Wiki 数据文件夹不可用。请在数据管理页面更改文件夹。");
+                "已保存的 Wiki 数据目录不可用。请恢复该目录后重试，或清除无效的主机设置以使用默认目录。");
         }
 
         var defaultPath = Path.Combine(
@@ -56,7 +56,7 @@ internal sealed class DataRootResolver
         {
             throw new DataRootResolutionException(
                 "default-data-root-unavailable",
-                "无法创建默认 Wiki 数据文件夹。请在数据管理页面选择其他文件夹。",
+                "无法创建默认 Wiki 数据目录。请检查目录权限和磁盘状态后重试。",
                 exception);
         }
 
@@ -64,7 +64,7 @@ internal sealed class DataRootResolver
         {
             throw new DataRootResolutionException(
                 "default-data-root-unavailable",
-                "默认 Wiki 数据文件夹包含无法识别的数据。请在数据管理页面选择其他文件夹。");
+                "默认 Wiki 数据目录包含无法识别的数据。请先恢复或清理该目录后重试。");
         }
 
         await _settings.SaveDataRootAsync(normalizedDefault!, cancellationToken).ConfigureAwait(false);
