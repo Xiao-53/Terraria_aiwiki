@@ -1,6 +1,6 @@
 # 迁移 Windows Wiki 数据根并删除旧 BigBearKing 目录
 
-- 状态：blocked
+- 状态：completed；用户确认迁移工作已完成，计划归档
 - Phase：无
 - 执行环境：Windows Codex desktop
 - 创建日期：2026-09-13
