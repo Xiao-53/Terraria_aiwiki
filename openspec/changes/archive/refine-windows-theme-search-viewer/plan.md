@@ -32,4 +32,6 @@ of the header, and remove the host iframe's bottom gap.
 
 ## Status
 
-ready-for-user-acceptance
+completed — Windows Release build succeeded with 0 warnings and 0 errors;
+the user accepted the resulting build. Automated tests were not run per the
+user's request.

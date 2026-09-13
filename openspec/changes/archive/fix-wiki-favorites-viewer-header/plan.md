@@ -1,10 +1,10 @@
 # 修复 Wiki 收藏、Viewer 页面身份与单顶栏
 
-- 状态：ready-for-user-acceptance；实现、自动化验证与本机 Windows smoke/窗口检查已完成，保留用户最终实机验收
+- 状态：completed；实现、自动化验证、本机 Windows smoke/窗口检查与用户验收已完成
 - Phase：无；承接 `post-phase-11-roadmap` 第一项
 - 执行环境：WSL2 Codex CLI 负责规划、源码编辑与静态检查；Windows 11 x64 负责 .NET/Avalonia 构建、测试、NativeWebView 与真实窗口验收
 - 创建日期：2026-09-12
-- 最后更新：2026-09-12
+- 最后更新：2026-09-13
 - 范围：Viewer → Reader 当前页同步、所有本地 Wiki 收藏聚合与指定 Wiki 操作、独立 Wiki 单顶栏
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/local-wiki-viewer/spec.md`、`openspec/specs/application-use-cases/spec.md`、ADR 0002、0003、0007
 - 来源：用户提供的 `C:\Users\Xiao\Desktop\preplan-wiki-favorites-viewer-header-fix-20260912.md`；历史边界见 `openspec/changes/archive/add-local-wiki-search-page/plan.md`
@@ -210,8 +210,8 @@ KEEP：`WindowsClientRuntime.cs` 的组合与 AI 生命周期、`ActiveWikiUseCa
 - [x] 单顶栏：迁移现有控件、折叠 Wiki Reader header、补首页内链状态；XAML 边界测试和本机 1280×820/900×600 浅深色窗口检查通过。
 - [x] 文档与资产证据：更新三个持续 spec、澄清 ADR 0003 旧历史描述，记录 JS 产品差异与最终资产 hash。
 - [x] Windows 自动验证与本机检查：Release build、全量 tests、NativeWebView Redirect/Back/主题/资源 smoke，以及当前 125% DPI 下浅深色 1280×820/900×600 截图已完成；日志和截图位于忽略的 `artifacts/fix-wiki-*`。100%/150% DPI、IME/hover/focus 与主观视觉仍归入下一项用户实机验收，不据此宣称通过。
-- [ ] 用户实机验收：确认收藏正确性、所有 Wiki 可见、单顶栏与普通 Reader；通过后按授权合并，不自行 push、发布或重建安装器。
-- [x] 实施收尾：检查 diff/status/忽略的合成数据与截图，选择性提交当前 change；保留用户既有 README、路线图和 Skill 改动。因用户实机验收尚未确认，不标记 completed、不归档、不合并。
+- [x] 用户实机验收：用户确认结果良好，并授权合并分支；未执行 push、发布或安装器重建。
+- [x] 实施收尾：检查 diff/status/忽略的合成数据与截图，选择性提交当前 change；保留用户既有 README、路线图和 Skill 改动。当前 change 已合并到 `master`，具备归档条件。
 
 ## 验证与回归计划
 
@@ -283,6 +283,7 @@ Android、其他平台、publish/安装器、公开发布本次均不适用。
 - 2026-09-12：完成 DOM commit 身份链、跨 Wiki 收藏聚合/显式操作、宿主协调切换与 Wiki 单顶栏；同步持续 spec、ADR 和资产 hash。
 - 2026-09-12：Windows Release build 0 warning/0 error，全量 .NET 362/362；最终 NativeWebView smoke `success=true`、12/12 Web 消息有效，最后完成方法为 `ViewerPageCommitted`。
 - 2026-09-12：在隔离合成数据根完成浅/深色 1280×820 与 900×600 窗口截图检查；Reading 最小窗口的六个顶栏控件均在同一行，Reader header 自动化元素不存在。当前系统为 125% DPI，100%/150% 和交互主观项留给用户验收。
+- 2026-09-13：用户完成实机验收并反馈结果良好；提交 `643b568` 已快进合并到 `master`，未提交的用户既有工作树改动保持不变。
 
 ## 发现、偏差与决策
 
@@ -306,4 +307,4 @@ Android、其他平台、publish/安装器、公开发布本次均不适用。
 
 ## 完成摘要
 
-本 change 的产品实现、持续契约、自动化回归、真实 NativeWebView smoke 与当前 Windows 窗口检查均已完成。分支保持未合并、未 push、未发布；下一步只有用户在正式使用环境确认收藏、跨 Wiki 打开、100%/150% DPI 与交互观感。确认后才把状态改为 completed、更新路线图并归档/合并。
+本 change 的产品实现、持续契约、自动化回归、真实 NativeWebView smoke、当前 Windows 窗口检查与用户验收均已完成。提交 `643b568` 已与 `master` 对齐；未 push、未发布、未重建安装器。本计划随 change 一并归档。
