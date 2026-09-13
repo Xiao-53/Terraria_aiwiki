@@ -1,6 +1,6 @@
 # 增加 Viewer 鼠标侧键前进导航
 
-- 状态：completed
+- 状态：archived；实现、Windows 回归与真实鼠标侧键验收均已完成
 - Phase：无
 - 执行环境：WSL2 Codex CLI 负责源码阅读、编辑、静态检查与计划维护；Windows 11 x64 负责 Windows .NET/Avalonia 构建、相关测试、NativeWebView 和真实鼠标验收
 - 创建日期：2026-09-13
