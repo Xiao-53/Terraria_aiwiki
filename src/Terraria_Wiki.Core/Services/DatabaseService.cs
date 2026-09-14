@@ -1,4 +1,5 @@
 using SQLite;
+using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
 
 namespace Terraria_Wiki.Services;
@@ -14,10 +15,14 @@ public enum DbMode
 /// retain the legacy application's data contract; Search behavior is fixed by
 /// the stable Wiki query boundary.
 /// </summary>
-public class DatabaseService
+public partial class DatabaseService
 {
+    internal const int ContentFormatVersion = 2;
+    internal const int SearchExtractorVersion = 1;
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private SQLiteAsyncConnection _db;
+    private WikiSearchAliasCatalog _searchAliases = WikiSearchAliasCatalog.Empty;
+    private int _wikiId;
 
     // Kept public for source compatibility with the legacy service.
     public bool _initialized;
@@ -62,12 +67,17 @@ public class DatabaseService
             }
             else
             {
+                await ValidateOrPrepareContentFormatAsync(seedBook, cancellationToken);
+                await _db.CreateTableAsync<WikiDatabaseMetadata>().WaitAsync(cancellationToken);
                 await _db.CreateTableAsync<WikiPage>().WaitAsync(cancellationToken);
                 await _db.CreateTableAsync<WikiRedirect>().WaitAsync(cancellationToken);
                 await _db.CreateTableAsync<WikiHistory>().WaitAsync(cancellationToken);
                 await _db.CreateTableAsync<WikiFavorite>().WaitAsync(cancellationToken);
                 await _db.CreateTableAsync<WikiAsset>().WaitAsync(cancellationToken);
+                await _db.CreateTableAsync<WikiSearchSection>().WaitAsync(cancellationToken);
+                await _db.CreateTableAsync<WikiSearchRegion>().WaitAsync(cancellationToken);
                 await InitFtsTableCoreAsync(cancellationToken);
+                await InitContentMetadataAsync(seedBook, cancellationToken);
                 await SeedWikiPageAsync(seedBook, cancellationToken);
             }
 
@@ -93,6 +103,9 @@ public class DatabaseService
     }
 
     public SQLiteAsyncConnection GetConnection() => _db;
+
+    public void ConfigureSearchAliases(WikiSearchAliasCatalog aliases) =>
+        _searchAliases = aliases ?? WikiSearchAliasCatalog.Empty;
 
     public async Task CloseConnection(CancellationToken cancellationToken = default)
     {
@@ -200,6 +213,19 @@ public class DatabaseService
     {
         ArgumentNullException.ThrowIfNull(item);
         await Init(cancellationToken: cancellationToken);
+        if (Mode == DbMode.Content && item is WikiPage page)
+        {
+            await SavePageWithSearchAsync(
+                page,
+                new Core.Data.ProcessedWikiContent(
+                    page.Content,
+                    string.Empty,
+                    [new Core.Data.WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                    [],
+                    []),
+                cancellationToken);
+            return;
+        }
         await _db.InsertOrReplaceAsync(item).WaitAsync(cancellationToken);
     }
 
@@ -214,7 +240,22 @@ public class DatabaseService
         foreach (var item in items)
         {
             cancellationToken.ThrowIfCancellationRequested();
-            await _db.InsertOrReplaceAsync(item).WaitAsync(cancellationToken);
+            if (Mode == DbMode.Content && item is WikiPage page)
+            {
+                await SavePageWithSearchAsync(
+                    page,
+                    new Core.Data.ProcessedWikiContent(
+                        page.Content,
+                        string.Empty,
+                        [new Core.Data.WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                        [],
+                        []),
+                    cancellationToken);
+            }
+            else
+            {
+                await _db.InsertOrReplaceAsync(item).WaitAsync(cancellationToken);
+            }
         }
     }
 
@@ -232,6 +273,11 @@ public class DatabaseService
     {
         ArgumentNullException.ThrowIfNull(primaryKey);
         await Init(cancellationToken: cancellationToken);
+        if (Mode == DbMode.Content && typeof(T) == typeof(WikiPage))
+        {
+            await DeletePageWithSearchAsync(Convert.ToString(primaryKey) ?? string.Empty, cancellationToken);
+            return;
+        }
         var item = await _db.FindAsync<T>(primaryKey).WaitAsync(cancellationToken);
         if (item is not null)
             await _db.DeleteAsync(item).WaitAsync(cancellationToken);
@@ -241,6 +287,11 @@ public class DatabaseService
         where T : new()
     {
         await Init(cancellationToken: cancellationToken);
+        if (Mode == DbMode.Content && typeof(T) == typeof(WikiPage))
+        {
+            await DeleteAllPagesWithSearchAsync(cancellationToken);
+            return;
+        }
         await _db.DeleteAllAsync<T>().WaitAsync(cancellationToken);
     }
 
@@ -346,408 +397,6 @@ public class DatabaseService
         await _db.ExecuteAsync("VACUUM").WaitAsync(cancellationToken);
     }
 
-    public async Task SaveSearchIndexAsync(
-        string title,
-        string plainContent,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(plainContent))
-            return;
-
-        await Init(cancellationToken: cancellationToken);
-        cancellationToken.ThrowIfCancellationRequested();
-        await _db.RunInTransactionAsync(transaction =>
-        {
-            transaction.Execute("DELETE FROM WikiSearchIndex WHERE Title = ?", title);
-            transaction.Execute(
-                "INSERT INTO WikiSearchIndex (Title, PlainContent) VALUES (?, ?)",
-                title,
-                plainContent);
-        }).WaitAsync(cancellationToken);
-    }
-
-    public async Task<List<SearchResultItem>> SearchAsync(
-        string keyword,
-        int maxSearchItemCount,
-        CancellationToken cancellationToken = default)
-    {
-        cancellationToken.ThrowIfCancellationRequested();
-        if (maxSearchItemCount is < 1 or > 100)
-            throw new ArgumentOutOfRangeException(
-                nameof(maxSearchItemCount),
-                "The maximum result count must be between 1 and 100.");
-
-        var normalizedKeyword = NormalizeSearchKeyword(keyword);
-        if (normalizedKeyword.Length == 0)
-            return [];
-
-        await Init(cancellationToken: cancellationToken);
-
-        var terms = normalizedKeyword.Split(' ', StringSplitOptions.RemoveEmptyEntries);
-        var longTerms = terms.Where(term => CountUnicodeScalars(term) >= 3).ToArray();
-        var shortTerms = terms.Where(term => CountUnicodeScalars(term) < 3).ToArray();
-        var escapedKeyword = EscapeLikePattern(normalizedKeyword);
-        var escapedTerms = terms.Select(EscapeLikePattern).ToArray();
-
-        var parameters = new List<object>();
-        parameters.Add(escapedKeyword);
-        parameters.Add(escapedKeyword);
-        parameters.Add($"{escapedKeyword}%");
-        parameters.Add($"{escapedKeyword}%");
-
-        var titleContainsClause = BuildLikeConditions("p.Title", escapedTerms, parameters, includeWildcards: true);
-        var redirectContainsClause = BuildLikeConditions("r.Title", escapedTerms, parameters, includeWildcards: true);
-
-        var markerStart = $"[[[fts-start-{Guid.NewGuid():N}]]]";
-        var markerEnd = $"[[[fts-end-{Guid.NewGuid():N}]]]";
-        var hasBodySearch = longTerms.Length > 0;
-        var bodyMatchesSql = BuildBodyMatchesSql(
-            hasBodySearch,
-            markerStart,
-            markerEnd,
-            longTerms,
-            shortTerms,
-            parameters);
-
-        var sql = $"""
-            WITH
-            RedirectTargets AS (
-                SELECT
-                    redirect.FromName AS Title,
-                    CASE
-                        WHEN INSTR(redirect.ToTarget, '#') > 0
-                            THEN SUBSTR(redirect.ToTarget, 1, INSTR(redirect.ToTarget, '#') - 1)
-                        ELSE redirect.ToTarget
-                    END AS RedirectTo
-                FROM WikiRedirect AS redirect
-                INNER JOIN WikiPage AS targetPage
-                    ON targetPage.Title = CASE
-                        WHEN INSTR(redirect.ToTarget, '#') > 0
-                            THEN SUBSTR(redirect.ToTarget, 1, INSTR(redirect.ToTarget, '#') - 1)
-                        ELSE redirect.ToTarget
-                    END
-            ),
-            TitleExact AS (
-                SELECT
-                    p.Title,
-                    '' AS RedirectTo,
-                    0 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM WikiPage AS p
-                WHERE p.Title LIKE ? ESCAPE '\'
-            ),
-            RedirectExact AS (
-                SELECT
-                    r.Title,
-                    r.RedirectTo,
-                    1 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM RedirectTargets AS r
-                WHERE r.Title LIKE ? ESCAPE '\'
-            ),
-            TitlePrefix AS (
-                SELECT
-                    p.Title,
-                    '' AS RedirectTo,
-                    2 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM WikiPage AS p
-                WHERE p.Title LIKE ? ESCAPE '\'
-            ),
-            RedirectPrefix AS (
-                SELECT
-                    r.Title,
-                    r.RedirectTo,
-                    3 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM RedirectTargets AS r
-                WHERE r.Title LIKE ? ESCAPE '\'
-            ),
-            TitleContains AS (
-                SELECT
-                    p.Title,
-                    '' AS RedirectTo,
-                    4 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM WikiPage AS p
-                WHERE {titleContainsClause}
-            ),
-            RedirectContains AS (
-                SELECT
-                    r.Title,
-                    r.RedirectTo,
-                    5 AS MatchKind,
-                    0.0 AS RankScore,
-                    0 AS TieBreaker,
-                    '' AS Snippet
-                FROM RedirectTargets AS r
-                WHERE {redirectContainsClause}
-            ),
-            {bodyMatchesSql},
-            AllMatches AS (
-                SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM TitleExact
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM RedirectExact
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM TitlePrefix
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM RedirectPrefix
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM TitleContains
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM RedirectContains
-                UNION ALL SELECT Title, RedirectTo, MatchKind, RankScore, TieBreaker, Snippet FROM BodyMatches
-            ),
-            RankedMatches AS (
-                SELECT
-                    allMatches.*,
-                    ROW_NUMBER() OVER (
-                        PARTITION BY Title
-                        ORDER BY
-                            MatchKind ASC,
-                            RankScore ASC,
-                            LENGTH(Title) ASC,
-                            Title ASC,
-                            RedirectTo ASC,
-                            Snippet ASC,
-                            TieBreaker ASC
-                    ) AS MatchNumber
-                FROM AllMatches AS allMatches
-            )
-            SELECT Title, RedirectTo, MatchKind, RankScore, Snippet
-            FROM RankedMatches
-            WHERE MatchNumber = 1
-            ORDER BY
-                MatchKind ASC,
-                RankScore ASC,
-                LENGTH(Title) ASC,
-                Title ASC,
-                RedirectTo ASC,
-                Snippet ASC,
-                TieBreaker ASC
-            LIMIT ?
-            """;
-
-        parameters.Add(maxSearchItemCount);
-        var rows = await _db.QueryAsync<SearchQueryRow>(sql, parameters.ToArray())
-            .WaitAsync(cancellationToken);
-
-        var plainSnippets = await LoadPlainSnippetsAsync(rows, cancellationToken);
-        foreach (var row in rows.Where(row => row.MatchKind != (int)WikiSearchMatchKind.BodyFts))
-        {
-            var contentTitle = row.RedirectTo.Length == 0 ? row.Title : row.RedirectTo;
-            row.Snippet = plainSnippets.GetValueOrDefault(contentTitle, "暂无描述...");
-        }
-
-        return rows
-            .Select(row => ToSearchResult(row, hasBodySearch ? markerStart : null, hasBodySearch ? markerEnd : null))
-            .ToList();
-    }
-
-    private static string NormalizeSearchKeyword(string keyword)
-    {
-        if (string.IsNullOrWhiteSpace(keyword))
-            return string.Empty;
-
-        return string.Join(
-            ' ',
-            keyword.Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries));
-    }
-
-    private static int CountUnicodeScalars(string value) => value.EnumerateRunes().Count();
-
-    private static string EscapeLikePattern(string value) =>
-        value.Replace("\\", "\\\\", StringComparison.Ordinal)
-            .Replace("%", "\\%", StringComparison.Ordinal)
-            .Replace("_", "\\_", StringComparison.Ordinal);
-
-    private static string BuildLikeConditions(
-        string column,
-        IReadOnlyList<string> escapedTerms,
-        ICollection<object> parameters,
-        bool includeWildcards)
-    {
-        var clauses = new List<string>(escapedTerms.Count);
-        foreach (var term in escapedTerms)
-        {
-            clauses.Add($"{column} LIKE ? ESCAPE '\\'");
-            parameters.Add(includeWildcards ? $"%{term}%" : term);
-        }
-
-        return string.Join(" AND ", clauses);
-    }
-
-    private static string BuildBodyMatchesSql(
-        bool hasBodySearch,
-        string markerStart,
-        string markerEnd,
-        IReadOnlyList<string> longTerms,
-        IReadOnlyList<string> shortTerms,
-        ICollection<object> parameters)
-    {
-        if (!hasBodySearch)
-        {
-            return "BodyMatches AS (SELECT '' AS Title, '' AS RedirectTo, 6 AS MatchKind, 0.0 AS RankScore, 0 AS TieBreaker, '' AS Snippet WHERE 0)";
-        }
-
-        parameters.Add(markerStart);
-        parameters.Add(markerEnd);
-        parameters.Add(string.Join(
-            " AND ",
-            longTerms.Select(term => $"\"{term.Replace("\"", "\"\"", StringComparison.Ordinal)}\"")));
-
-        var shortClauses = new List<string>(shortTerms.Count);
-        foreach (var term in shortTerms)
-        {
-            shortClauses.Add("search.PlainContent LIKE ? ESCAPE '\\'");
-            parameters.Add($"%{EscapeLikePattern(term)}%");
-        }
-
-        var shortClause = shortClauses.Count == 0
-            ? string.Empty
-            : $"\n                  AND {string.Join("\n                  AND ", shortClauses)}";
-
-        return $"""
-            BodyMatches AS (
-                SELECT
-                    search.Title,
-                    '' AS RedirectTo,
-                    6 AS MatchKind,
-                    rank AS RankScore,
-                    search.rowid AS TieBreaker,
-                    snippet(WikiSearchIndex, 1, ?, ?, '...', 60) AS Snippet
-                FROM WikiSearchIndex AS search
-                INNER JOIN WikiPage AS page ON page.Title = search.Title
-                WHERE WikiSearchIndex MATCH ?{shortClause}
-            )
-            """;
-    }
-
-    private static string BuildPlainSnippetSql(string plainContentExpression) => $"""
-        CASE
-            WHEN {plainContentExpression} IS NULL OR {plainContentExpression} = '' THEN '暂无描述...'
-            WHEN LENGTH({plainContentExpression}) > 60 THEN SUBSTR({plainContentExpression}, 1, 60) || '...'
-            ELSE {plainContentExpression}
-        END
-        """;
-
-    private async Task<IReadOnlyDictionary<string, string>> LoadPlainSnippetsAsync(
-        IReadOnlyList<SearchQueryRow> rows,
-        CancellationToken cancellationToken)
-    {
-        var contentTitles = rows
-            .Where(row => row.MatchKind != (int)WikiSearchMatchKind.BodyFts)
-            .Select(row => row.RedirectTo.Length == 0 ? row.Title : row.RedirectTo)
-            .Distinct(StringComparer.Ordinal)
-            .ToArray();
-        if (contentTitles.Length == 0)
-            return new Dictionary<string, string>(StringComparer.Ordinal);
-
-        var placeholders = string.Join(", ", Enumerable.Repeat("?", contentTitles.Length));
-        var sql = $"""
-            SELECT
-                Title,
-                {BuildPlainSnippetSql("MAX(PlainContent)")} AS Snippet
-            FROM WikiSearchIndex
-            WHERE Title IN ({placeholders})
-            GROUP BY Title
-            """;
-        var snippets = await _db.QueryAsync<PlainSnippetRow>(sql, contentTitles.Cast<object>().ToArray())
-            .WaitAsync(cancellationToken);
-        return snippets.ToDictionary(row => row.Title, row => row.Snippet, StringComparer.Ordinal);
-    }
-
-    private static SearchResultItem ToSearchResult(
-        SearchQueryRow row,
-        string? markerStart,
-        string? markerEnd)
-    {
-        if (row.MatchKind != (int)WikiSearchMatchKind.BodyFts
-            || markerStart is null
-            || markerEnd is null)
-        {
-            return new SearchResultItem
-            {
-                Title = row.Title,
-                RedirectTo = row.RedirectTo,
-                Snippet = row.Snippet,
-                MatchKind = (WikiSearchMatchKind)row.MatchKind,
-                Highlights = [],
-            };
-        }
-
-        var (plainSnippet, highlights) = ParseFtsSnippet(row.Snippet, markerStart, markerEnd);
-        return new SearchResultItem
-        {
-            Title = row.Title,
-            RedirectTo = row.RedirectTo,
-            Snippet = plainSnippet,
-            MatchKind = WikiSearchMatchKind.BodyFts,
-            Highlights = highlights,
-        };
-    }
-
-    private static (string PlainSnippet, IReadOnlyList<WikiSearchHighlight> Highlights) ParseFtsSnippet(
-        string snippet,
-        string markerStart,
-        string markerEnd)
-    {
-        var plain = new System.Text.StringBuilder(snippet.Length);
-        var highlights = new List<WikiSearchHighlight>();
-        var highlightStart = -1;
-        var index = 0;
-
-        while (index < snippet.Length)
-        {
-            if (snippet.AsSpan(index).StartsWith(markerStart, StringComparison.Ordinal))
-            {
-                if (highlightStart < 0)
-                    highlightStart = plain.Length;
-                index += markerStart.Length;
-                continue;
-            }
-
-            if (snippet.AsSpan(index).StartsWith(markerEnd, StringComparison.Ordinal))
-            {
-                if (highlightStart >= 0)
-                {
-                    var length = plain.Length - highlightStart;
-                    if (length > 0)
-                        highlights.Add(new WikiSearchHighlight(highlightStart, length));
-                    highlightStart = -1;
-                }
-
-                index += markerEnd.Length;
-                continue;
-            }
-
-            plain.Append(snippet[index]);
-            index++;
-        }
-
-        return (plain.ToString(), highlights);
-    }
-
-    private sealed class SearchQueryRow
-    {
-        public string Title { get; set; } = string.Empty;
-        public string RedirectTo { get; set; } = string.Empty;
-        public int MatchKind { get; set; }
-        public double RankScore { get; set; }
-        public string Snippet { get; set; } = string.Empty;
-    }
-
-    private sealed class PlainSnippetRow
-    {
-        public string Title { get; set; } = string.Empty;
-        public string Snippet { get; set; } = string.Empty;
-    }
-
     public async Task<int> GetFilteredCountAsync(
         string tableName,
         string searchColumn,
@@ -846,13 +495,24 @@ public class DatabaseService
     private async Task InitFtsTableCoreAsync(CancellationToken cancellationToken)
     {
         const string createSql = """
-            CREATE VIRTUAL TABLE IF NOT EXISTS WikiSearchIndex USING fts5(
-                Title UNINDEXED,
-                PlainContent,
-                tokenize='trigram'
+            CREATE VIRTUAL TABLE IF NOT EXISTS WikiSearchRegionFts USING fts5(
+                ContextTokens,
+                BodyTokens,
+                content='',
+                tokenize='unicode61 remove_diacritics 2',
+                detail='full'
             );
             """;
         await _db.ExecuteAsync(createSql).WaitAsync(cancellationToken);
+        await _db.ExecuteAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_WikiSearchRegion_PageOrdinal ON WikiSearchRegion(PageTitle, RegionOrdinal);")
+            .WaitAsync(cancellationToken);
+        await _db.ExecuteAsync(
+            "CREATE INDEX IF NOT EXISTS IX_WikiSearchRegion_PageSection ON WikiSearchRegion(PageTitle, SectionOrdinal);")
+            .WaitAsync(cancellationToken);
+        await _db.ExecuteAsync(
+            "CREATE UNIQUE INDEX IF NOT EXISTS IX_WikiSearchSection_PageOrdinal ON WikiSearchSection(PageTitle, SectionOrdinal);")
+            .WaitAsync(cancellationToken);
     }
 
     private async Task MigrateWikiBookColumnsAsync(CancellationToken cancellationToken)
@@ -935,7 +595,7 @@ public class DatabaseService
     private async Task SeedWikiPageAsync(WikiBook? seedBook, CancellationToken cancellationToken)
     {
         var defaultTitle = seedBook?.DefaultPageTitle ?? seedBook?.Title;
-        if (seedBook is null || defaultTitle is null)
+        if (seedBook is null || string.IsNullOrWhiteSpace(defaultTitle))
             return;
 
         var exists = await ItemExistsWithoutInitAsync<WikiPage>(defaultTitle, cancellationToken);
@@ -949,6 +609,14 @@ public class DatabaseService
             LastModified = DateTime.UnixEpoch,
         };
         await _db.InsertAsync(defaultPage).WaitAsync(cancellationToken);
+        await _db.InsertAsync(new WikiSearchSection
+        {
+            PageTitle = defaultPage.Title,
+            SectionOrdinal = 0,
+            Title = defaultPage.Title,
+            HeadingPath = defaultPage.Title,
+            Anchor = string.Empty,
+        }).WaitAsync(cancellationToken);
     }
 
     private async Task<bool> ItemExistsWithoutInitAsync<T>(

@@ -31,13 +31,17 @@ public sealed class AiCrossLanguageIntegrationTests
         var database = new ContentDbService(Path.Combine(directory.Path, active.DataFolder, "data.db"));
         try
         {
-            await database.SaveItemAsync(new WikiPage
+            var page = new WikiPage
             {
                 Title = "天顶剑",
                 Content = "<h2 id='配方'>配方</h2><p>天顶剑由多把剑合成，需要在秘银砧或山铜砧制作。</p>",
                 LastModified = new DateTime(2026, 8, 27, 0, 0, 0, DateTimeKind.Utc),
-            });
-            await database.SaveSearchIndexAsync("天顶剑", "天顶剑 合成 秘银砧 山铜砧");
+            };
+            var processed = WikiContentProcessor.Process(
+                page.Content,
+                new WikiBook { Id = active.Id, Title = active.Title },
+                page.Title);
+            await database.SavePageWithSearchAsync(page, processed);
         }
         finally
         {

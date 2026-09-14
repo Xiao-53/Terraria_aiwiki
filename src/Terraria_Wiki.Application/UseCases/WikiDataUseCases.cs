@@ -156,121 +156,12 @@ public sealed class WikiDataUseCases
         }
     }
 
-    public async Task<WikiPackageInspection> InspectPackageAsync(
-        string packagePath,
-        CancellationToken cancellationToken = default)
-    {
-        _state.RequireActiveBook();
-        return await _state.Packages.InspectAsync(packagePath, cancellationToken: cancellationToken);
-    }
-
-    public async Task<WikiPackageImportResponse> ImportPackageAsync(
-        string packagePath,
-        string inspectionToken,
-        bool allowLegacyPackage = false,
-        int? mapToWikiId = null,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(inspectionToken))
-            throw new ArgumentException("An inspection token is required.", nameof(inspectionToken));
-
-        if (!await _state.CoordinationGate.WaitAsync(0, cancellationToken))
-            throw OperationInProgress();
-        try
-        {
-            var active = _state.RequireActiveBook();
-            var inspection = await _state.Packages.InspectAsync(
-                packagePath,
-                cancellationToken: cancellationToken);
-            var targetId = mapToWikiId ?? inspection.Metadata.Id;
-            IAsyncDisposable? consumers = null;
-            if (targetId == active.Id)
-                consumers = await _state.ConsumerCoordinator.PauseAsync(cancellationToken);
-
-            await using (consumers)
-            {
-                var result = await _state.Packages.ImportAsync(
-                    new WikiPackageImportRequest(
-                        packagePath,
-                        _state.DataRoot,
-                        inspectionToken,
-                        mapToWikiId,
-                        allowLegacyPackage),
-                    cancellationToken: cancellationToken);
-                if (result.WikiBook.Id == active.Id)
-                    _state.ActiveBook = ApplicationState.CloneBook(result.WikiBook);
-                return ApplicationMapper.ToResponse(result);
-            }
-        }
-        finally
-        {
-            _state.CoordinationGate.Release();
-        }
-    }
-
-    public async Task<WikiPackageExportResponse> ExportPackageAsync(
-        int wikiId,
-        string packagePath,
-        string appVersion,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(appVersion))
-            throw new ArgumentException("An application version is required.", nameof(appVersion));
-
-        if (!await _state.CoordinationGate.WaitAsync(0, cancellationToken))
-            throw OperationInProgress();
-        try
-        {
-            var active = _state.RequireActiveBook();
-            var book = await _state.ManagerDatabase.GetItemAsync<WikiBook>(wikiId, cancellationToken)
-                ?? throw new ApplicationUseCaseException("unknown-wiki", $"WikiBook {wikiId} is not registered.");
-            var paths = Paths(book);
-            if (!File.Exists(paths.ContentDatabasePath))
-                throw new WikiPackageException(
-                    "content-database-not-found",
-                    $"Content database does not exist: {paths.ContentDatabasePath}.");
-
-            ContentDbService? temporary = null;
-            try
-            {
-                var source = active.Id == wikiId
-                    ? _state.ContentDatabase
-                    : temporary = new ContentDbService(paths.ContentDatabasePath);
-                var result = await _state.Packages.ExportAsync(
-                    book,
-                    paths,
-                    packagePath,
-                    appVersion,
-                    source,
-                    cancellationToken: cancellationToken);
-                return ApplicationMapper.ToResponse(result);
-            }
-            finally
-            {
-                if (temporary is not null)
-                {
-                    try
-                    {
-                        await temporary.CloseConnection();
-                    }
-                    catch
-                    {
-                    }
-                }
-            }
-        }
-        finally
-        {
-            _state.CoordinationGate.Release();
-        }
-    }
-
     public async Task<WikiDatabaseInspection> InspectDatabaseAsync(
         string databasePath,
         CancellationToken cancellationToken = default)
     {
         _state.RequireActiveBook();
-        return await _state.Packages.InspectDatabaseAsync(databasePath, cancellationToken);
+        return await _state.DatabaseTransfer.InspectDatabaseAsync(databasePath, cancellationToken);
     }
 
     public async Task<WikiDatabaseImportResponse> ImportDatabaseAsync(
@@ -286,7 +177,7 @@ public sealed class WikiDataUseCases
         {
             var active = _state.RequireActiveBook();
             await using var consumers = await _state.ConsumerCoordinator.PauseAsync(cancellationToken);
-            var result = await _state.Packages.ImportDatabaseAsync(
+            var result = await _state.DatabaseTransfer.ImportDatabaseAsync(
                 new WikiDatabaseImportRequest(
                     databasePath,
                     _state.DataRoot,
@@ -311,7 +202,7 @@ public sealed class WikiDataUseCases
         try
         {
             var active = _state.RequireActiveBook();
-            var result = await _state.Packages.ExportDatabaseAsync(
+            var result = await _state.DatabaseTransfer.ExportDatabaseAsync(
                 Paths(active),
                 databasePath,
                 _state.ContentDatabase,

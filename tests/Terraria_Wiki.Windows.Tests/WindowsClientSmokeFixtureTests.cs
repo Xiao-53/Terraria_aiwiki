@@ -28,18 +28,20 @@ public sealed class WindowsClientSmokeFixtureTests
             paths.EnsureDataDirectory();
             content = new ContentDbService(paths.ContentDatabasePath);
             await content.Init(seedBook: book);
-            await content.SaveItemAsync(new WikiPage
+            var home = new WikiPage
             {
                 Title = book.DefaultPageTitle,
                 Content = "<p>Smoke home.</p><a data-wiki='Smoke Alias'>Open target</a><img src='/src/smoke.png'><audio src='/src/smoke.ogg'></audio>",
                 LastModified = DateTime.UtcNow,
-            });
-            await content.SaveItemAsync(new WikiPage
+            };
+            await content.SavePageWithSearchAsync(home, WikiContentProcessor.Process(home.Content, book, home.Title));
+            var target = new WikiPage
             {
                 Title = "Smoke Target",
                 Content = "<h2 id='Section'>Smoke target page.</h2><img src='/src/smoke.png'><audio src='/src/smoke.ogg'></audio>",
                 LastModified = DateTime.UtcNow,
-            });
+            };
+            await content.SavePageWithSearchAsync(target, WikiContentProcessor.Process(target.Content, book, target.Title));
             await content.SaveItemAsync(new WikiRedirect { FromName = "Smoke Alias", ToTarget = "Smoke Target#Section" });
             await content.SaveItemAsync(new WikiAsset { FileName = "smoke.png", Data = Convert.FromBase64String("iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII="), MimeType = "image/png" });
             await content.SaveItemAsync(new WikiAsset { FileName = "smoke.ogg", Data = "OggS\0TerrariaSmoke"u8.ToArray(), MimeType = "audio/ogg" });

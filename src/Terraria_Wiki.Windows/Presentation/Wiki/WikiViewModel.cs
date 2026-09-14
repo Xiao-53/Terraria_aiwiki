@@ -16,15 +16,19 @@ internal sealed class WikiSearchResultViewModel
         Title = result.Title;
         RedirectText = string.IsNullOrWhiteSpace(result.RedirectTo) ? string.Empty : "→ " + result.RedirectTo;
         Snippet = result.Snippet;
-        MatchText = result.MatchKind switch
+        SectionText = result.SectionPath;
+        MatchText = result.EvidenceKind switch
         {
-            WikiSearchMatchKind.ExactTitle => "精确标题",
-            WikiSearchMatchKind.ExactRedirect => "精确重定向",
-            WikiSearchMatchKind.TitlePrefix => "标题前缀",
-            WikiSearchMatchKind.RedirectPrefix => "重定向前缀",
-            WikiSearchMatchKind.TitleContains => "标题包含",
-            WikiSearchMatchKind.RedirectContains => "重定向包含",
-            _ => "正文匹配",
+            WikiSearchEvidenceKind.ExactTitle => "精确标题",
+            WikiSearchEvidenceKind.ExactRedirect => "精确重定向",
+            WikiSearchEvidenceKind.ExactCommunityAlias => "社区别名",
+            WikiSearchEvidenceKind.Heading => "章节标题",
+            WikiSearchEvidenceKind.TableRow => "表格内容",
+            WikiSearchEvidenceKind.ListItem => "列表内容",
+            WikiSearchEvidenceKind.Definition => "定义内容",
+            WikiSearchEvidenceKind.Infobox => "信息框",
+            WikiSearchEvidenceKind.Generic => "正文片段",
+            _ => result.Scope == WikiSearchScope.Partial ? "部分匹配" : "正文匹配",
         };
         OpenCommand = new AsyncCommand(_ => OpenAsync());
     }
@@ -33,6 +37,7 @@ internal sealed class WikiSearchResultViewModel
     public string Title { get; }
     public string RedirectText { get; }
     public string Snippet { get; }
+    public string SectionText { get; }
     public string MatchText { get; }
     public AsyncCommand OpenCommand { get; }
 

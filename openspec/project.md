@@ -23,14 +23,14 @@ Windows 新版本已经确定不继续使用 .NET MAUI。Avalonia + NativeWebVie
 - MediaWiki 页面列表、页面内容和 Redirect 获取；
 - 页面更新时间比较、增量更新和失败任务处理；
 - HTML 清理、页面保存和搜索文本生成；
-- SQLite 内容存储与 FTS5 搜索；
-- 数据包兼容、活动 Wiki 单文件数据库导入导出和旧数据兼容；
+- SQLite v2 内容存储、章节/区域记录与 contentless FTS5 搜索；
+- 活动 Wiki 单文件数据库导入导出、格式/身份校验和中断恢复；
 - Wiki 资源、本地页面展示、页面收藏与 Reader 内存返回等应用能力；旧持久 WikiHistory 仅兼容保留并停止读写；
 - 多 Wiki 数据源所需的现有身份和配置基础。
 
 这些是 brownfield 改造的真实基线。具体调用关系和平台行为仍须在对应 Phase 中以代码和运行验证为准。
 
-Core/Application 继续保留使用 `.pkg` 的兼容导入/导出，旧仓库 README 仍写 `.pak`。Phase 00 没有取得历史 `.pak` 样本，因此不对它作额外格式承诺；当前 `.pkg` golden 与独立 writer/oracle 契约已经验证。Windows 普通 UI 按 ADR 0011 改为当前活动 Wiki 的单文件 `.db` 导入/导出，不改变 `.pkg` 字节格式。后续若出现 `.pak` 样本，仍须显式检查，不能静默把任一扩展名当作不存在。
+ADR 0012 已把开发期旧内容格式、`.pkg` 容器及其迁移入口退休。Windows 普通 UI 继续按 ADR 0011 导入/导出当前活动 Wiki 的单文件 v2 `.db`，并校验格式、加工版本、Wiki 身份与搜索数据一致性。
 
 ## 技术与平台基线
 
@@ -55,7 +55,7 @@ MAUI、Razor、MAUI XAML 和 `Platforms/*` 是旧源码宿主事实，不再是 
 - Avalonia Presentation / client host（Phase 04 已建立正式 Windows Foundation）；
 - NativeWebView 通过受限动态 loopback 承载现有 Local Wiki Viewer；
 - Windows data-root、设置、锁、外链和 Viewer Adapters 已实现最小链路；首次运行由 Windows 宿主在 LocalAppData 创建默认数据根，普通 UI 不再切换地址，数据管理页直接导入/导出当前活动 Wiki 的完整 `data.db`。Android Adapters 仅在已暂缓的 Phase 13 获重新授权后考虑实现；
-- Windows 启动对旧/目标数据目录冲突执行只读失败关闭并保留稳定兼容 code；健康启动使用 Manager 统计快照，只有迁移预检确认必要时才执行 SQLite checkpoint 与安全迁移。诊断和 smoke 使用固定阶段记录累计/阶段耗时，Viewer transport 故障与数据兼容故障分别恢复；
+- Windows 启动恢复 raw import journal 后检查 v2 格式与 Wiki 身份，并使用 Manager 统计快照；不扫描 HTML、不构建全库索引、不迁移旧内容目录。诊断和 smoke 使用固定阶段记录累计/阶段耗时，Viewer transport 故障与数据格式故障分别恢复；
 - 独立 Wiki Tool Adapter 通过无状态、动态 loopback MCP 只暴露 Application Search / Read，并由 Phase 07 Windows Runtime 在 Viewer 之后按需启停；
 - Python Agent 通过受限 MCP 执行 Search → Read → typed Answer；`read_wiki` 只向模型返回有界的 `wiki_blocks_v1` 章节化纯文本证据，实际来源由当前运行成功 Read 派生。每轮是新的 Agent 运行，可选上下文只有最近 4 轮 user/assistant 纯文本；业务逻辑与 Windows/Android Runtime 分离。
 - Windows Avalonia Host 通过严格 NDJSON v2 长驻 stdio Sidecar 组合 WikiTools 与 Python Agent，并在本地拥有完整版本化会话、整段收藏和对话历史。正式 payload 使用只读内置 CPython 3.14.7 x64，用户级 `ai-runtime.json` v3 只保存 provider，API key 存入当前用户 Windows Credential Manager。设置页可编辑 DeepSeek 官方 API 或自定义 OpenAI-compatible provider 与思考强度，并在原子保存后显式重启同一 Runtime。Host 只把 key 注入所属 Sidecar 环境，AI 故障不影响离线 Search/Viewer。
@@ -84,7 +84,7 @@ Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` �
 - 新 Presentation 通过 Application 使用后端，不直接绑定数据库或平台 Runtime。
 - Local Viewer Adapter、Wiki Tool Adapter 和平台 Adapter 依赖向内的 Application/Core 边界；Core 不依赖 WebView、loopback、Python Runtime 或平台 Adapter。
 - AI 通过稳定的 Wiki Search / Read 边界获取本地事实，不直接建立第二套 Wiki 数据体系。
-- 搜索继续使用现有 SQLite FTS5 能力并做局部修正，不重建搜索系统。
+- 搜索使用 ADR 0012 的单套区域级 contentless FTS5；不增加向量库、第二份正文或并行旧索引。
 - Python Agent 业务逻辑与 Windows / Android Runtime 分离。
 - Windows 新版本不使用 MAUI；Phase 10 已在 P0 接管证据基础上移除旧 MAUI 参考 gitlink，不得把它重新引入产品 build/runtime。
 - Vector Search、Embedding Retrieval、Vector Database 和第二套 LLM Wiki 数据库不属于项目范围。
@@ -94,7 +94,7 @@ Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` �
 
 产品源码已以 `d67d904` 内容建立独立基线，固定上游参考从未参与迁移后的 build/runtime；Phase 10 已移除其本地 gitlink。移除后的 Windows Release build 为 0 warning/0 error，275/275 .NET tests 与两种 publish smoke 均通过；冻结 Python 回归沿用此前无源码变化的证据。
 
-Phase 00–10 已完成，Phase 11 Windows Productization 已按用户决定关闭并归档；Phase 12 按真实需求决定是否实施，Phase 13 Android 继续暂缓。Windows Avalonia Shell 现有六个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite；新增“Wiki”入口复用原搜索与唯一共享 Reader，在同一工作区切换真实本地首页、全宽结果和全宽正文。其首版已进入本地主线并通过自动化验证，但真实窗口视觉验收未通过，后续由新 plan 继续优化。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收；公开仓库/版本/许可输入、干净机与真实 GitHub 渠道矩阵、Windows 10 可选门槛和发布审计未完成，已转入 `post-phase-11-roadmap`，当前候选仍为 `publicationReady: false`。已完整关闭并归档的 AI 会话 Token 优化 change 把 AI 边界升级为 `wiki_blocks_v1`、NDJSON v2 和最多最近 4 轮纯文本，并增加本地完整会话、整段收藏与对话历史；后续 Token/答案质量工作另建 plan。Windows 本地 Wiki 启动也已前移无损冲突检测、取消首屏统计重算并收紧迁移 checkpoint，可证明目标库严格覆盖旧布局时完成可回滚接管，未绑定 Reader 不再允许打开空白预览。Application/Viewer 继续使用完整 HTML，SQLite schema、FTS5、Redirect、数据包和唯一 Reader 不变。各变更测试结果与未验证边界在相应归档计划中单独记录。最新未打包源代码会自动创建 Windows 默认数据根，空内容时直接进入数据管理页；普通 UI 不再更改路径，改为安全导入/导出当前 Wiki 的单文件 `data.db`。设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按要求未重建。未来公开发行工作必须另建 change 并取得必要输入与外部写入授权。
+Phase 00–10 已完成，Phase 11 Windows Productization 已按用户决定关闭并归档；Phase 12 按真实需求决定是否实施，Phase 13 Android 继续暂缓。Windows Avalonia Shell 现有六个入口继续只经现有 Application/Core 能力运行，Presentation 不直接访问 SQLite；新增“Wiki”入口复用原搜索与唯一共享 Reader，在同一工作区切换真实本地首页、全宽结果和全宽正文。其首版已进入本地主线并通过自动化验证，但真实窗口视觉验收未通过，后续由新 plan 继续优化。Phase 11 已实现内置 CPython、Credential Manager + 严格 v3、Velopack 普通 Setup/portable/full+delta、Evergreen WebView2 bootstrap/外置用户数据、公开 GitHub stable 更新状态和有界诊断，并在实际 Windows 11 x64 完成本地安装、portable、N→N+1、repair、卸载、P0 smoke 与目标窗口验收；公开仓库/版本/许可输入、干净机与真实 GitHub 渠道矩阵、Windows 10 可选门槛和发布审计未完成，已转入 `post-phase-11-roadmap`，当前候选仍为 `publicationReady: false`。已完整关闭并归档的 AI 会话 Token 优化 change 把 AI 边界升级为 `wiki_blocks_v1`、NDJSON v2 和最多最近 4 轮纯文本，并增加本地完整会话、整段收藏与对话历史；后续 Token/答案质量工作另建 plan。Windows 本地 Wiki 已转为 v2 内容格式：启动恢复 raw import journal 后检查格式与身份，不扫描 HTML 或迁移旧内容；Application/Viewer 继续使用完整 HTML、Redirect 和唯一 Reader，旧 `.pkg` 已退休。各变更测试结果与未验证边界在相应归档计划中单独记录。最新未打包源代码会自动创建 Windows 默认数据根，空内容时直接进入数据管理页；普通 UI 不再更改路径，改为安全导入/导出当前 Wiki 的单文件 `data.db`。设置页临时隐藏共享 Reader，已保存 API Key 以固定遮蔽状态显示且不回显真实值。此前的 `0.11.0-local.22` 安装与 portable 候选不含这些最新源码变更，并按要求未重建。未来公开发行工作必须另建 change 并取得必要输入与外部写入授权。
 
 ## 治理关系
 

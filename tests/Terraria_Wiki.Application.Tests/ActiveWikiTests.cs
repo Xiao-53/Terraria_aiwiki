@@ -1,4 +1,4 @@
-using System.Security.Cryptography;
+using SQLite;
 using Terraria_Wiki.Core.Compatibility;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Services;
@@ -222,112 +222,6 @@ public sealed class ActiveWikiTests
     }
 
     [Fact]
-    public async Task InitializationMigratesLegacyDirectoryAndDatabaseFamilyBeforeOpeningContent()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
-        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
-        Directory.CreateDirectory(legacyDirectory);
-        var legacyPath = Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName);
-        var legacy = new ContentDbService(legacyPath);
-        await legacy.Init(seedBook: CreateBookOne());
-        await legacy.CloseConnection();
-
-        var active = await fixture.Application.ActiveWiki.InitializeAsync();
-
-        Assert.Equal(1, active.Id);
-        Assert.False(Directory.Exists(legacyDirectory));
-        Assert.True(File.Exists(Path.Combine(fixture.Root, "Terraria_Wiki_zh", "data.db")));
-        Assert.EndsWith(Path.Combine("Terraria_Wiki_zh", "data.db"), fixture.State.ContentDatabase.DatabasePath);
-    }
-
-    [Fact]
-    public async Task InitializationCompletesAnchorMigrationBeforeRead()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
-        var directory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
-        var path = Path.Combine(directory, "data.db");
-        var content = new ContentDbService(path);
-        var book = CreateBookOne();
-        await content.Init(seedBook: book);
-        await content.SaveItemAsync(new WikiPage
-        {
-            Title = book.DefaultPageTitle,
-            Content = "<p><a title='Sword'>Sword</a></p>",
-            LastModified = DateTime.UnixEpoch,
-        });
-        await content.CloseConnection();
-
-        await fixture.Application.ActiveWiki.InitializeAsync();
-        var read = await fixture.Application.Query.ReadAsync(book.DefaultPageTitle);
-
-        Assert.Contains("data-wiki=\"Sword\"", read.Content);
-    }
-
-    [Fact]
-    public async Task InitializationPreservesCompatibilityCodeAndDoesNotModifyConflictingDataFamilies()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
-        await fixture.State.ManagerDatabase.Init();
-        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
-        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
-        await CreateContentDatabaseAsync(
-            Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName),
-            "legacy-content");
-        await CreateContentDatabaseAsync(
-            Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName),
-            "current-content");
-        File.WriteAllBytes(Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName) + "-wal", [1, 2, 3]);
-        File.WriteAllBytes(Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName) + "-shm", [4, 5, 6]);
-        await fixture.State.ManagerDatabase.CloseConnection();
-        var before = SnapshotProtectedFiles(fixture.Root);
-
-        var error = await Assert.ThrowsAsync<ApplicationUseCaseException>(
-            () => fixture.Application.ActiveWiki.InitializeAsync());
-
-        Assert.Equal("data-directory-conflict", error.Code);
-        Assert.DoesNotContain(fixture.Root, error.Message, StringComparison.OrdinalIgnoreCase);
-        Assert.Equal(before, SnapshotProtectedFiles(fixture.Root));
-    }
-
-    [Fact]
-    public async Task InitializationRetiresLegacyDirectoryWhenCurrentDatabaseCoversIt()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
-        await fixture.State.ManagerDatabase.Init();
-        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
-        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
-        var legacyPath = Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName);
-        var currentPath = Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName);
-        await CreateContentDatabaseAsync(legacyPath, "legacy-content");
-        await CreateContentDatabaseAsync(currentPath, "current-content");
-        var current = new ContentDbService(currentPath);
-        try
-        {
-            await current.Init(seedBook: CreateBookOne());
-            await current.SaveItemAsync(new WikiPage
-            {
-                Title = "New Page",
-                Content = "new-content",
-                LastModified = DateTime.UnixEpoch.AddDays(1),
-            });
-        }
-        finally
-        {
-            await current.CloseConnection();
-        }
-        await fixture.State.ManagerDatabase.CloseConnection();
-
-        var active = await fixture.Application.ActiveWiki.InitializeAsync();
-
-        Assert.Equal(1, active.Id);
-        Assert.False(Directory.Exists(legacyDirectory));
-        Assert.Empty(Directory.EnumerateDirectories(
-            fixture.Root,
-            LegacyWikiCompatibility.LegacyDataFolder + ".superseded-*"));
-        Assert.Equal("new-content", (await fixture.Application.Query.ReadAsync("New Page")).Content);
-    }
-
-    [Fact]
     public async Task InitializationUsesSavedStatisticsSnapshotUntilExplicitRefresh()
     {
         await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
@@ -339,7 +233,7 @@ public sealed class ActiveWikiTests
         book.DataSize = 9004;
         await fixture.State.ManagerDatabase.SaveItemAsync(book);
         await CreateContentDatabaseAsync(
-            Path.Combine(fixture.Root, book.DataFolder, LegacyWikiCompatibility.CurrentDatabaseName),
+            Path.Combine(fixture.Root, book.DataFolder, "data.db"),
             "current-content");
         var timings = new List<ApplicationStartupTiming>();
 
@@ -370,32 +264,23 @@ public sealed class ActiveWikiTests
     }
 
     [Fact]
-    public async Task PendingImportForAnyRegisteredWikiRunsBeforeConflictFastFailure()
+    public async Task Initialization_rejects_old_content_format_without_converting_it()
     {
         await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1, initialize: false);
         await fixture.State.ManagerDatabase.Init();
-        await fixture.State.ManagerDatabase.CloseConnection();
-        var legacyDirectory = Path.Combine(fixture.Root, LegacyWikiCompatibility.LegacyDataFolder);
-        var currentDirectory = Path.Combine(fixture.Root, "Terraria_Wiki_zh");
-        Directory.CreateDirectory(legacyDirectory);
-        Directory.CreateDirectory(currentDirectory);
-        File.WriteAllBytes(Path.Combine(legacyDirectory, LegacyWikiCompatibility.LegacyDatabaseName), [1]);
-        File.WriteAllBytes(Path.Combine(currentDirectory, LegacyWikiCompatibility.CurrentDatabaseName), [2]);
-        var stagingRoot = Path.Combine(fixture.Root, "Temp");
-        Directory.CreateDirectory(stagingRoot);
-        await File.WriteAllTextAsync(Path.Combine(stagingRoot, "import-2.journal.json"), "{}");
-        var timings = new List<ApplicationStartupTiming>();
+        var book = (await fixture.State.ManagerDatabase.GetItemsAsync<WikiBook>()).Single(item => item.Id == 1);
+        var path = Path.Combine(fixture.Root, book.DataFolder, "data.db");
+        Directory.CreateDirectory(Path.GetDirectoryName(path)!);
+        using (var old = new SQLiteConnection(path))
+            old.Execute("CREATE TABLE WikiPage (Title TEXT PRIMARY KEY, Content TEXT, LastModified TEXT)");
 
-        var error = await Assert.ThrowsAsync<ApplicationUseCaseException>(
-            () => fixture.Application.ActiveWiki.InitializeAsync(timings.Add));
+        var error = await Assert.ThrowsAsync<ApplicationUseCaseException>(() =>
+            fixture.Application.ActiveWiki.InitializeAsync());
 
-        Assert.Equal("initialization-failed", error.Code);
-        Assert.Contains(
-            timings,
-            timing => timing.Stage == ApplicationStartupStage.ManagerInitializationAndRecovery);
-        Assert.DoesNotContain(
-            timings,
-            timing => timing.Stage == ApplicationStartupStage.CompatibilityPreparation);
+        Assert.Equal("content-database-format-unsupported", error.Code);
+        using var unchanged = new SQLiteConnection(path, SQLiteOpenFlags.ReadOnly);
+        Assert.Equal(0, unchanged.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM sqlite_master WHERE name = 'WikiDatabaseMetadata'"));
     }
 
     private static async Task CreateContentDatabaseAsync(string path, string contentValue)
@@ -417,28 +302,6 @@ public sealed class ActiveWikiTests
             await database.CloseConnection();
         }
     }
-
-    private static string[] SnapshotProtectedFiles(string root) => Directory
-        .EnumerateFiles(root, "*", SearchOption.AllDirectories)
-        .Where(path =>
-        {
-            var name = Path.GetFileName(path);
-            return string.Equals(name, "Manager.db", StringComparison.Ordinal)
-                || name.StartsWith(LegacyWikiCompatibility.LegacyDatabaseName, StringComparison.Ordinal)
-                || name.StartsWith(LegacyWikiCompatibility.CurrentDatabaseName, StringComparison.Ordinal);
-        })
-        .OrderBy(path => path, StringComparer.Ordinal)
-        .Select(path =>
-        {
-            var relative = Path.GetRelativePath(root, path);
-            using var stream = new FileStream(
-                path,
-                FileMode.Open,
-                FileAccess.Read,
-                FileShare.ReadWrite | FileShare.Delete);
-            return $"{relative}|{stream.Length}|{Convert.ToHexString(SHA256.HashData(stream))}";
-        })
-        .ToArray();
 
     private static WikiBook CreateBookOne() => new()
     {

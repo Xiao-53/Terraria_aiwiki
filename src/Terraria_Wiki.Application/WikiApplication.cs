@@ -14,14 +14,16 @@ public sealed class WikiApplication : IAsyncDisposable
         IApplicationSettingsStore settingsStore,
         IWikiDataConsumerCoordinator consumerCoordinator,
         IWikiHttpTransport httpTransport,
-        TimeProvider? timeProvider = null)
+        TimeProvider? timeProvider = null,
+        string? searchAliasPath = null)
     {
         _state = new ApplicationState(
             dataRoot,
             settingsStore,
             consumerCoordinator,
             httpTransport,
-            timeProvider ?? TimeProvider.System);
+            timeProvider ?? TimeProvider.System,
+            searchAliasPath);
 
         Settings = new ApplicationSettingsUseCases(_state);
         ActiveWiki = new ActiveWikiUseCases(_state, Settings);

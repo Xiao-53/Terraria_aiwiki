@@ -37,6 +37,45 @@ public class WikiPage
     public DateTime LastModified { get; set; }
 }
 
+public class WikiDatabaseMetadata
+{
+    [PrimaryKey]
+    public string Key { get; set; } = string.Empty;
+
+    public string Value { get; set; } = string.Empty;
+}
+
+public class WikiSearchSection
+{
+    [PrimaryKey, AutoIncrement]
+    public long Id { get; set; }
+
+    [Indexed]
+    public string PageTitle { get; set; } = string.Empty;
+
+    public int SectionOrdinal { get; set; }
+    public string Title { get; set; } = string.Empty;
+    public string HeadingPath { get; set; } = string.Empty;
+    public string Anchor { get; set; } = string.Empty;
+}
+
+public class WikiSearchRegion
+{
+    [PrimaryKey, AutoIncrement]
+    public long Id { get; set; }
+
+    [Indexed]
+    public string PageTitle { get; set; } = string.Empty;
+
+    public int SectionOrdinal { get; set; }
+    public int RegionOrdinal { get; set; }
+    public string Kind { get; set; } = string.Empty;
+    public string HeadingPath { get; set; } = string.Empty;
+    public string Anchor { get; set; } = string.Empty;
+    public string ContextText { get; set; } = string.Empty;
+    public string BodyText { get; set; } = string.Empty;
+}
+
 public class WikiRedirect
 {
     [PrimaryKey]

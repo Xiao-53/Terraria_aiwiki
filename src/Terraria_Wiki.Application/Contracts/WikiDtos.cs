@@ -55,23 +55,10 @@ public sealed record GlobalWikiFavoritesResult(
     IReadOnlyList<GlobalWikiFavoriteItem> Items,
     IReadOnlyList<GlobalWikiFavoriteIssue> Issues);
 
-public sealed record WikiPackageImportResponse(
-    WikiBookSnapshot WikiBook,
-    WikiPackageInspection Inspection,
-    bool ReplacedExistingData,
-    bool MigratedLegacyAnchors);
-
-public sealed record WikiPackageExportResponse(
-    string PackagePath,
-    long PackageBytes,
-    int MetadataBytes,
-    long PayloadBytes);
-
 public sealed record WikiDatabaseImportResponse(
     WikiBookSnapshot WikiBook,
     WikiDatabaseInspection Inspection,
-    bool ReplacedExistingData,
-    bool MigratedLegacyAnchors);
+    bool ReplacedExistingData);
 
 public sealed record WikiDatabaseExportResponse(
     string DatabasePath,

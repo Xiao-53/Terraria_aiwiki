@@ -252,16 +252,22 @@ public sealed class PresentationFlowTests
         using var shell = new ShellViewModel();
         var opened = new List<string>();
         shell.AttachReader(
-            (title, _) =>
+            (target, _) =>
             {
-                opened.Add(title);
+                opened.Add(target);
                 return Task.CompletedTask;
             },
             _ => Task.CompletedTask);
         shell.SetWikiHomePage("Terraria Wiki");
         var wiki = shell.Wiki;
         wiki.Attach((_, _) => Task.FromResult<IReadOnlyList<SearchResultItem>>(
-            [new SearchResultItem { Title = "史莱姆", MatchKind = WikiSearchMatchKind.ExactTitle }]));
+            [new SearchResultItem
+            {
+                Title = "史莱姆别名",
+                CanonicalTitle = "史莱姆",
+                Anchor = "掉落",
+                MatchKind = WikiSearchMatchKind.ExactRedirect,
+            }]));
 
         shell.NavigateWiki();
 
@@ -276,7 +282,7 @@ public sealed class PresentationFlowTests
         Assert.True(shell.IsWikiReadingActive);
         Assert.True(shell.IsWikiSurfaceVisible);
         Assert.True(shell.IsReaderVisible);
-        Assert.Equal(new[] { "Terraria Wiki", "史莱姆" }, opened);
+        Assert.Equal(new[] { "Terraria Wiki", "史莱姆#掉落" }, opened);
 
         shell.ReturnToWikiSearchCommand.Execute(null);
         Assert.True(shell.IsWikiSearchActive);
@@ -290,12 +296,23 @@ public sealed class PresentationFlowTests
         Assert.True(shell.IsReaderVisible);
         await Task.Delay(300);
         Assert.Empty(wiki.Results);
-        Assert.Equal(new[] { "Terraria Wiki", "史莱姆", "Terraria Wiki" }, opened);
+        Assert.Equal(new[]
+        {
+            "Terraria Wiki",
+            "史莱姆#掉落",
+            "Terraria Wiki",
+        }, opened);
 
         shell.NavigateChat();
         shell.NavigateWiki();
         Assert.True(shell.IsWikiHomeActive);
-        Assert.Equal(new[] { "Terraria Wiki", "史莱姆", "Terraria Wiki", "Terraria Wiki" }, opened);
+        Assert.Equal(new[]
+        {
+            "Terraria Wiki",
+            "史莱姆#掉落",
+            "Terraria Wiki",
+            "Terraria Wiki",
+        }, opened);
     }
 
     [Fact]

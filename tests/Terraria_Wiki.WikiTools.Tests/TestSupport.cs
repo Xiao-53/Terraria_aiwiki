@@ -1,6 +1,7 @@
 using System.Net;
 using ModelContextProtocol.Client;
 using Terraria_Wiki.Application;
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Net;
 using Terraria_Wiki.Models;
 
@@ -93,14 +94,22 @@ internal sealed class WikiToolFixture : IAsyncDisposable
     {
         await WithContentDatabaseAsync(async database =>
         {
-            await database.SaveItemsAsync(pages.Select(page => new WikiPage
-            {
-                Title = page.Title,
-                Content = page.Html,
-                LastModified = page.Modified,
-            }));
             foreach (var page in pages)
-                await database.SaveSearchIndexAsync(page.Title, page.PlainContent);
+            {
+                var entity = new WikiPage
+                {
+                    Title = page.Title,
+                    Content = page.Html,
+                    LastModified = page.Modified,
+                };
+                var processed = new ProcessedWikiContent(
+                    page.Html,
+                    page.PlainContent,
+                    [new WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                    [new WikiSearchRegionDraft(0, 0, "paragraph", page.Title, string.Empty, page.Title, page.PlainContent)],
+                    []);
+                await database.SavePageWithSearchAsync(entity, processed);
+            }
         });
     }
 

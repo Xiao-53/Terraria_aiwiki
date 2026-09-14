@@ -28,6 +28,8 @@ codex
 - Core 与数据根决策：[`docs/adr/0002-portable-core-and-data-root.md`](./docs/adr/0002-portable-core-and-data-root.md)
 - Windows 默认数据根决策：[`docs/adr/0009-use-managed-default-windows-data-root.md`](./docs/adr/0009-use-managed-default-windows-data-root.md)
 - Windows 单文件数据库交换决策：[`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`](./docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md)
+- v2 区域索引 Wiki 数据库决策：[`docs/adr/0012-use-v2-region-indexed-wiki-database.md`](./docs/adr/0012-use-v2-region-indexed-wiki-database.md)
+- 进行中的本地 Wiki 区域搜索重构：[`openspec/changes/rebuild-local-wiki-search/plan.md`](./openspec/changes/rebuild-local-wiki-search/plan.md)
 - 已完成 Phase 00 记录：[`openspec/changes/archive/phase-00-migration-baseline/plan.md`](./openspec/changes/archive/phase-00-migration-baseline/plan.md)
 - 已完成 Phase 01 记录：[`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`](./openspec/changes/archive/phase-01-portable-wiki-core/plan.md)
 - 已完成 Phase 02 记录：[`openspec/changes/archive/phase-02-search-fix/plan.md`](./openspec/changes/archive/phase-02-search-fix/plan.md)
@@ -103,8 +105,8 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 任何阶段都必须保护完整 Wiki 数据生命周期及其消费者，包括：
 
 - Wiki 获取、Redirect、增量更新和失败处理；
-- 内容清理、SQLite、搜索索引和现有 FTS5 搜索；
-- 数据包兼容、单文件数据库导入导出、迁移和维护；
+- 内容清理、完整 HTML、SQLite v2、章节/区域记录和单套 FTS5 搜索；
+- 单文件数据库导入导出、格式/身份校验、中断恢复和维护；
 - Wiki 资源、多数据源和 Local Viewer backend；
 - 手动搜索、离线阅读和未来 AI 对同一份本地数据的复用。
 
@@ -136,7 +138,7 @@ Migration Baseline & Host Spike
 
 已完整关闭并归档的 AI 会话 Token 优化变更在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。旧 change 未执行的真实 Token、答案、来源与窗口验收保留为历史边界，不再作为开放项；后续优化另建 plan，本仓库验证不得自行产生付费请求。
 
-Windows 本地 Wiki 启动现已把旧/目标数据目录冲突前移到只读布局预检并保留稳定错误，冲突时 Manager 与两套 Content 数据库原字节不变且不会启动 Viewer；健康库启动使用 Manager 统计快照，不再在首屏前统计三张表，锚点迁移仅在轻量预检确认需要后才 checkpoint。Windows smoke 同时记录 allowlist 启动阶段的累计/阶段耗时，数据兼容错误、Viewer 资源/bind/导航/DOM Ready 错误进入不同恢复分类。
+本地 Wiki 正在按 ADR 0012 切换到 v2 内容库：页面下载事务同时提交完整 HTML、章节、搜索区域和 contentless FTS5，启动只恢复 raw import journal、检查格式/身份并使用 Manager 统计快照。旧内容库、Anchor 迁移和 `.pkg` 已退休；真实语料的相关性、性能与体积等待用户用新 Release 下载后验收。
 
 当前合并源码最近记录的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 349/349；AI evidence 变更的 Python lint、format、strict mypy 通过，离线 tests 为 109 passed / 7 deselected，并完成两组五轮真实 DeepSeek 验收。各证据边界和未验证项以相应归档计划为准；本轮治理整理未重新运行产品构建、发布或付费请求。
 
@@ -171,7 +173,8 @@ terraria_aiwiki/
 │     ├─ 0008-use-github-releases-windows-distribution.md # Windows 分发
 │     ├─ 0009-use-managed-default-windows-data-root.md # Windows 默认数据根
 │     ├─ 0010-use-bounded-local-ai-conversations.md # 本地会话与模型历史边界
-│     └─ 0011-use-managed-data-root-and-raw-database-transfer.md # Windows 数据根与数据库文件交换
+│     ├─ 0011-use-managed-data-root-and-raw-database-transfer.md # Windows 数据根与数据库文件交换
+│     └─ 0012-use-v2-region-indexed-wiki-database.md # v2 区域索引与旧兼容退休
 ├─ openspec/
 │  ├─ project.md                     # 技术与产品基线
 │  ├─ specs/                         # 已确认能力契约

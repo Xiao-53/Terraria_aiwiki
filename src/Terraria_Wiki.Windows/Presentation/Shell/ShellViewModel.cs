@@ -493,7 +493,12 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         ReaderState = ReaderPaneState.Wiki;
         if (IsWikiSelected)
             WikiMode = WikiDisplayMode.Reading;
-        await Reader.OpenAsync(new ReaderPageRequest(result.Title));
+        var title = string.IsNullOrWhiteSpace(result.CanonicalTitle)
+            ? string.IsNullOrWhiteSpace(result.RedirectTo) ? result.Title : result.RedirectTo
+            : result.CanonicalTitle;
+        await Reader.OpenAsync(new ReaderPageRequest(
+            title,
+            string.IsNullOrWhiteSpace(result.Anchor) ? null : result.Anchor));
     }
 
     private async Task OpenWikiHomeAsync()

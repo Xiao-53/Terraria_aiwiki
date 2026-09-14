@@ -1,5 +1,4 @@
 using SQLite;
-using Terraria_Wiki.Core.Compatibility;
 using Terraria_Wiki.Models;
 
 namespace Terraria_Wiki.Core.Data;
@@ -134,25 +133,17 @@ internal static class WikiFavoriteStore
             throw Error("data-directory-reparse-point", "A Wiki data directory cannot be a reparse point.");
 
         var current = paths.ContentDatabasePath;
-        var legacy = Path.Combine(directory, LegacyWikiCompatibility.LegacyDatabaseName);
         var hasCurrent = File.Exists(current);
-        var hasLegacy = File.Exists(legacy);
-        if (hasCurrent && hasLegacy)
-            throw Error("database-family-conflict", "Multiple Wiki content databases are present.");
-        if (!hasCurrent && !hasLegacy)
+        if (!hasCurrent)
         {
-            if (HasSidecar(current) || HasSidecar(legacy))
+            if (HasSidecar(current))
                 throw Error("orphan-database-sidecar", "A Wiki database sidecar has no matching database.");
             return null;
         }
 
-        var selected = hasCurrent ? current : legacy;
-        var other = hasCurrent ? legacy : current;
-        if (HasSidecar(other))
-            throw Error("orphan-database-sidecar", "A Wiki database sidecar belongs to another database family.");
-        if ((File.GetAttributes(selected) & FileAttributes.ReparsePoint) != 0)
+        if ((File.GetAttributes(current) & FileAttributes.ReparsePoint) != 0)
             throw Error("database-reparse-point", "A Wiki content database cannot be a reparse point.");
-        return selected;
+        return current;
     }
 
     private static SQLiteConnection Open(string path, SQLiteOpenFlags mode) =>

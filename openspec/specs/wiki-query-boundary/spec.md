@@ -1,56 +1,52 @@
 # Wiki Search / Read 边界契约
 
 - 状态：confirmed baseline
-- 适用范围：Application、Presentation、Wiki Tool Adapter、AI Backend
-- 来源：现有手动搜索/阅读能力与 AI 事实来源决策
+- 适用范围：Core、Application、Presentation、Wiki Tool Adapter、AI Backend
+- 来源：`rebuild-local-wiki-search` 与本地 Wiki 单一事实源决策
 
 ## 目的
 
-为新 UI 和 AI 提供同一套稳定 Wiki 查询能力，使调用方不依赖 SQLite、FTS5 表、全局 `App.*` 或具体 transport。
+为手动搜索、Reader 和 Wiki Tool 提供同一套区域级本地 Wiki 查询，使调用方不依赖 SQLite 表、FTS 细节或平台状态。
 
-## 契约
+## Search 契约
 
-### Search
+- Search 查询当前活动 Wiki 的 v2 内容库。每个结果指向一个真实搜索区域；同一页面可以返回多个内容不同的区域。
+- 查询先执行 Unicode NFKC 与空白规范化，再解析精确 Title、官方 Redirect 和按 Wiki 身份加载的社区 Alias。多个输入名称解析到同一实体时合并为一个概念，输入顺序不得改变关键词权重。
+- 社区 Alias 是随程序发布的独立版本化 JSON，只允许确定性实体映射；它不写入 Redirect、不联网、不调用 AI。
+- 唯一正文索引是 contentless FTS5 位置索引。汉字按 Unicode scalar 编码为逐字 token，连续拉丁字母和数字按词编码，字面符号编码为确定性 token；连续中文查询使用短语匹配。不得同时保留旧 trigram 或 ShortTerm 明细索引。
+- 上下文和正文分列索引，BM25 权重固定为 2:1。完整上下文只能来自页面标题、当前章节路径或真实 DOM 结构关系。
+- 排序层级固定为 `SameRegion`、`SameSection`、`SamePage`、`Partial`。只有上一层结果不足调用方上限时才会返回下一层；低层结果不能依靠词频越级。
+- 同层先比较实体关系、概念覆盖和明确结构证据，再使用 BM25；最后按规范页面标题和区域顺序稳定排序。
+- 章节或页面放宽结果返回共同支持匹配的完整 `EvidenceRegions` 集合，并选择其中一个真实区域作为点击目标。证据块保持原区域边界，不拼接成原文没有表达的关系。
+- 结果包含显示标题、规范页面标题、区域 ID/顺序、章节路径、已有 Anchor、完整证据、证据类型、匹配层级、Preview 和 Preview 高亮。`Snippet` 继续作为 Preview 的兼容字段。
+- Preview 在查询时从证据生成；完整正文只保存在区域表。高亮使用 Preview 的零基 .NET UTF-16 起始位置与长度。
+- 无真实区域或章节 ID 时 Anchor 为空，调用方打开页面并显示可读区域来源，不生成定位 ID。
+- 页面与区域相同且证据相同的重复结果先去重，再应用 `MaxResults`；上限固定为 `1..100`。
+- 取消不得变成空结果；数据源不可用、格式不支持和 Wiki 身份不匹配使用稳定错误语义。
 
-- Search 使用现有本地 Wiki 数据和 SQLite FTS5 能力，并保留标题、Redirect 与正文检索的既有角色。
-- 匹配类型与优先级固定为 `ExactTitle`、`ExactRedirect`、`TitlePrefix`、`RedirectPrefix`、`TitleContains`、`RedirectContains`、`BodyFts`；同级结果必须完全确定，跨来源重复结果只保留最高优先级匹配。
-- 查询去除首尾空白并把连续 Unicode 空白折叠为单个空格；精确/前缀基于完整规范化查询，包含与正文多词查询要求所有词出现。`%`、`_`、反斜线、单双引号和其他符号均按字面输入处理。
-- 全部查询词少于 3 个 Unicode scalar 时只搜索标题和 Redirect；混合长短词只以长词建立 FTS 候选，再在候选正文校验短词，不对正文执行全表短词扫描。
-- Search 返回可识别页面的标题、Redirect 目标和纯文本摘要；`Highlights` 使用摘要字符串的零基 .NET UTF-16 起始位置与长度，不包含 HTML 标记。
-- 陈旧 FTS 行和无法解析到现有页面的 Redirect 不得作为搜索结果返回。
-- 去重与完整排序后才应用 `MaxResults`；`WikiSearchOptions.MaxResults` 允许范围固定为 `1..100`。
-- 结果数量、查询选项和取消由调用参数或 Application 用例控制，不从 Core 内部读取 Presentation/平台设置。
-- 取消不得被报告为无结果；数据源不可用通过稳定错误语义返回。搜索质量后续变化仍须由专门 Phase 和回归样本确认，不得以更换索引体系绕过局部问题。
+## Read 契约
 
-### Read
+- Read 通过稳定页面身份读取同一 v2 内容库中的完整 Viewer HTML。
+- Redirect、Anchor 和未找到页面的语义明确，调用方不直接拼接数据库查询。
+- 搜索加工不修改 Viewer HTML。Viewer、手动阅读和 AI Adapter 读取同一份 Core 数据。
 
-- Read 通过稳定页面身份读取本地 Wiki 页面及必要来源信息。
-- Redirect、锚点和未找到页面的语义必须明确，调用方不直接拼接数据库查询。
-- Viewer、手动阅读和 AI 可以使用不同 Adapter，但读取同一份 Core 数据。
+## 调用边界
 
-### 调用边界
-
-- Presentation 通过 Application Search/Read 用例访问 Wiki。
-- Wiki Tool Adapter 调用相同用例，不直接访问 `SQLiteAsyncConnection`、表或全局应用状态。
-- AI transport、Python 进程和 Tool Calling 协议不得进入 Core；transport 可以替换而不改变 Search/Read 语义。
-- 错误、取消、超时和不可用数据源必须以稳定结果或错误语义返回，不依赖 UI 弹窗完成流程。
-
-### 非目标
-
+- Presentation 和 Wiki Tool Adapter 都通过 Application Search/Read 用例访问 Wiki。
+- Wiki Tool 保持现有协议，通过薄映射消费 Search；本变更不扩展 AI Tool、Runtime、Prompt、Token 或 Chat。
+- AI transport、Python 进程和 Tool Calling 协议不得进入 Core。
 - 不建设 Vector Search、Embedding Retrieval、Vector Database 或第二套 AI Wiki 数据。
-- 不在本契约中固定接口签名、DTO 类名、SQL 或 transport。
 
 ## 验收场景
 
-1. 同一查询通过手动 UI 与 Wiki Tool Adapter 获得语义一致的候选页面。
-2. 七级标题、Redirect 与正文匹配顺序、同级确定排序、跨来源去重和无结果均有稳定回归样本。
-3. 多词、Unicode 空白、短词/混合词及字面 `%`、`_`、反斜线、单双引号均有安全回归样本。
-4. 摘要始终为纯文本，高亮范围合法且可按 .NET UTF-16 字符串索引安全切片。
-5. `MaxResults` 的 `1..100` 边界和最终截断、取消、数据源不可用、坏 Redirect 与陈旧 FTS 均有明确回归。
-6. Read 能返回代表性页面，正确处理 Redirect/锚点/不存在页面。
-7. 调用方取消或数据源不可用时，不需要直接操作数据库或 UI 全局状态即可得到明确结果。
-8. 静态依赖检查确认 Presentation、AI Backend 和 transport 不直接访问 SQLite 表。
+1. 汉字单字、双字、连续中文、拉丁词、数字和字面符号可在区域正文中查询。
+2. Title、Redirect、Alias、多概念去重和输入顺序交换有确定性回归。
+3. 同区域、同章节、同页面和部分匹配严格分层，低层不越级。
+4. 表格、Infobox、列表与普通正文结果保留完整证据、来源、真实 Anchor 和合法 Preview 高亮。
+5. 同页多区域分别返回；相同证据去重后再应用 `1..100` 上限。
+6. 手动 UI 与 Wiki Tool 获得顺序一致的候选；Read 正确处理 Redirect、Anchor 与不存在页面。
+7. 取消、格式错误和数据源不可用无需调用方直接操作数据库即可得到明确结果。
 
 ## 变更规则
 
-能力语义变化时更新本 spec；接口、DTO、SQL、排序权重和测试数据写入对应 Phase 计划。
+能力语义变化时更新本 spec；SQL、提取规则、权重和测试语料写入对应 change 与 ADR。

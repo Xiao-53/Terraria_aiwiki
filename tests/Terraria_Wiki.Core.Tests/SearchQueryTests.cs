@@ -1,399 +1,330 @@
-using System.Diagnostics;
+using System.Text.Json;
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
 using Xunit;
-using Xunit.Abstractions;
 
 namespace Terraria_Wiki.Core.Tests;
 
 public sealed class SearchQueryTests
 {
-    private readonly ITestOutputHelper _output;
-
-    public SearchQueryTests(ITestOutputHelper output)
-    {
-        _output = output;
-    }
-
     private static readonly DateTime FixtureTime =
         new(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
 
     [Fact]
-    public async Task SearchUsesSevenStableTiersAndDeduplicatesAcrossSources()
+    public async Task ChineseSingleAndDoubleCharacterTermsSearchRegionBodies()
     {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("Crystal", "crystal body text"),
-            ("crystal blade", "crystal blade body text"),
-            ("ancient crystal", "ancient crystal body text"),
-            ("Exact Redirect Target", "redirect destination"),
-            ("Prefix Redirect Target", "redirect destination"),
-            ("Contains Redirect Target", "redirect destination"),
-            ("Body Entry", "the crystal appears only in this body"));
-        await fixture.Database.SaveItemsAsync(
-        [
-            new WikiRedirect { FromName = "crystal", ToTarget = "Exact Redirect Target#Section" },
-            new WikiRedirect { FromName = "crystal bridge", ToTarget = "Prefix Redirect Target" },
-            new WikiRedirect { FromName = "ancient crystal gate", ToTarget = "Contains Redirect Target" },
-        ]);
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "武器指南", "<h2 id='types'>类型</h2><p>剑和弓都是常见武器。</p>");
 
-        var results = await SearchAsync(fixture, "crystal", 100);
-
-        Assert.Collection(
-            results,
-            item => AssertSearchItem(item, "Crystal", WikiSearchMatchKind.ExactTitle),
-            item => AssertSearchItem(item, "crystal", WikiSearchMatchKind.ExactRedirect, "Exact Redirect Target"),
-            item => AssertSearchItem(item, "crystal blade", WikiSearchMatchKind.TitlePrefix),
-            item => AssertSearchItem(item, "crystal bridge", WikiSearchMatchKind.RedirectPrefix, "Prefix Redirect Target"),
-            item => AssertSearchItem(item, "ancient crystal", WikiSearchMatchKind.TitleContains),
-            item => AssertSearchItem(item, "ancient crystal gate", WikiSearchMatchKind.RedirectContains, "Contains Redirect Target"),
-            item => AssertSearchItem(item, "Body Entry", WikiSearchMatchKind.BodyFts));
-        Assert.Equal(results.Count, results.Select(item => item.Title).Distinct(StringComparer.Ordinal).Count());
-    }
-
-    [Fact]
-    public async Task SameTierOrderingIsFullyDeterministic()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("ore zeta", "description"),
-            ("ore Beta", "description"),
-            ("ore alpha", "description"),
-            ("ore aa", "description"));
-
-        var first = await SearchAsync(fixture, "ore", 100);
-        var second = await SearchAsync(fixture, "ore", 100);
-
-        Assert.Equal(first.Select(ResultIdentity), second.Select(ResultIdentity));
-        Assert.Equal(
-            ["ore aa", "ore Beta", "ore zeta", "ore alpha"],
-            first.Select(item => item.Title));
-        Assert.All(first, item => Assert.Equal(WikiSearchMatchKind.TitlePrefix, item.MatchKind));
-    }
-
-    [Theory]
-    [InlineData(25)]
-    [InlineData(50)]
-    [InlineData(75)]
-    [InlineData(100)]
-    public async Task MaxResultsIsAppliedAfterRankingAndBodyIsNotCappedAtFifty(int maxResults)
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await InsertBulkCorpusAsync(fixture, 120, "body-limit-token");
-
-        var results = await SearchAsync(fixture, "body-limit-token", maxResults);
-
-        Assert.Equal(maxResults, results.Count);
-        Assert.All(results, item => Assert.Equal(WikiSearchMatchKind.BodyFts, item.MatchKind));
-    }
-
-    [Fact]
-    public async Task ExactMatchesSurviveLargeFuzzyPools()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await InsertPagesAsync(
-            fixture,
-            Enumerable.Range(0, 150).Select(index => $"fuzzy needle {index:D3}"));
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("Needle", "exact page"),
-            ("Needle Redirect Target", "redirect page"));
-        await fixture.Database.SaveItemAsync(
-            new WikiRedirect { FromName = "needle", ToTarget = "Needle Redirect Target#Anchor" });
-
-        var results = await SearchAsync(fixture, "needle", 25);
-
-        Assert.Equal("Needle", results[0].Title);
-        Assert.Equal(WikiSearchMatchKind.ExactTitle, results[0].MatchKind);
-        Assert.Equal("needle", results[1].Title);
-        Assert.Equal(WikiSearchMatchKind.ExactRedirect, results[1].MatchKind);
-        Assert.Equal(25, results.Count);
-    }
-
-    [Fact]
-    public async Task MultiWordQueriesUseAndAndCollapseUnicodeWhitespace()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("Alpha Beta", "both alpha and beta"),
-            ("Body Both", "alpha middle beta"),
-            ("Body Alpha", "alpha only"),
-            ("Body Beta", "beta only"));
-
-        var results = await SearchAsync(fixture, " \talpha\u2003beta\r\n", 100);
-
-        Assert.Equal("Alpha Beta", results[0].Title);
-        Assert.Equal(WikiSearchMatchKind.ExactTitle, results[0].MatchKind);
-        Assert.Contains(results, item => item.Title == "Body Both" && item.MatchKind == WikiSearchMatchKind.BodyFts);
-        Assert.DoesNotContain(results, item => item.Title is "Body Alpha" or "Body Beta");
-    }
-
-    [Fact]
-    public async Task SpecialCharactersAreSafeAndLikeWildcardsRemainLiteral()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("100%_safe", "literal percent underscore"),
-            ("100xxsafe", "wildcard decoy"),
-            ("\"quoted\"", "quoted title"),
-            ("it's", "apostrophe title"),
-            ("path\\name", "backslash title"),
-            ("***", "symbol title"),
-            ("Quote Body", "a pick\"axe is mentioned here"));
-
-        Assert.Equal(["100%_safe"], (await SearchAsync(fixture, "%_", 100)).Select(item => item.Title));
-        Assert.Equal("\"quoted\"", (await SearchAsync(fixture, "\"quoted\"", 100))[0].Title);
-        Assert.Equal("it's", (await SearchAsync(fixture, "it's", 100))[0].Title);
-        Assert.Equal("path\\name", (await SearchAsync(fixture, "path\\name", 100))[0].Title);
-        Assert.Equal("***", (await SearchAsync(fixture, "***", 100))[0].Title);
-        Assert.Contains(
-            await SearchAsync(fixture, "pick\"axe", 100),
-            item => item.Title == "Quote Body" && item.MatchKind == WikiSearchMatchKind.BodyFts);
-        Assert.Empty(await SearchAsync(fixture, " \u2003\t\r\n", 100));
-    }
-
-    [Fact]
-    public async Task ShortTermsOnlySearchTitlesAndRedirects()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("铜镐", "short title"),
-            ("Short Body", "正文中只有镐"),
-            ("Emoji Body", "正文中只有🙂"),
-            ("Redirect Target", "target"));
-        await fixture.Database.SaveItemAsync(
-            new WikiRedirect { FromName = "镐别名", ToTarget = "Redirect Target" });
-
-        var oneRune = await SearchAsync(fixture, "镐", 100);
-        var emoji = await SearchAsync(fixture, "🙂", 100);
-
-        Assert.Contains(oneRune, item => item.Title == "铜镐" && item.MatchKind == WikiSearchMatchKind.TitleContains);
-        Assert.Contains(oneRune, item => item.Title == "镐别名" && item.MatchKind == WikiSearchMatchKind.RedirectPrefix);
-        Assert.DoesNotContain(oneRune, item => item.Title == "Short Body");
-        Assert.DoesNotContain(emoji, item => item.Title == "Emoji Body");
-    }
-
-    [Fact]
-    public async Task MixedLongAndShortTermsFilterOnlyLongTermFtsCandidates()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("Mixed Match", "use the pickaxe to mine 铜 ore"),
-            ("Long Only", "use the pickaxe to mine ore"),
-            ("Short Only", "这里只有铜矿"));
-
-        var results = await SearchAsync(fixture, "pickaxe 铜", 100);
-
-        var result = Assert.Single(results);
-        Assert.Equal("Mixed Match", result.Title);
-        Assert.Equal(WikiSearchMatchKind.BodyFts, result.MatchKind);
-    }
-
-    [Fact]
-    public async Task BrokenRedirectsAndStaleFtsRowsAreExcluded()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await fixture.Database.SaveItemAsync(
-            new WikiRedirect { FromName = "ghost alias", ToTarget = "Missing#Anchor" });
-        await fixture.Database.SaveSearchIndexAsync("Stale Fts", "ghost token body");
-
-        Assert.Empty(await SearchAsync(fixture, "ghost", 100));
-    }
-
-    [Fact]
-    public async Task SnippetsStayPlainTextAndExposeValidUtf16Highlights()
-    {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await SavePagesAndIndexesAsync(
-            fixture,
-            ("Unsafe Body", "<img src=x onerror=alert(1)> pickaxe & <script>bad()</script>"));
-
-        var result = Assert.Single(await SearchAsync(fixture, "pickaxe", 100));
-
-        Assert.Equal(WikiSearchMatchKind.BodyFts, result.MatchKind);
-        Assert.DoesNotContain("<mark", result.Snippet, StringComparison.OrdinalIgnoreCase);
-        Assert.DoesNotContain("search-highlight", result.Snippet, StringComparison.OrdinalIgnoreCase);
-        Assert.NotEmpty(result.Highlights);
-        var previousEnd = 0;
-        foreach (var highlight in result.Highlights)
+        foreach (var query in new[] { "剑", "弓", "武器" })
         {
-            Assert.InRange(highlight.Start, previousEnd, result.Snippet.Length);
-            Assert.InRange(highlight.Length, 1, result.Snippet.Length - highlight.Start);
-            Assert.Equal(
-                "pickaxe",
-                result.Snippet.Substring(highlight.Start, highlight.Length),
-                ignoreCase: true);
-            previousEnd = highlight.Start + highlight.Length;
+            var result = (await SearchAsync(fixture, query)).First(item =>
+                item.EvidenceText.Contains(query, StringComparison.Ordinal)
+                && item.EvidenceText.Contains("常见", StringComparison.Ordinal));
+            Assert.Equal("武器指南", result.CanonicalTitle);
+            Assert.Contains(query, result.EvidenceText);
+            Assert.NotEmpty(result.Highlights);
         }
     }
 
     [Fact]
-    public async Task OptionsCancellationAndUnavailableDataSourceAreExplicit()
+    public async Task EightAcceptanceQueriesReachTheirSyntheticContentEvidence()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "光之女皇", "<div class='infobox'><div class='title'>光之女皇</div><div class='section drops'><div class='title'>掉落</div><ul><li>宝藏袋 100%</li></ul></div></div>");
+        await SaveAsync(fixture, "猪龙鱼公爵", "<h2 id='loot'>掉落</h2><p>猪龙鱼公爵会掉落多种武器。</p>");
+        await SaveAsync(fixture, "克苏鲁之眼", "<h2 id='loot'>掉落</h2><p>克苏鲁之眼掉落恶魔矿。</p>");
+        await SaveAsync(fixture, "武器指南", "<p>剑和弓都是武器。</p>");
+        await SaveAsync(fixture, "药剂指南", "<p>药水可以提供增益。</p>");
+        await SaveAsync(fixture, "装备指南", "<p>饰品可以装备在配饰栏。</p>");
+        var aliasPath = Path.Combine(fixture.RootPath, "aliases.json");
+        await File.WriteAllTextAsync(aliasPath, JsonSerializer.Serialize(new
+        {
+            version = 1,
+            wikis = new[]
+            {
+                new
+                {
+                    wiki_id = 1,
+                    aliases = new[]
+                    {
+                        new { alias = "光女", target_title = "光之女皇" },
+                        new { alias = "猪鲨", target_title = "猪龙鱼公爵" },
+                        new { alias = "克眼", target_title = "克苏鲁之眼" },
+                    }
+                }
+            }
+        }));
+        fixture.Database.ConfigureSearchAliases(WikiSearchAliasCatalog.Load(aliasPath));
+
+        var checks = new[]
+        {
+            (Query: "光女 宝藏袋", CanonicalTitle: "光之女皇", EvidenceTerm: "宝藏袋"),
+            (Query: "猪鲨 武器", CanonicalTitle: "猪龙鱼公爵", EvidenceTerm: "武器"),
+            (Query: "克眼 掉落", CanonicalTitle: "克苏鲁之眼", EvidenceTerm: "掉落"),
+            (Query: "剑", CanonicalTitle: "武器指南", EvidenceTerm: "剑"),
+            (Query: "弓", CanonicalTitle: "武器指南", EvidenceTerm: "弓"),
+            (Query: "武器", CanonicalTitle: "武器指南", EvidenceTerm: "武器"),
+            (Query: "药水", CanonicalTitle: "药剂指南", EvidenceTerm: "药水"),
+            (Query: "饰品", CanonicalTitle: "装备指南", EvidenceTerm: "饰品"),
+        };
+
+        foreach (var check in checks)
+        {
+            var results = await SearchAsync(fixture, check.Query);
+            Assert.Contains(results, result => result.CanonicalTitle == check.CanonicalTitle
+                && result.EvidenceText.Contains(check.EvidenceTerm, StringComparison.Ordinal));
+        }
+    }
+
+    [Fact]
+    public async Task TableAndInfoboxRowsRetainHeadersGroupsAndMergedContext()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        const string html = """
+            <div class="infobox npc"><div class="title">光之女皇</div>
+              <div class="section drops"><div class="title">掉落</div>
+                <ul><li class="groupstart caption">专家模式</li><li>宝藏袋 100%</li></ul>
+              </div>
+            </div>
+            <h2 id="loot">宝藏袋内容</h2>
+            <table><caption>Boss 掉落</caption>
+              <tr><th>Boss</th><th>物品</th><th>概率</th></tr>
+              <tr><th colspan="3">专家模式</th></tr>
+              <tr><th rowspan="2">光之女皇</th><td>星光</td><td>25%</td></tr>
+              <tr><td>彩虹猫之刃</td><td>25%</td></tr>
+            </table>
+            """;
+        await SaveAsync(fixture, "光之女皇", html);
+
+        var bag = (await SearchAsync(fixture, "专家模式 宝藏袋 100%"))[0];
+        Assert.Equal(WikiSearchScope.SameRegion, bag.Scope);
+        Assert.Equal(WikiSearchEvidenceKind.Infobox, bag.EvidenceKind);
+        Assert.Contains("掉落", bag.EvidenceText);
+        Assert.Contains("光之女皇", bag.EvidenceText);
+
+        var merged = (await SearchAsync(fixture, "光之女皇 彩虹猫之刃"))[0];
+        Assert.Equal(WikiSearchEvidenceKind.TableRow, merged.EvidenceKind);
+        Assert.Contains("Boss 掉落", merged.EvidenceText);
+        Assert.Contains("专家模式", merged.EvidenceText);
+        Assert.Contains("物品", merged.EvidenceText);
+        Assert.Contains("光之女皇", merged.EvidenceText);
+        Assert.Contains("彩虹猫之刃", merged.EvidenceText);
+        Assert.Equal("loot", merged.Anchor);
+        var sections = await fixture.Database.GetItemsAsync<WikiSearchSection>();
+        Assert.Contains(sections, section => section.PageTitle == "光之女皇"
+            && section.Title == "宝藏袋内容" && section.Anchor == "loot");
+    }
+
+    [Fact]
+    public async Task SameRegionRanksBeforeSamePageAndPartialMatches()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "直接相关", "<h2>掉落</h2><p>克苏鲁之眼会掉落恶魔矿。</p>");
+        await SaveAsync(fixture, "同页分散", "<h2>Boss</h2><p>克苏鲁之眼。</p><h2>战利品</h2><p>掉落物列表。</p>");
+        await SaveAsync(fixture, "部分页面", "<p>这里只讨论掉落。</p>");
+
+        var results = await SearchAsync(fixture, "克苏鲁之眼 掉落");
+
+        Assert.Equal("直接相关", results[0].CanonicalTitle);
+        Assert.Equal(WikiSearchScope.SameRegion, results[0].Scope);
+        Assert.Contains(results, item => item.CanonicalTitle == "同页分散" && item.Scope == WikiSearchScope.SamePage);
+        var pageRelaxation = results.First(item => item.CanonicalTitle == "同页分散" && item.Scope == WikiSearchScope.SamePage);
+        Assert.True(pageRelaxation.EvidenceRegions.Count >= 2);
+        Assert.Contains(pageRelaxation.EvidenceRegions, region => region.EvidenceText.Contains("克苏鲁之眼"));
+        Assert.Contains(pageRelaxation.EvidenceRegions, region => region.EvidenceText.Contains("掉落物列表"));
+        var firstPartial = results.ToList().FindIndex(item => item.Scope == WikiSearchScope.Partial);
+        var lastFull = results.ToList().FindLastIndex(item => item.Scope != WikiSearchScope.Partial);
+        Assert.True(firstPartial < 0 || firstPartial > lastFull);
+    }
+
+    [Fact]
+    public async Task CommunityAliasesResolveDeterministicallyWithoutChangingRedirects()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "猪龙鱼公爵", "<h2 id='drops'>掉落</h2><p>会掉落多种强力武器。</p>");
+        var aliasPath = Path.Combine(fixture.RootPath, "aliases.json");
+        await File.WriteAllTextAsync(aliasPath, JsonSerializer.Serialize(new
+        {
+            version = 1,
+            wikis = new[] { new { wiki_id = 1, aliases = new[] { new { alias = "猪鲨", target_title = "猪龙鱼公爵" } } } }
+        }));
+        fixture.Database.ConfigureSearchAliases(WikiSearchAliasCatalog.Load(aliasPath));
+
+        var result = (await SearchAsync(fixture, "猪鲨 武器"))[0];
+
+        Assert.Equal("猪龙鱼公爵", result.Title);
+        Assert.Equal("猪龙鱼公爵", result.CanonicalTitle);
+        Assert.Equal(WikiSearchEvidenceKind.ExactCommunityAlias, result.EvidenceKind);
+        Assert.Equal(WikiSearchScope.SameRegion, result.Scope);
+        Assert.Null(await fixture.Database.GetItemAsync<WikiRedirect>("猪鲨"));
+
+        var canonicalFirst = await SearchAsync(fixture, "猪龙鱼公爵 猪鲨 武器");
+        var aliasFirst = await SearchAsync(fixture, "武器 猪鲨 猪龙鱼公爵");
+        Assert.Equal(
+            canonicalFirst.Select(item => (item.CanonicalTitle, item.RegionOrdinal, item.Scope)),
+            aliasFirst.Select(item => (item.CanonicalTitle, item.RegionOrdinal, item.Scope)));
+        Assert.Equal(WikiSearchScope.SameRegion, canonicalFirst[0].Scope);
+    }
+
+    [Fact]
+    public async Task OfficialRedirectResolvesToCanonicalPageAndKeepsNavigationIdentity()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "克苏鲁之眼", "<h2 id='loot'>掉落</h2><p>掉落矿石。</p>");
+        await fixture.Database.SaveItemAsync(new WikiRedirect
+        {
+            FromName = "克眼", ToTarget = "克苏鲁之眼#loot"
+        });
+
+        var result = (await SearchAsync(fixture, "克眼 掉落"))[0];
+
+        Assert.Equal("克眼", result.Title);
+        Assert.Equal("克苏鲁之眼", result.RedirectTo);
+        Assert.Equal("克苏鲁之眼", result.CanonicalTitle);
+        Assert.Equal(WikiSearchEvidenceKind.ExactRedirect, result.EvidenceKind);
+    }
+
+    [Fact]
+    public async Task SamePageMayReturnSeveralDistinctRegions()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "药水", "<h2 id='a'>制作</h2><p>药水需要水瓶。</p><h2 id='b'>使用</h2><p>药水提供增益。</p>");
+
+        var results = await SearchAsync(fixture, "药水");
+
+        Assert.True(results.Count >= 2);
+        Assert.Equal(results.Count, results.Select(item => item.EvidenceText).Distinct().Count());
+        Assert.Contains(results, item => item.Anchor == "a");
+        Assert.Contains(results, item => item.Anchor == "b");
+    }
+
+    [Fact]
+    public async Task UpdatingPageAtomicallyReplacesOldRegionsIncludingEmptyContent()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "更新页", "<p>旧词药水</p>");
+        Assert.NotEmpty(await SearchAsync(fixture, "药水"));
+
+        await SaveAsync(fixture, "更新页", "<p>新词饰品</p>");
+        Assert.DoesNotContain(await SearchAsync(fixture, "药水"), item => item.CanonicalTitle == "更新页");
+        Assert.Contains(await SearchAsync(fixture, "饰品"), item => item.CanonicalTitle == "更新页");
+
+        await SaveAsync(fixture, "更新页", "<div></div>");
+        Assert.DoesNotContain(await SearchAsync(fixture, "饰品"), item => item.CanonicalTitle == "更新页");
+    }
+
+    [Fact]
+    public async Task Failed_page_transaction_rolls_back_html_regions_and_fts()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "事务页", "<p>保留旧证据</p>");
+        await fixture.Database.GetConnection().ExecuteAsync(
+            "CREATE TRIGGER fail_region_insert BEFORE INSERT ON WikiSearchRegion WHEN NEW.BodyText LIKE '%触发失败%' BEGIN SELECT RAISE(ABORT, 'fixture failure'); END;");
+
+        await Assert.ThrowsAnyAsync<Exception>(() => SaveAsync(fixture, "事务页", "<p>触发失败的新证据</p>"));
+
+        Assert.Contains(await SearchAsync(fixture, "旧证据"), item => item.CanonicalTitle == "事务页");
+        Assert.DoesNotContain(await SearchAsync(fixture, "新证据"), item => item.CanonicalTitle == "事务页");
+        Assert.Contains("保留旧证据", (await fixture.Database.GetItemAsync<WikiPage>("事务页"))!.Content);
+    }
+
+    [Fact]
+    public async Task Page_delete_removes_region_rows_and_contentless_fts_entries_together()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "删除页", "<p>只在这里出现的羽落药水</p>");
+
+        await fixture.Database.DeleteItemAsync<WikiPage>("删除页");
+
+        Assert.Null(await fixture.Database.GetItemAsync<WikiPage>("删除页"));
+        Assert.DoesNotContain(await SearchAsync(fixture, "羽落药水"), item => item.CanonicalTitle == "删除页");
+        Assert.Equal(0, await fixture.Database.GetCountAsync<WikiSearchRegion>());
+    }
+
+    [Fact]
+    public async Task Nested_lists_collapsed_modes_malformed_html_and_unwrapped_text_are_preserved()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        const string html = "<h2 id='craft'>制作</h2><ul><li>父项说明<ul><li>子项材料 +4%</li></ul></li></ul>"
+            + "<dl><dt>射速</dt><dd>每秒两发</dd></dl>"
+            + "<div class='mw-collapsible' style='display:none'><p>大师模式限定掉落</p></div>"
+            + "<section>没有段落包裹的通用文字<span>以及尾部文字</span><div><b>异常标签";
+        await SaveAsync(fixture, "结构页", html);
+
+        var nested = Assert.Single(await SearchAsync(fixture, "父项说明 子项材料"),
+            item => item.CanonicalTitle == "结构页" && item.Scope == WikiSearchScope.SameRegion);
+        Assert.Equal(WikiSearchEvidenceKind.ListItem, nested.EvidenceKind);
+        Assert.Contains("+4%", nested.EvidenceText);
+        Assert.Contains(await SearchAsync(fixture, "大师模式"), item => item.CanonicalTitle == "结构页");
+        Assert.Contains(await SearchAsync(fixture, "通用文字"), item => item.CanonicalTitle == "结构页");
+        Assert.Contains(await SearchAsync(fixture, "+4%"), item => item.CanonicalTitle == "结构页");
+        Assert.Contains(await SearchAsync(fixture, "异常标签"), item => item.CanonicalTitle == "结构页");
+        var definition = Assert.Single(await SearchAsync(fixture, "射速 每秒"),
+            item => item.CanonicalTitle == "结构页" && item.Scope == WikiSearchScope.SameRegion);
+        Assert.Equal(WikiSearchEvidenceKind.Definition, definition.EvidenceKind);
+    }
+
+    [Fact]
+    public async Task PreviewIsBoundedButFullEvidenceAndUtf16HighlightsRemainAvailable()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "长页面", $"<p>{new string('前', 220)}药水{new string('后', 220)}</p>");
+
+        var result = Assert.Single(await SearchAsync(fixture, "药水"));
+
+        Assert.True(result.Snippet.Length <= 182);
+        Assert.True(result.EvidenceText.Length > result.Snippet.Length);
+        Assert.All(result.Highlights, range =>
+            Assert.Equal("药水", result.Snippet.Substring(range.Start, range.Length)));
+    }
+
+    [Fact]
+    public async Task OptionsCancellationAndDeterministicOrderingRemainExplicit()
     {
         Assert.Throws<ArgumentOutOfRangeException>(() => new WikiSearchOptions(0));
-        Assert.Throws<ArgumentOutOfRangeException>(() => new WikiSearchOptions(101));
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "乙", "<p>武器</p>");
+        await SaveAsync(fixture, "甲", "<p>武器</p>");
+        var first = await SearchAsync(fixture, "武器");
+        var second = await SearchAsync(fixture, "武器");
+        Assert.Equal(first.Select(item => (item.CanonicalTitle, item.RegionOrdinal)),
+            second.Select(item => (item.CanonicalTitle, item.RegionOrdinal)));
 
-        await using var fixture = await TestDatabase.CreateContentAsync();
         using var canceled = new CancellationTokenSource();
         canceled.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() =>
-            new WikiReader(fixture.Database).SearchAsync(
-                "anything",
-                new WikiSearchOptions(10),
-                canceled.Token));
-
-        var root = Path.Combine(Path.GetTempPath(), "terraria-wiki-search-unavailable-" + Guid.NewGuid().ToString("N"));
-        var databasePath = Path.Combine(root, "data.db");
-        Directory.CreateDirectory(databasePath);
-        var unavailable = new ContentDbService(databasePath);
-        try
-        {
-            var error = await Assert.ThrowsAsync<WikiQueryException>(() =>
-                new WikiReader(unavailable).SearchAsync("anything", new WikiSearchOptions(10)));
-            Assert.Equal(WikiQueryErrorCode.DataSourceUnavailable, error.Code);
-        }
-        finally
-        {
-            try
-            {
-                await unavailable.CloseConnection();
-            }
-            catch
-            {
-            }
-
-            try
-            {
-                Directory.Delete(root, recursive: true);
-            }
-            catch
-            {
-            }
-        }
+            new WikiReader(fixture.Database).SearchAsync("武器", new WikiSearchOptions(10), canceled.Token));
     }
 
-    [Fact]
-    [Trait("Category", "Performance")]
-    public async Task TenThousandRowSearchesMeetWindowsReleaseBudget()
+    private static async Task SaveAsync(TestDatabase fixture, string title, string html)
     {
-        await using var fixture = await TestDatabase.CreateContentAsync();
-        await InsertBulkCorpusAsync(fixture, 10_000, "performance-body-token");
-        await SavePagesAndIndexesAsync(fixture, ("Unique Exact Title", "exact title description"));
-        await fixture.Database.SaveItemAsync(
-            new WikiRedirect { FromName = "Unique Exact Alias", ToTarget = "Bulk Page 00000#Anchor" });
-        var reader = new WikiReader(fixture.Database);
-        var options = new WikiSearchOptions(100);
-
-        await reader.SearchAsync("Unique Exact Title", options);
-        await reader.SearchAsync("Unique Exact Alias", options);
-        await reader.SearchAsync("performance-body-token", options);
-
-        var (titleResults, titleElapsed) = await MeasureAsync(() =>
-            reader.SearchAsync("Unique Exact Title", options));
-        var (redirectResults, redirectElapsed) = await MeasureAsync(() =>
-            reader.SearchAsync("Unique Exact Alias", options));
-        var (bodyResults, bodyElapsed) = await MeasureAsync(() =>
-            reader.SearchAsync("performance-body-token", options));
-
-        _output.WriteLine("Exact title: {0:N1} ms", titleElapsed.TotalMilliseconds);
-        _output.WriteLine("Exact redirect: {0:N1} ms", redirectElapsed.TotalMilliseconds);
-        _output.WriteLine("Body (100 results): {0:N1} ms", bodyElapsed.TotalMilliseconds);
-
-        Assert.Equal(WikiSearchMatchKind.ExactTitle, titleResults[0].MatchKind);
-        Assert.Equal(WikiSearchMatchKind.ExactRedirect, redirectResults[0].MatchKind);
-        Assert.Equal(100, bodyResults.Count);
-        Assert.All(bodyResults, item => Assert.Equal(WikiSearchMatchKind.BodyFts, item.MatchKind));
-        Assert.True(titleElapsed < TimeSpan.FromSeconds(2), $"Exact title search took {titleElapsed.TotalMilliseconds:N0} ms.");
-        Assert.True(redirectElapsed < TimeSpan.FromSeconds(2), $"Exact redirect search took {redirectElapsed.TotalMilliseconds:N0} ms.");
-        Assert.True(bodyElapsed < TimeSpan.FromSeconds(2), $"Body search took {bodyElapsed.TotalMilliseconds:N0} ms.");
+        var book = CreateBook();
+        var processed = WikiContentProcessor.Process(html, book, title);
+        await fixture.Database.SavePageWithSearchAsync(new WikiPage
+        {
+            Title = title,
+            Content = processed.Html,
+            LastModified = FixtureTime,
+        }, processed);
     }
 
     private static async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         TestDatabase fixture,
         string query,
-        int maxResults) =>
-        await new WikiReader(fixture.Database).SearchAsync(query, new WikiSearchOptions(maxResults));
+        int max = 100) =>
+        await new WikiReader(fixture.Database).SearchAsync(query, new WikiSearchOptions(max));
 
-    private static async Task SavePagesAndIndexesAsync(
-        TestDatabase fixture,
-        params (string Title, string PlainContent)[] pages)
+    private static WikiBook CreateBook() => new()
     {
-        await fixture.Database.SaveItemsAsync(
-            pages.Select(page => new WikiPage
-            {
-                Title = page.Title,
-                Content = $"<p>{page.Title}</p>",
-                LastModified = FixtureTime,
-            }));
-        foreach (var page in pages)
-            await fixture.Database.SaveSearchIndexAsync(page.Title, page.PlainContent);
-    }
-
-    private static async Task InsertPagesAsync(TestDatabase fixture, IEnumerable<string> titles)
-    {
-        var connection = fixture.Database.GetConnection();
-        await connection.RunInTransactionAsync(transaction =>
-        {
-            foreach (var title in titles)
-            {
-                transaction.Insert(new WikiPage
-                {
-                    Title = title,
-                    Content = $"<p>{title}</p>",
-                    LastModified = FixtureTime,
-                });
-            }
-        });
-    }
-
-    private static async Task InsertBulkCorpusAsync(TestDatabase fixture, int count, string bodyToken)
-    {
-        var connection = fixture.Database.GetConnection();
-        await connection.RunInTransactionAsync(transaction =>
-        {
-            for (var index = 0; index < count; index++)
-            {
-                var title = $"Bulk Page {index:D5}";
-                transaction.Insert(new WikiPage
-                {
-                    Title = title,
-                    Content = $"<p>{title}</p>",
-                    LastModified = FixtureTime,
-                });
-                transaction.Execute(
-                    "INSERT INTO WikiSearchIndex (Title, PlainContent) VALUES (?, ?)",
-                    title,
-                    $"{bodyToken} fixture row {index:D5}");
-            }
-        });
-    }
-
-    private static async Task<(IReadOnlyList<SearchResultItem> Results, TimeSpan Elapsed)> MeasureAsync(
-        Func<Task<IReadOnlyList<SearchResultItem>>> operation)
-    {
-        var stopwatch = Stopwatch.StartNew();
-        var results = await operation();
-        stopwatch.Stop();
-        return (results, stopwatch.Elapsed);
-    }
-
-    private static void AssertSearchItem(
-        SearchResultItem item,
-        string title,
-        WikiSearchMatchKind matchKind,
-        string redirectTo = "")
-    {
-        Assert.Equal(title, item.Title);
-        Assert.Equal(matchKind, item.MatchKind);
-        Assert.Equal(redirectTo, item.RedirectTo);
-    }
-
-    private static string ResultIdentity(SearchResultItem item) =>
-        $"{(int)item.MatchKind}|{item.Title}|{item.RedirectTo}";
+        Id = 1,
+        Title = "泰拉瑞亚中文百科",
+        BaseUrl = "https://terraria.wiki.gg",
+        ApiBaseUrl = "https://terraria.wiki.gg/api.php",
+        RedirectListUrl = "/wiki/Special:ListRedirects",
+        DataFolder = "Terraria_Wiki_zh",
+        DefaultPageTitle = "首页",
+        DefaultPageContent = "请先下载数据",
+    };
 }

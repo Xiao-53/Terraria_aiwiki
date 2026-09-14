@@ -47,7 +47,8 @@ public sealed class DataPathsAndContentTests : IDisposable
         var result = WikiContentProcessor.Process(html, CreateBook());
 
         Assert.Contains("infobox", result.Html);
-        Assert.DoesNotContain("Excluded from search", result.SearchText);
+        Assert.Contains("Excluded from search", result.SearchText);
+        Assert.Contains(result.SearchRegions, region => region.Kind == "infobox");
         Assert.Contains("Main text", result.SearchText);
         Assert.Contains("title=\"Target#Part\"", result.Html);
         Assert.DoesNotContain("href=\"/wiki/Target#Part\"", result.Html);

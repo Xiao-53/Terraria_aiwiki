@@ -120,7 +120,11 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
                 resolution.Path,
                 settings,
                 consumers,
-                new HttpClientWikiHttpTransport(httpClient));
+                new HttpClientWikiHttpTransport(httpClient),
+                searchAliasPath: Path.Combine(
+                    AppContext.BaseDirectory,
+                    "SearchAssets",
+                    "community-aliases.zh-cn.json"));
             viewer.SetActiveWikiProvider(application.ActiveWiki.GetActiveAsync);
 
             await application.ActiveWiki.InitializeAsync(

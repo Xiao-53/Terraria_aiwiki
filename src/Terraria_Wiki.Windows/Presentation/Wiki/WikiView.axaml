@@ -24,6 +24,8 @@
               </Grid>
               <TextBlock Text="{Binding RedirectText}" Classes="muted"
                          TextWrapping="Wrap" />
+              <TextBlock Text="{Binding SectionText}" Classes="muted"
+                         TextWrapping="Wrap" />
               <TextBlock Text="{Binding Snippet}" Classes="muted"
                          TextWrapping="Wrap" MaxLines="3" />
             </StackPanel>

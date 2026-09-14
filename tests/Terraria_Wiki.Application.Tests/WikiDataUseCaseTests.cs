@@ -118,32 +118,6 @@ public sealed class WikiDataUseCaseTests
     }
 
     [Fact]
-    public async Task ActivePackageExportInspectAndImportUseTokenAndConsumerLease()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync();
-        await fixture.State.ContentDatabase.SaveItemAsync(Page("Packaged Page"));
-        var packagePath = PackagePath(fixture, "active.pkg");
-
-        var written = await fixture.Application.Data.ExportPackageAsync(1, packagePath, "1.0.0");
-        var inspection = await fixture.Application.Data.InspectPackageAsync(packagePath);
-        await fixture.State.ContentDatabase.SaveItemAsync(Page("After Export"));
-        var pauses = fixture.Consumers.PauseCount;
-        var resumes = fixture.Consumers.ResumeCount;
-
-        var imported = await fixture.Application.Data.ImportPackageAsync(
-            packagePath,
-            inspection.InspectionToken);
-
-        Assert.Equal(packagePath, written.PackagePath);
-        Assert.Equal(1, imported.WikiBook.Id);
-        Assert.Equal(inspection.InspectionToken, imported.Inspection.InspectionToken);
-        Assert.Equal(pauses + 1, fixture.Consumers.PauseCount);
-        Assert.Equal(resumes + 1, fixture.Consumers.ResumeCount);
-        Assert.True((await fixture.Application.Query.ReadAsync("Packaged Page")).IsFound);
-        Assert.False((await fixture.Application.Query.ReadAsync("After Export")).IsFound);
-    }
-
-    [Fact]
     public async Task ActiveDatabaseExportInspectAndImportUseTokenAndConsumerLease()
     {
         await using var fixture = await ApplicationFixture.CreateAsync();
@@ -171,82 +145,6 @@ public sealed class WikiDataUseCaseTests
     }
 
     [Fact]
-    public async Task TokenMismatchAndLegacyConfirmationAreExplicitAndAlwaysResumeActiveConsumers()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync();
-        var packagePath = PackagePath(fixture, "legacy.pkg");
-        await fixture.Application.Data.ExportPackageAsync(1, packagePath, "0.3.0");
-        var inspection = await fixture.Application.Data.InspectPackageAsync(packagePath);
-        var pauses = fixture.Consumers.PauseCount;
-        var resumes = fixture.Consumers.ResumeCount;
-
-        var tokenError = await Assert.ThrowsAsync<WikiPackageException>(() =>
-            fixture.Application.Data.ImportPackageAsync(packagePath, "wrong-token"));
-        var legacyError = await Assert.ThrowsAsync<WikiPackageException>(() =>
-            fixture.Application.Data.ImportPackageAsync(packagePath, inspection.InspectionToken));
-        var imported = await fixture.Application.Data.ImportPackageAsync(
-            packagePath,
-            inspection.InspectionToken,
-            allowLegacyPackage: true);
-
-        Assert.Equal("inspection-token-mismatch", tokenError.Code);
-        Assert.Equal("legacy-confirmation-required", legacyError.Code);
-        Assert.Equal("0.3.0", imported.Inspection.Metadata.AppVersion);
-        Assert.Equal(pauses + 3, fixture.Consumers.PauseCount);
-        Assert.Equal(resumes + 3, fixture.Consumers.ResumeCount);
-    }
-
-    [Fact]
-    public async Task NonActiveExportAndImportDoNotPauseActiveConsumers()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync(activeWikiId: 1);
-        await fixture.Application.ActiveWiki.SwitchAsync(2);
-        await fixture.State.ContentDatabase.SaveItemAsync(Page("Calamity Package Page"));
-        await fixture.Application.ActiveWiki.SwitchAsync(1);
-        var packagePath = PackagePath(fixture, "non-active.pkg");
-        var pauses = fixture.Consumers.PauseCount;
-        var resumes = fixture.Consumers.ResumeCount;
-
-        await fixture.Application.Data.ExportPackageAsync(2, packagePath, "1.0.0");
-        var inspection = await fixture.Application.Data.InspectPackageAsync(packagePath);
-        var imported = await fixture.Application.Data.ImportPackageAsync(
-            packagePath,
-            inspection.InspectionToken);
-
-        Assert.Equal(2, imported.WikiBook.Id);
-        Assert.Equal(pauses, fixture.Consumers.PauseCount);
-        Assert.Equal(resumes, fixture.Consumers.ResumeCount);
-        Assert.Equal(1, (await fixture.Application.ActiveWiki.GetActiveAsync()).Id);
-        Assert.True((await fixture.Application.Query.ReadAsync("Terraria Wiki")).IsFound);
-    }
-
-    [Fact]
-    public async Task InvalidPackageDatabaseLeavesActiveSourceUsableAndResumesConsumers()
-    {
-        await using var fixture = await ApplicationFixture.CreateAsync();
-        await fixture.State.ContentDatabase.SaveItemAsync(Page("Still Available"));
-        var invalidDatabase = Path.Combine(fixture.Root, "invalid-data.db");
-        await File.WriteAllBytesAsync(invalidDatabase, [1, 2, 3, 4]);
-        var packagePath = PackagePath(fixture, "invalid.pkg");
-        await WikiPackageWriter.WriteAsync(
-            packagePath,
-            new WikiPackageDescriptor(1, "Invalid", false, false, DateTime.UtcNow, "1.0.0"),
-            [new WikiPackageSourceFile("data.db", invalidDatabase)]);
-        var inspection = await fixture.Application.Data.InspectPackageAsync(packagePath);
-        var pauses = fixture.Consumers.PauseCount;
-        var resumes = fixture.Consumers.ResumeCount;
-
-        await Assert.ThrowsAsync<WikiPackageException>(() => fixture.Application.Data.ImportPackageAsync(
-            packagePath,
-            inspection.InspectionToken));
-
-        Assert.Equal(pauses + 1, fixture.Consumers.PauseCount);
-        Assert.Equal(resumes + 1, fixture.Consumers.ResumeCount);
-        Assert.True((await fixture.Application.Query.ReadAsync("Still Available")).IsFound);
-        Assert.Equal(1, (await fixture.Application.ActiveWiki.GetActiveAsync()).Id);
-    }
-
-    [Fact]
     public async Task SharedGateAndCancellationErrorsArePreserved()
     {
         await using var fixture = await ApplicationFixture.CreateAsync();
@@ -257,14 +155,14 @@ public sealed class WikiDataUseCaseTests
         Assert.Equal("operation-in-progress", busy.Code);
 
         occupied!.Dispose();
-        var packagePath = PackagePath(fixture, "cancel.pkg");
-        await fixture.Application.Data.ExportPackageAsync(1, packagePath, "1.0.0");
+        var databasePath = PackagePath(fixture, "cancel.db");
+        await fixture.Application.Data.ExportDatabaseAsync(databasePath);
         using var cancellation = new CancellationTokenSource();
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
             () => fixture.Application.Data.DownloadAsync(false, cancellationToken: cancellation.Token));
         await Assert.ThrowsAnyAsync<OperationCanceledException>(
-            () => fixture.Application.Data.InspectPackageAsync(packagePath, cancellationToken: cancellation.Token));
+            () => fixture.Application.Data.InspectDatabaseAsync(databasePath, cancellationToken: cancellation.Token));
     }
 
     private static async Task ConfigureFixtureBookAsync(ApplicationFixture fixture)

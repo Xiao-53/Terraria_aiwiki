@@ -32,23 +32,10 @@ internal static class ApplicationMapper
         result.Redirect?.TargetAnchor,
         result.Anchor);
 
-    public static WikiPackageImportResponse ToResponse(WikiPackageImportResult result) => new(
-        ToSnapshot(result.WikiBook),
-        result.Inspection,
-        result.ReplacedExistingData,
-        result.MigratedLegacyAnchors);
-
-    public static WikiPackageExportResponse ToResponse(WikiPackageWriteResult result) => new(
-        result.PackagePath,
-        result.PackageBytes,
-        result.MetadataBytes,
-        result.PayloadBytes);
-
     public static WikiDatabaseImportResponse ToResponse(WikiDatabaseImportResult result) => new(
         ToSnapshot(result.WikiBook),
         result.Inspection,
-        result.ReplacedExistingData,
-        result.MigratedLegacyAnchors);
+        result.ReplacedExistingData);
 
     public static WikiDatabaseExportResponse ToResponse(WikiDatabaseExportResult result) => new(
         result.DatabasePath,

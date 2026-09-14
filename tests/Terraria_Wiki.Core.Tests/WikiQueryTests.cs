@@ -1,3 +1,4 @@
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
 using Xunit;
@@ -110,20 +111,28 @@ public sealed class WikiQueryTests
     {
         var fixture = await TestDatabase.CreateContentAsync();
         var now = new DateTime(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
-        await fixture.Database.SaveItemsAsync(
-        [
-            new WikiPage { Title = "Guide", Content = "<p>Guide</p>", LastModified = now },
-            new WikiPage { Title = "Guide Two", Content = "<p>Guide two</p>", LastModified = now },
-            new WikiPage { Title = "Target", Content = "<p>Target</p>", LastModified = now },
-        ]);
+        foreach (var page in new[]
+                 {
+                     (Title: "Guide", Body: "Use a copper pickaxe for mining"),
+                     (Title: "Guide Two", Body: "Another guide entry"),
+                     (Title: "Target", Body: "Redirect target section"),
+                 })
+        {
+            var entity = new WikiPage { Title = page.Title, Content = $"<p>{page.Title}</p>", LastModified = now };
+            await fixture.Database.SavePageWithSearchAsync(
+                entity,
+                new ProcessedWikiContent(
+                    entity.Content,
+                    page.Body,
+                    [new WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                    [new WikiSearchRegionDraft(0, 0, "paragraph", page.Title, string.Empty, page.Title, page.Body)],
+                    []));
+        }
         await fixture.Database.SaveItemsAsync(
         [
             new WikiRedirect { FromName = "Alias", ToTarget = "Target#Section" },
             new WikiRedirect { FromName = "Broken", ToTarget = "Absent" },
         ]);
-        await fixture.Database.SaveSearchIndexAsync("Guide", "Use a copper pickaxe for mining");
-        await fixture.Database.SaveSearchIndexAsync("Guide Two", "Another guide entry");
-        await fixture.Database.SaveSearchIndexAsync("Target", "Redirect target section");
         return fixture;
     }
 }

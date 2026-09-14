@@ -16,14 +16,22 @@ internal static class WikiContentSchemaValidator
     private static readonly IReadOnlyDictionary<string, SchemaRequirement> RequiredTables =
         new Dictionary<string, SchemaRequirement>(StringComparer.Ordinal)
         {
+            ["WikiDatabaseMetadata"] = new(["Key", "Value"], "Key", []),
             ["WikiPage"] = new(["Title", "Content", "LastModified"], "Title", []),
             ["WikiRedirect"] = new(["FromName", "ToTarget"], "FromName", ["ToTarget"]),
-            ["WikiHistory"] = new(["Id", "WikiTitle", "ReadAt", "DateKey"], "Id", ["WikiTitle", "DateKey"]),
             ["WikiFavorite"] = new(["WikiTitle", "FavoritedAt"], "WikiTitle", []),
             ["WikiAsset"] = new(["FileName", "Data", "MimeType", "LastModified"], "FileName", []),
+            ["WikiSearchSection"] = new(
+                ["Id", "PageTitle", "SectionOrdinal", "Title", "HeadingPath", "Anchor"],
+                "Id",
+                ["PageTitle"]),
+            ["WikiSearchRegion"] = new(
+                ["Id", "PageTitle", "SectionOrdinal", "RegionOrdinal", "Kind", "HeadingPath", "Anchor", "ContextText", "BodyText"],
+                "Id",
+                ["PageTitle"]),
         };
 
-    public static void Validate(string databasePath)
+    public static void Validate(string databasePath, int? expectedWikiId = null)
     {
         try
         {
@@ -34,8 +42,14 @@ internal static class WikiContentSchemaValidator
             if (!string.Equals(integrity, "ok", StringComparison.OrdinalIgnoreCase))
                 throw Error("database-integrity-failed", $"SQLite integrity_check returned: {integrity}.");
 
+            var metadataTable = connection.ExecuteScalar<int>(
+                "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = 'WikiDatabaseMetadata';");
+            if (metadataTable == 0)
+                throw Error("database-format-unsupported", "The database does not declare the supported content format.");
+
             foreach (var (table, requirement) in RequiredTables)
                 ValidateOrdinaryTable(connection, table, requirement);
+            ValidateMetadata(connection, expectedWikiId);
             ValidateFtsTable(connection);
         }
         catch (WikiContentSchemaValidationException)
@@ -99,9 +113,9 @@ internal static class WikiContentSchemaValidator
     private static void ValidateFtsTable(SQLiteConnection connection)
     {
         var tableEntry = connection.Query<SchemaTableEntry>("PRAGMA table_list;")
-            .SingleOrDefault(entry => string.Equals(entry.Name, "WikiSearchIndex", StringComparison.Ordinal));
+            .SingleOrDefault(entry => string.Equals(entry.Name, "WikiSearchRegionFts", StringComparison.Ordinal));
         var schemaObject = connection.FindWithQuery<SchemaObject>(
-            "SELECT type AS Type, sql AS Sql FROM sqlite_master WHERE name = 'WikiSearchIndex';");
+            "SELECT type AS Type, sql AS Sql FROM sqlite_master WHERE name = 'WikiSearchRegionFts';");
         if (tableEntry is null
             || !string.Equals(tableEntry.Type, "virtual", StringComparison.OrdinalIgnoreCase)
             || schemaObject is null
@@ -109,7 +123,7 @@ internal static class WikiContentSchemaValidator
             || string.IsNullOrWhiteSpace(schemaObject.Sql))
             throw Error("database-schema-invalid", "The database does not contain the expected FTS5 virtual table.");
 
-        var columns = connection.Query<SchemaColumn>("PRAGMA table_info(\"WikiSearchIndex\");")
+        var columns = connection.Query<SchemaColumn>("PRAGMA table_info(\"WikiSearchRegionFts\");")
             .Select(column => column.Name)
             .ToHashSet(StringComparer.OrdinalIgnoreCase);
         var sqlWithoutComments = Regex.Replace(
@@ -117,20 +131,50 @@ internal static class WikiContentSchemaValidator
             @"--[^\r\n]*|/\*.*?\*/",
             string.Empty,
             RegexOptions.Singleline);
-        if (!columns.Contains("Title")
-            || !columns.Contains("PlainContent")
+        if (!columns.Contains("ContextTokens")
+            || !columns.Contains("BodyTokens")
             || !Regex.IsMatch(sqlWithoutComments, @"\bUSING\s+fts5\s*\(", RegexOptions.IgnoreCase)
+            || !Regex.IsMatch(sqlWithoutComments, "\\bcontent\\s*=\\s*(?:''|\"\")", RegexOptions.IgnoreCase)
             || !Regex.IsMatch(
                 sqlWithoutComments,
-                @"\btokenize\s*=\s*(?:'trigram'|""trigram""|trigram)",
-                RegexOptions.IgnoreCase))
-            throw Error("database-schema-invalid", "The database does not contain the expected FTS5 trigram index.");
+                @"\btokenize\s*=\s*(?:'unicode61[^']*'|""unicode61[^""]*"")",
+                RegexOptions.IgnoreCase)
+            || !Regex.IsMatch(sqlWithoutComments, "\\bdetail\\s*=\\s*(?:'full'|\"full\")", RegexOptions.IgnoreCase))
+            throw Error("database-schema-invalid", "The database does not contain the expected FTS5 region index.");
 
         // Ordinary tables can contain a misleading SQL comment; executing MATCH
         // proves that the object is an actual full-text virtual table.
         connection.ExecuteScalar<int>(
-            "SELECT COUNT(*) FROM WikiSearchIndex WHERE WikiSearchIndex MATCH ?;",
-            "phase01schemavalidationtoken");
+            "SELECT COUNT(*) FROM WikiSearchRegionFts WHERE WikiSearchRegionFts MATCH ?;",
+            "formatvalidationtoken");
+        var regionCount = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM WikiSearchRegion;");
+        var ftsCount = connection.ExecuteScalar<int>("SELECT COUNT(*) FROM WikiSearchRegionFts;");
+        var orphanCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM WikiSearchRegion AS region LEFT JOIN WikiPage AS page ON page.Title = region.PageTitle WHERE page.Title IS NULL;");
+        var orphanSectionCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM WikiSearchSection AS section LEFT JOIN WikiPage AS page ON page.Title = section.PageTitle WHERE page.Title IS NULL;");
+        var missingRegionSectionCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM WikiSearchRegion AS region LEFT JOIN WikiSearchSection AS section ON section.PageTitle = region.PageTitle AND section.SectionOrdinal = region.SectionOrdinal WHERE section.Id IS NULL;");
+        var missingPageSectionCount = connection.ExecuteScalar<int>(
+            "SELECT COUNT(*) FROM WikiPage AS page LEFT JOIN WikiSearchSection AS section ON section.PageTitle = page.Title WHERE section.Id IS NULL;");
+        if (regionCount != ftsCount || orphanCount != 0 || orphanSectionCount != 0
+            || missingRegionSectionCount != 0 || missingPageSectionCount != 0)
+            throw Error("database-search-index-invalid", "The region search index is incomplete or inconsistent.");
+    }
+
+    private static void ValidateMetadata(SQLiteConnection connection, int? expectedWikiId)
+    {
+        var version = connection.ExecuteScalar<string>(
+            "SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'format_version';");
+        var extractorVersion = connection.ExecuteScalar<string>(
+            "SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'extractor_version';");
+        var wikiId = connection.ExecuteScalar<string>(
+            "SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'wiki_id';");
+        if (version != "2" || extractorVersion != "1"
+            || !int.TryParse(wikiId, out var parsedWikiId) || parsedWikiId <= 0)
+            throw Error("database-format-unsupported", "The database does not declare the supported content format and Wiki identity.");
+        if (expectedWikiId.HasValue && parsedWikiId != expectedWikiId.Value)
+            throw Error("database-wiki-mismatch", "The database belongs to a different Wiki identity.");
     }
 
     private static string QuoteIdentifier(string value) =>

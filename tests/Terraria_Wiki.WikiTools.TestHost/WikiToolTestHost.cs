@@ -1,4 +1,5 @@
 using Terraria_Wiki.Application;
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Models;
 using Terraria_Wiki.Services;
 using Terraria_Wiki.WikiTools;
@@ -113,19 +114,25 @@ public sealed class WikiToolTestHost : IAsyncDisposable
             };
 
             await database.SaveItemsAsync(
-                pages.Select(page => new WikiPage
-                {
-                    Title = page.Title,
-                    Content = page.Html,
-                    LastModified = modified,
-                }),
-                cancellationToken);
-            await database.SaveItemsAsync(
             [
                 new WikiRedirect { FromName = "月镐", ToTarget = "月铸镐#配方" },
             ], cancellationToken);
             foreach (var page in pages)
-                await database.SaveSearchIndexAsync(page.Title, page.PlainText, cancellationToken);
+            {
+                var entity = new WikiPage
+                {
+                    Title = page.Title,
+                    Content = page.Html,
+                    LastModified = modified,
+                };
+                var processed = new ProcessedWikiContent(
+                    page.Html,
+                    page.PlainText,
+                    [new WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                    [new WikiSearchRegionDraft(0, 0, "paragraph", page.Title, string.Empty, page.Title, page.PlainText)],
+                    []);
+                await database.SavePageWithSearchAsync(entity, processed, cancellationToken);
+            }
         }
         finally
         {

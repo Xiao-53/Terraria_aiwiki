@@ -90,16 +90,10 @@ public sealed class WikiToolContractTests
         Assert.False(result.IsError);
         var values = result.StructuredContent!.Value.GetProperty("results").EnumerateArray().ToArray();
         Assert.Equal(direct.Count, values.Length);
-        Assert.Equal(
-        [
-            WikiSearchMatchKind.ExactTitle,
-            WikiSearchMatchKind.ExactRedirect,
-            WikiSearchMatchKind.TitlePrefix,
-            WikiSearchMatchKind.RedirectPrefix,
-            WikiSearchMatchKind.TitleContains,
-            WikiSearchMatchKind.RedirectContains,
-            WikiSearchMatchKind.BodyFts,
-        ], direct.Select(item => item.MatchKind));
+        Assert.NotEmpty(direct);
+        Assert.Equal(WikiSearchMatchKind.ExactTitle, direct[0].MatchKind);
+        Assert.Equal(direct.OrderBy(item => item.Scope).Select(item => item.Scope),
+            direct.Select(item => item.Scope));
 
         for (var index = 0; index < direct.Count; index++)
         {

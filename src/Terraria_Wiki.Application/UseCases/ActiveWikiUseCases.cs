@@ -1,36 +1,14 @@
 using System.Diagnostics;
 using Terraria_Wiki.Application.Internal;
-using Terraria_Wiki.Core.Compatibility;
 using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Packages;
 using Terraria_Wiki.Models;
+using Terraria_Wiki.Services;
 
 namespace Terraria_Wiki.Application;
 
 public sealed class ActiveWikiUseCases
 {
-    private static readonly HashSet<string> SafeCompatibilityCodes = new(StringComparer.Ordinal)
-    {
-        "anchor-migration-cleanup-failed",
-        "anchor-migration-commit-invalid",
-        "anchor-migration-journal-invalid",
-        "anchor-migration-rollback-failed",
-        "content-database-not-found",
-        "data-directory-conflict",
-        "data-directory-migration-failed",
-        "data-directory-not-found",
-        "data-directory-reparse-point",
-        "data-directory-rollback-failed",
-        "data-root-not-found",
-        "database-checkpoint-failed",
-        "database-family-conflict",
-        "database-family-journal-invalid",
-        "database-family-normalization-failed",
-        "database-family-rollback-failed",
-        "database-not-checkpointed",
-        "orphan-database-sidecar",
-    };
-
     private readonly ApplicationState _state;
     private readonly ApplicationSettingsUseCases _settings;
 
@@ -54,8 +32,7 @@ public sealed class ActiveWikiUseCases
             if (_state.IsInitialized && _state.ActiveBook is not null)
                 return ApplicationMapper.ToSnapshot(_state.ActiveBook);
 
-            using (Measure(ApplicationStartupStage.DataLayoutPreflight, startupObserver))
-                await FailFastOnDataDirectoryConflictAsync(cancellationToken);
+            Report(startupObserver, ApplicationStartupStage.DataLayoutPreflight, 0);
 
             List<WikiBook> books;
             using (Measure(ApplicationStartupStage.ManagerInitializationAndRecovery, startupObserver))
@@ -63,7 +40,7 @@ public sealed class ActiveWikiUseCases
                 await _state.ManagerDatabase.Init(cancellationToken: cancellationToken);
                 books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
                 foreach (var book in books.OrderBy(book => book.Id))
-                    await _state.Packages.RecoverPendingImportAsync(_state.DataRoot, book, cancellationToken);
+                    await _state.DatabaseTransfer.RecoverPendingImportAsync(_state.DataRoot, book, cancellationToken);
 
                 books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
                 if (books.Count == 0)
@@ -84,24 +61,14 @@ public sealed class ActiveWikiUseCases
             using var operation = await _state.OperationGate.TryAcquireAsync(cancellationToken)
                 ?? throw OperationInProgress();
 
-            LegacyDataDirectoryMigrationResult? migration;
             using (Measure(ApplicationStartupStage.CompatibilityPreparation, startupObserver))
-                migration = await PrepareTargetAsync(selected, cancellationToken);
+                PrepareTarget(selected, cancellationToken);
             var paths = WikiDataPaths.Create(_state.DataRoot, selected);
-            try
+            using (Measure(ApplicationStartupStage.ContentInitialization, startupObserver))
             {
-                using (Measure(ApplicationStartupStage.ContentInitialization, startupObserver))
-                {
-                    await _state.ContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
-                    await _state.ContentDatabase.Init(seedBook: selected, cancellationToken: cancellationToken);
-                }
+                await _state.ContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
+                await _state.ContentDatabase.Init(seedBook: selected, cancellationToken: cancellationToken);
             }
-            catch
-            {
-                LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
-                throw;
-            }
-            LegacyWikiCompatibility.CompleteLegacyDataDirectoryMigration(migration);
 
             // Manager.db is the durable startup snapshot. Fresh counts remain
             // available through Data.GetStatisticsAsync and lifecycle operations.
@@ -124,18 +91,10 @@ public sealed class ActiveWikiUseCases
             await ResetFailedInitializationAsync();
             throw;
         }
-        catch (WikiCompatibilityException exception)
+        catch (WikiDatabaseFormatException exception)
         {
             await ResetFailedInitializationAsync();
-            throw SafeCompatibilityCodes.Contains(exception.Code)
-                ? new ApplicationUseCaseException(
-                    exception.Code,
-                    "Wiki data compatibility preparation failed.",
-                    exception)
-                : new ApplicationUseCaseException(
-                    "initialization-failed",
-                    "Application initialization failed.",
-                    exception);
+            throw new ApplicationUseCaseException(exception.Code, exception.Message, exception);
         }
         catch (Exception exception)
         {
@@ -196,19 +155,10 @@ public sealed class ActiveWikiUseCases
             try
             {
                 await _state.ContentDatabase.CloseConnection(cancellationToken);
-                var migration = await PrepareTargetAsync(target, cancellationToken);
+                PrepareTarget(target, cancellationToken);
                 var targetPaths = WikiDataPaths.Create(_state.DataRoot, target);
-                try
-                {
-                    await _state.ContentDatabase.SwitchDatabaseAsync(targetPaths.ContentDatabasePath, cancellationToken);
-                    await _state.ContentDatabase.Init(seedBook: target, cancellationToken: cancellationToken);
-                }
-                catch
-                {
-                    LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
-                    throw;
-                }
-                LegacyWikiCompatibility.CompleteLegacyDataDirectoryMigration(migration);
+                await _state.ContentDatabase.SwitchDatabaseAsync(targetPaths.ContentDatabasePath, cancellationToken);
+                await _state.ContentDatabase.Init(seedBook: target, cancellationToken: cancellationToken);
                 target = await _state.Lifecycle.RefreshBookStatisticsAsync(target, cancellationToken);
                 await _state.SettingsStore.SaveActiveWikiIdAsync(target.Id, cancellationToken);
                 _state.ActiveBook = target;
@@ -246,77 +196,13 @@ public sealed class ActiveWikiUseCases
         }
     }
 
-    private async Task<LegacyDataDirectoryMigrationResult?> PrepareTargetAsync(
+    private void PrepareTarget(
         WikiBook book,
         CancellationToken cancellationToken)
     {
-        var paths = WikiDataPaths.Create(_state.DataRoot, book);
-        var legacyDirectory = Path.Combine(_state.DataRoot, LegacyWikiCompatibility.LegacyDataFolder);
-        var hasLegacyFamily = HasDatabaseFamily(legacyDirectory);
-        var hasCurrentFamily = HasDatabaseFamily(paths.DataDirectory);
-
-        if (hasLegacyFamily || hasCurrentFamily)
-        {
-            var migration = LegacyWikiCompatibility.MigrateLegacyDataDirectory(_state.DataRoot, book.DataFolder);
-            try
-            {
-                await LegacyWikiCompatibility.PrepareAndMigrateAnchorDataSafelyAsync(
-                    migration.Database.DatabasePath,
-                    book.DefaultPageTitle,
-                    cancellationToken);
-                return migration;
-            }
-            catch
-            {
-                LegacyWikiCompatibility.RollbackLegacyDataDirectoryMigration(migration);
-                throw;
-            }
-        }
-
-        if (Directory.Exists(legacyDirectory) && !Directory.Exists(paths.DataDirectory))
-            Directory.Move(legacyDirectory, paths.DataDirectory);
-        paths.EnsureDataDirectory();
-        return null;
-    }
-
-    private async Task FailFastOnDataDirectoryConflictAsync(CancellationToken cancellationToken)
-    {
         cancellationToken.ThrowIfCancellationRequested();
-        var legacyDirectory = Path.Combine(_state.DataRoot, LegacyWikiCompatibility.LegacyDataFolder);
-        if (!HasDatabaseFamily(legacyDirectory))
-            return;
-
-        var layouts = LegacyWikiCompatibility.ReadExistingWikiLayouts(
-            _state.ManagerDatabase.DatabasePath);
-        if (layouts.Count == 0)
-            return;
-        if (layouts.Any(layout =>
-                WikiPackageTransferService.HasPendingImportJournal(_state.DataRoot, layout.Id)))
-        {
-            return;
-        }
-
-        var storedId = await _state.SettingsStore.LoadActiveWikiIdAsync(cancellationToken);
-        var selected = layouts.FirstOrDefault(layout => layout.Id == storedId)
-            ?? layouts.FirstOrDefault(layout => layout.Id == ApplicationPreferences.DefaultActiveWikiId)
-            ?? layouts.OrderBy(layout => layout.Id).First();
-        if (string.IsNullOrWhiteSpace(selected.DataFolder)
-            || !string.Equals(
-                Path.GetFileName(selected.DataFolder),
-                selected.DataFolder,
-                StringComparison.Ordinal)
-            || selected.DataFolder is "." or "..")
-        {
-            return;
-        }
-
-        var targetDirectory = Path.Combine(_state.DataRoot, selected.DataFolder);
-        if (HasDatabaseFamily(targetDirectory))
-        {
-            LegacyWikiCompatibility.EnsureNoLegacyDataDirectoryConflict(
-                _state.DataRoot,
-                selected.DataFolder);
-        }
+        var paths = WikiDataPaths.Create(_state.DataRoot, book);
+        paths.EnsureDataDirectory();
     }
 
     private async Task ResetFailedInitializationAsync()
@@ -336,18 +222,6 @@ public sealed class ActiveWikiUseCases
         books.FirstOrDefault(book => book.Id == storedId)
         ?? books.FirstOrDefault(book => book.Id == ApplicationPreferences.DefaultActiveWikiId)
         ?? books.OrderBy(book => book.Id).First();
-
-    private static bool HasDatabaseFamily(string directory) =>
-        Directory.Exists(directory)
-        && new[]
-        {
-            LegacyWikiCompatibility.LegacyDatabaseName,
-            LegacyWikiCompatibility.LegacyDatabaseName + "-wal",
-            LegacyWikiCompatibility.LegacyDatabaseName + "-shm",
-            LegacyWikiCompatibility.CurrentDatabaseName,
-            LegacyWikiCompatibility.CurrentDatabaseName + "-wal",
-            LegacyWikiCompatibility.CurrentDatabaseName + "-shm",
-        }.Any(name => File.Exists(Path.Combine(directory, name)));
 
     private static ApplicationUseCaseException OperationInProgress() => new(
         "operation-in-progress",

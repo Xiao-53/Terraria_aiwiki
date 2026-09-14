@@ -14,7 +14,8 @@ internal sealed class ApplicationState
         IApplicationSettingsStore settingsStore,
         IWikiDataConsumerCoordinator consumerCoordinator,
         IWikiHttpTransport httpTransport,
-        TimeProvider timeProvider)
+        TimeProvider timeProvider,
+        string? searchAliasPath)
     {
         if (string.IsNullOrWhiteSpace(dataRoot))
             throw new ArgumentException("A data root is required.", nameof(dataRoot));
@@ -29,9 +30,10 @@ internal sealed class ApplicationState
 
         ManagerDatabase = new ManagerDbService(Path.Combine(DataRoot, "Manager.db"));
         ContentDatabase = new ContentDbService(Path.Combine(DataRoot, ".application-uninitialized.db"));
+        ContentDatabase.ConfigureSearchAliases(WikiSearchAliasCatalog.Load(searchAliasPath));
         OperationGate = new WikiDataOperationGate();
         Lifecycle = new WikiDataLifecycle(ManagerDatabase, ContentDatabase, httpTransport, OperationGate);
-        Packages = new WikiPackageTransferService(ManagerDatabase, ContentDatabase, OperationGate);
+        DatabaseTransfer = new WikiDatabaseTransferService(ManagerDatabase, ContentDatabase, OperationGate);
         Reader = new WikiReader(ContentDatabase);
     }
 
@@ -43,7 +45,7 @@ internal sealed class ApplicationState
     public ContentDbService ContentDatabase { get; }
     public WikiDataOperationGate OperationGate { get; }
     public WikiDataLifecycle Lifecycle { get; }
-    public WikiPackageTransferService Packages { get; }
+    public WikiDatabaseTransferService DatabaseTransfer { get; }
     public WikiReader Reader { get; }
     public SemaphoreSlim CoordinationGate { get; } = new(1, 1);
     public ApplicationPreferences? Preferences { get; set; }

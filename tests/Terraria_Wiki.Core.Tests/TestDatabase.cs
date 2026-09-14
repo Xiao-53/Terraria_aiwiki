@@ -20,7 +20,7 @@ internal sealed class TestDatabase : IAsyncDisposable
         var root = Path.Combine(Path.GetTempPath(), "terraria-wiki-core-tests-" + Guid.NewGuid().ToString("N"));
         Directory.CreateDirectory(root);
         var database = new ContentDbService(Path.Combine(root, "data.db"));
-        await database.Init(seedBook: seedBook);
+        await database.Init(seedBook: seedBook ?? new WikiBook { Id = 1 });
         return new TestDatabase(root, database);
     }
 

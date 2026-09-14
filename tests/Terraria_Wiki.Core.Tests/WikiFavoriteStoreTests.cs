@@ -53,18 +53,27 @@ public sealed class WikiFavoriteStoreTests
     }
 
     [Fact]
-    public void ConflictingDatabaseFamiliesAreRejectedWithoutMutation()
+    public async Task Retired_legacy_database_is_ignored_when_current_database_exists()
     {
         using var temp = new TestDirectory();
         var paths = Paths(temp, "wiki");
-        Directory.CreateDirectory(paths.DataDirectory);
-        File.WriteAllBytes(paths.ContentDatabasePath, []);
+        var current = new ContentDbService(paths.ContentDatabasePath);
+        await current.Init(seedBook: new WikiBook
+        {
+            Id = 42,
+            Title = "Fixture",
+            DataFolder = "wiki",
+            DefaultPageTitle = "Home",
+            DefaultPageContent = "placeholder",
+        });
+        await current.SaveItemAsync(new WikiFavorite { WikiTitle = "Current", FavoritedAt = DateTime.UnixEpoch });
+        await current.CloseConnection();
         var legacy = Path.Combine(paths.DataDirectory, "Terraria_Wiki.db");
         File.WriteAllBytes(legacy, []);
 
-        var exception = Assert.Throws<WikiFavoriteStoreException>(() => WikiFavoriteStore.ReadAll(paths));
+        var favorites = WikiFavoriteStore.ReadAll(paths);
 
-        Assert.Equal("database-family-conflict", exception.Code);
+        Assert.Equal("Current", Assert.Single(favorites).WikiTitle);
         Assert.True(File.Exists(paths.ContentDatabasePath));
         Assert.True(File.Exists(legacy));
     }

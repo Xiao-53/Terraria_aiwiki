@@ -66,6 +66,13 @@
           SkipUnchangedFiles="true" />
   </Target>
 
+  <Target Name="CopySearchAssetsAfterBuild" AfterTargets="Build">
+    <MakeDir Directories="$(OutDir)SearchAssets" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\assets\search\community-aliases.zh-cn.json"
+          DestinationFolder="$(OutDir)SearchAssets"
+          SkipUnchangedFiles="true" />
+  </Target>
+
   <Target Name="CopyViewerAssetsAfterPublish" AfterTargets="Publish">
     <PropertyGroup>
       <_ViewerOutput>$(PublishDir)ViewerAssets</_ViewerOutput>
@@ -84,6 +91,13 @@
           SkipUnchangedFiles="true" />
     <Copy SourceFiles="$(MSBuildProjectDirectory)\Assets\viewer-host.html"
           DestinationFiles="$(_ViewerOutput)\index.html"
+          SkipUnchangedFiles="true" />
+  </Target>
+
+  <Target Name="CopySearchAssetsAfterPublish" AfterTargets="Publish">
+    <MakeDir Directories="$(PublishDir)SearchAssets" />
+    <Copy SourceFiles="$(MSBuildProjectDirectory)\..\..\assets\search\community-aliases.zh-cn.json"
+          DestinationFolder="$(PublishDir)SearchAssets"
           SkipUnchangedFiles="true" />
   </Target>
 

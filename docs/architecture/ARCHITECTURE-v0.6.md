@@ -47,7 +47,7 @@
 | Wiki 获取与同步 | 页面列表、页面下载、更新时间比较、增量更新、Redirect、失败任务与重试 |
 | 内容处理与存储 | 页面解析与清理、SQLite 持久化、现有数据语义与兼容性 |
 | 搜索 | 搜索索引生成、SQLite FTS5、标题与 Redirect 检索、手动搜索 |
-| 数据可移植性 | 数据包兼容、活动 Wiki 单文件数据库导入导出、完整性检查、旧数据迁移与兼容逻辑 |
+| 数据可移植性 | v2 内容格式、活动 Wiki 单文件数据库导入导出、完整性/身份检查与中断恢复 |
 | 资源与维护 | Wiki 资源、数据库维护、状态与容量统计 |
 | 数据源 | 多 WikiBook 身份、配置和数据目录语义 |
 | 离线阅读 | Local Wiki Viewer 的页面、资源、导航和消息桥能力 |
@@ -74,7 +74,7 @@
 
 产品平台是闭集：当前只交付 Windows，未来只考虑 Android。iOS、macOS/MacCatalyst、Linux 桌面、浏览器/Web 及其他产品平台均为明确非目标；WSL/Linux 只承担开发与平台无关检查，不构成 Linux 产品支持。旧源码 target、条件编译或框架能力表不产生产品承诺；若未来改变范围，必须由用户重新授权并更新架构决策。
 
-本项目不建设 Vector Search、Embedding Retrieval、Vector Database、第二套 LLM Wiki 数据库或预先总结整个 Wiki 的知识库；不为了换 UI 而重写已有数据库、搜索、同步、数据包或 Viewer 内容；不为未来需求预建大型接口体系、Registry、事件总线或插件框架。
+本项目不建设 Vector Search、Embedding Retrieval、Vector Database、第二套 LLM Wiki 数据库或预先总结整个 Wiki 的知识库；数据库和搜索变化必须由独立决策、事务边界与验证证据支撑，不复制同步或 Viewer 内容；不为未来需求预建大型接口体系、Registry、事件总线或插件框架。
 
 ---
 
@@ -123,7 +123,7 @@ Windows / Android Adapters ─→ inward-facing application ports
 |---|---|---|
 | Avalonia Presentation | 产品导航、视图、交互和视觉表达 | 只调用 Application；Viewer 控件属于 Presentation/Host |
 | Application | 查询、阅读、同步、数据管理、AI 与设置用例 | 保持薄；编排 Core，通过小型 ports 使用平台能力 |
-| Portable Wiki Core | Wiki 数据生命周期、搜索、数据包、资源和数据兼容性 | 只包含平台无关 .NET 能力，不引用 UI 或目标平台 API |
+| Portable Wiki Core | Wiki 数据生命周期、区域搜索、raw 数据库交换、资源和格式校验 | 只包含平台无关 .NET 能力，不引用 UI 或目标平台 API |
 | Local Viewer Adapter | 向 NativeWebView 提供现有 Viewer 内容与本地 Wiki 资源 | 依赖向内的读取边界；transport 可替换 |
 | AI / Wiki Tool Adapters | 接入 Agent，并把 Search / Read 暴露给 AI | 不直接访问 SQLite，不复制 Core |
 | Platform Adapters | 路径、设置、文件选择、剪贴板、外链、窗口、生命周期与打包 | Windows/Android 分开实现，共用层不包含平台假设 |
@@ -151,9 +151,9 @@ Characterize existing behavior and data
 
 | 区域 | 总体策略 | 边界 |
 |---|---|---|
-| 持久化模型、SQLite、FTS5 | **KEEP + MOVE** | 保持数据与查询兼容；搜索修复独立进行 |
+| 持久化模型、SQLite、FTS5 | **KEEP + EVOLVE** | 完整 HTML 与生命周期保持；内容格式和区域索引按 ADR 0012 演进 |
 | 数据库与 Wiki 数据生命周期服务 | **KEEP + ADAPT** | 移除已证实的宿主依赖，不重写业务算法 |
-| 数据包与旧数据迁移 | **KEEP + ADAPT** | 保持兼容格式，同时补足安全输入与回退 |
+| raw 数据库交换 | **KEEP + ADAPT** | 保留快照、校验、staging、backup、journal 与 rollback；旧 `.pkg` 和内容迁移已退休 |
 | Local Viewer 内容 | **KEEP** | HTML/CSS/JS 与 Wiki 资源继续复用；transport 由 PoC 决定 |
 | Application | **ADD, THIN** | 只覆盖真实用例，不复制 Core |
 | Avalonia Presentation | **REBUILD + TRANSITION** | 旧 UI 作为行为参考，逐项接管后再退休 |
@@ -177,7 +177,7 @@ Reuse → Fix → Wrap → Extract when necessary → Rewrite last
 |---|---|---|---|---|
 | **00 — Migration Baseline & Host Spike** | 锁定 P0 基线，以 Windows 垂直切片验证首选轻量宿主；不正式迁移 Core | 无 | 已完成：Avalonia + NativeWebView 通过 Windows 11 x64 门槛 | `openspec/changes/archive/phase-00-migration-baseline/plan.md` |
 | **01 — Portable Wiki Core** | 逐步移动持久化模型和平台无关 Wiki 能力，只适配已证实的宿主边缘 | 00 | 已完成：单一 `net10.0` Core 在无 MAUI/UI 引用下通过兼容回归 | `openspec/changes/archive/phase-01-portable-wiki-core/plan.md` |
-| **02 — Search Fix** | 在可测试 Core 上修正已确认搜索问题，保留 SQLite FTS5 | 01 | 已完成：手动搜索与未来 AI 共用的七级查询行为有 Core 回归证据 | `openspec/changes/archive/phase-02-search-fix/plan.md` |
+| **02 — Search Fix** | 在可测试 Core 上修正已确认搜索问题，保留 SQLite FTS5 | 01 | 历史完成；查询行为已由 ADR 0012 与 `rebuild-local-wiki-search` 取代 | `openspec/changes/archive/phase-02-search-fix/plan.md` |
 | **03 — Application Boundary** | 建立 UI 所需的薄用例边界，移除新 UI 对数据库和全局状态的直接依赖 | 01；通常在 02 后 | 已完成：查询、阅读、同步、数据管理和设置可由稳定用例调用 | `openspec/changes/archive/phase-03-application-boundary/plan.md` |
 | **04 — Windows Client Foundation** | 建立 Avalonia Windows 壳、Windows Adapters 和 Viewer 最小链路 | 00、03 | 已完成：Windows 可启动、搜索、打开页面并加载本地资源 | `openspec/changes/archive/phase-04-windows-client-foundation/plan.md` |
 | **05 — AI Adapter** | 以最小侵入向 AI 暴露 Wiki Search / Read | 02、03 | 已完成：无状态 loopback MCP 可通过 Application 查询和读取现有 Wiki | `openspec/changes/archive/phase-05-ai-adapter/plan.md` |
@@ -208,7 +208,7 @@ Phase 11 关闭后的候选队列和遗留项见 `openspec/changes/post-phase-11
 | 源码所有权 | 当前仓库统一拥有产品源码/测试/Agent/构建资产；旧 MAUI gitlink 已退休，上游固定来源由 ADR/资产记录追溯 |
 | Core | 外层产品仓库中的单一平台无关 .NET 10 Wiki Core；不复制第二套实现 |
 | 数据根 | Core 只接收宿主提供的绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`；Windows 使用 LocalAppData 宿主管理默认根，普通 UI 不切换地址，数据管理页以当前 Wiki 的单文件 `data.db` 导入导出提供可移植性 |
-| 数据库与搜索 | 保留现有 SQLite/FTS5 并局部修正 |
+| 数据库与搜索 | 使用单一 v2 SQLite 内容库和区域级 contentless FTS5；真实质量与性能在完整下载后验收 |
 | 客户端首选 | Avalonia + NativeWebView；Phase 00 Windows 11 x64 门槛已通过 |
 | Application | 保持薄，只表达真实用例和必要 ports |
 | Viewer | 内容与数据链路保留；Windows 使用受限动态 loopback，Android 后续独立验证 |

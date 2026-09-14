@@ -67,26 +67,24 @@ public sealed class WikiDataLifecycleTests : IAsyncLifetime
     }
 
     [Fact]
-    public async Task Package_and_lifecycle_mutations_share_the_same_operation_gate()
+    public async Task Database_transfer_and_lifecycle_mutations_share_the_same_operation_gate()
     {
         var book = CreateBook();
         var paths = WikiDataPaths.Create(_root, book);
         var transport = new BlockingTransport();
         var gate = new WikiDataOperationGate();
         var (lifecycle, manager, content) = await CreateLifecycleAsync(book, paths, transport, gate);
-        var packages = new WikiPackageTransferService(manager, content, gate);
+        var transfer = new WikiDatabaseTransferService(manager, content, gate);
         using var cancellation = new CancellationTokenSource();
 
         var first = lifecycle.DownloadAsync(book, paths, false, cancellationToken: cancellation.Token);
         await transport.Started.Task.WaitAsync(TimeSpan.FromSeconds(5));
 
-        var error = await Assert.ThrowsAsync<WikiPackageException>(() => packages.ExportAsync(
-            book,
+        var error = await Assert.ThrowsAsync<WikiDatabaseTransferException>(() => transfer.ExportDatabaseAsync(
             paths,
-            Path.Combine(_root, "blocked.pkg"),
-            "1.0.0",
+            Path.Combine(_root, "blocked.db"),
             content));
-        Assert.Equal("package-operation-in-progress", error.Code);
+        Assert.Equal("database-operation-in-progress", error.Code);
 
         cancellation.Cancel();
         await Assert.ThrowsAnyAsync<OperationCanceledException>(() => first);
@@ -158,6 +156,56 @@ public sealed class WikiDataLifecycleTests : IAsyncLifetime
         Assert.Contains("https://wiki.test/images/Sword.png", await File.ReadAllTextAsync(paths.ResourceListPath));
     }
 
+    [Fact]
+    public async Task Missing_parse_html_is_recorded_as_a_failed_page_instead_of_success()
+    {
+        var book = CreateBook();
+        var paths = WikiDataPaths.Create(_root, book);
+        var transport = new FixtureTransport { MissingParseText = true };
+        var (lifecycle, _, content) = await CreateLifecycleAsync(book, paths, transport);
+
+        var summary = await lifecycle.DownloadAsync(
+            book,
+            paths,
+            includeResources: false,
+            new WikiOperationOptions(PageConcurrency: 1, ResourceConcurrency: 1, MaxRetryAttempts: 0));
+
+        Assert.Equal(0, summary.Pages);
+        Assert.Equal(1, summary.Failed);
+        Assert.True(lifecycle.HasFailures(paths));
+        Assert.Null(await content.GetItemAsync<WikiPage>("Sword"));
+    }
+
+    [Fact]
+    public async Task Full_and_light_downloads_store_identical_non_media_content_and_search_regions()
+    {
+        var fullBook = CreateBook();
+        var lightBook = CreateBook();
+        var fullPaths = WikiDataPaths.Create(Path.Combine(_root, "full"), fullBook);
+        var lightPaths = WikiDataPaths.Create(Path.Combine(_root, "light"), lightBook);
+        var (fullLifecycle, _, fullContent) = await CreateLifecycleAsync(fullBook, fullPaths, new FixtureTransport());
+        var (lightLifecycle, _, lightContent) = await CreateLifecycleAsync(lightBook, lightPaths, new FixtureTransport());
+        var options = new WikiOperationOptions(PageConcurrency: 1, ResourceConcurrency: 1, MaxRetryAttempts: 0);
+
+        await fullLifecycle.DownloadAsync(fullBook, fullPaths, includeResources: true, options);
+        await lightLifecycle.DownloadAsync(lightBook, lightPaths, includeResources: false, options);
+
+        Assert.Equal((await fullContent.GetItemAsync<WikiPage>("Sword"))!.Content,
+            (await lightContent.GetItemAsync<WikiPage>("Sword"))!.Content);
+        Assert.Equal(
+            (await fullContent.GetItemsAsync<WikiSearchSection>()).Select(item =>
+                (item.PageTitle, item.SectionOrdinal, item.Title, item.HeadingPath, item.Anchor)),
+            (await lightContent.GetItemsAsync<WikiSearchSection>()).Select(item =>
+                (item.PageTitle, item.SectionOrdinal, item.Title, item.HeadingPath, item.Anchor)));
+        Assert.Equal(
+            (await fullContent.GetItemsAsync<WikiSearchRegion>()).Select(item =>
+                (item.PageTitle, item.RegionOrdinal, item.Kind, item.ContextText, item.BodyText)),
+            (await lightContent.GetItemsAsync<WikiSearchRegion>()).Select(item =>
+                (item.PageTitle, item.RegionOrdinal, item.Kind, item.ContextText, item.BodyText)));
+        Assert.NotNull(await fullContent.GetItemAsync<WikiAsset>("Sword.png"));
+        Assert.Null(await lightContent.GetItemAsync<WikiAsset>("Sword.png"));
+    }
+
     public Task InitializeAsync()
     {
         Directory.CreateDirectory(_root);
@@ -212,6 +260,7 @@ public sealed class WikiDataLifecycleTests : IAsyncLifetime
         public string PageTouched { get; set; } = "2026-01-01T00:00:00Z";
         public HttpStatusCode ResourceStatus { get; set; } = HttpStatusCode.OK;
         public int ParseFailuresRemaining { get; set; }
+        public bool MissingParseText { get; set; }
         public DateTimeOffset? LastIfModifiedSince { get; private set; }
 
         public Task<string> GetStringAsync(WikiBook book, Uri uri, CancellationToken cancellationToken = default)
@@ -235,6 +284,8 @@ public sealed class WikiDataLifecycleTests : IAsyncLifetime
             {
                 if (ParseFailuresRemaining-- > 0)
                     throw new HttpRequestException("fixture page failure");
+                if (MissingParseText)
+                    return Task.FromResult("<api><parse /></api>");
                 return Task.FromResult("""
                     <api><parse><text><![CDATA[<p>A useful sword.</p><img src="/images/Sword.png" />]]></text></parse></api>
                     """);

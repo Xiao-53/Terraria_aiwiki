@@ -9,24 +9,12 @@ using Terraria_Wiki.Services;
 
 namespace Terraria_Wiki.Core.Packages;
 
-public sealed record WikiPackageImportRequest(
-    string PackagePath,
-    string DataRoot,
-    string InspectionToken,
-    int? MapToWikiId = null,
-    bool AllowLegacyPackage = false);
-
-public sealed record WikiPackageImportResult(
-    WikiBook WikiBook,
-    WikiPackageInspection Inspection,
-    bool ReplacedExistingData,
-    bool MigratedLegacyAnchors);
 
 /// <summary>
-/// Coordinates verified packages with SQLite connections and the Manager database.
-/// UI file pickers, Viewer lifecycle, and old-version confirmation remain host concerns.
+/// Coordinates verified standalone SQLite snapshots with active connections and Manager state.
+/// UI file pickers, confirmation, and Viewer lifecycle remain host concerns.
 /// </summary>
-public sealed class WikiPackageTransferService
+public sealed class WikiDatabaseTransferService
 {
     private static readonly JsonSerializerOptions JournalJsonOptions = new(JsonSerializerDefaults.General);
 
@@ -34,7 +22,7 @@ public sealed class WikiPackageTransferService
     private readonly ContentDbService _activeContentDatabase;
     private readonly WikiDataOperationGate _operationGate;
 
-    public WikiPackageTransferService(
+    public WikiDatabaseTransferService(
         ManagerDbService managerDatabase,
         ContentDbService activeContentDatabase,
         WikiDataOperationGate operationGate)
@@ -44,11 +32,6 @@ public sealed class WikiPackageTransferService
         _operationGate = operationGate ?? throw new ArgumentNullException(nameof(operationGate));
     }
 
-    public Task<WikiPackageInspection> InspectAsync(
-        string packagePath,
-        WikiPackageOptions? options = null,
-        CancellationToken cancellationToken = default) =>
-        WikiPackageReader.InspectAsync(packagePath, options, cancellationToken);
 
     public async Task<WikiDatabaseInspection> InspectDatabaseAsync(
         string databasePath,
@@ -91,179 +74,6 @@ public sealed class WikiPackageTransferService
         catch
         {
             TryDeleteFile(target);
-            throw;
-        }
-    }
-
-    public async Task<WikiPackageWriteResult> ExportAsync(
-        WikiBook book,
-        WikiDataPaths paths,
-        string packagePath,
-        string appVersion,
-        DatabaseService sourceDatabase,
-        WikiPackageOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(book);
-        ArgumentNullException.ThrowIfNull(paths);
-        ArgumentNullException.ThrowIfNull(sourceDatabase);
-        using var lease = await EnterAsync(cancellationToken);
-        string? staging = null;
-        try
-        {
-            staging = paths.CreateUniqueStagingDirectory("export");
-            if (!File.Exists(paths.ContentDatabasePath))
-                throw Error("content-database-not-found", $"Content database does not exist: {paths.ContentDatabasePath}.");
-            if (!PathsEqual(sourceDatabase.DatabasePath, paths.ContentDatabasePath))
-                throw Error("database-source-mismatch", "The snapshot source does not match the selected Wiki data directory.");
-
-            var databaseSnapshot = Path.Combine(staging, "data.db");
-            await sourceDatabase.BackupExistingAsync(databaseSnapshot, cancellationToken);
-            var sources = new List<WikiPackageSourceFile>
-            {
-                new("data.db", databaseSnapshot)
-            };
-
-            var enumeration = new EnumerationOptions
-            {
-                RecurseSubdirectories = true,
-                IgnoreInaccessible = false,
-                ReturnSpecialDirectories = false,
-                AttributesToSkip = FileAttributes.ReparsePoint,
-            };
-            foreach (var sourcePath in Directory.EnumerateFiles(paths.DataDirectory, "*", enumeration))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (IsDatabaseFamilyMember(sourcePath, paths.ContentDatabasePath)) continue;
-                var relativePath = Path.GetRelativePath(paths.DataDirectory, sourcePath).Replace('\\', '/');
-                sources.Add(new WikiPackageSourceFile(relativePath, sourcePath));
-            }
-
-            return await WikiPackageWriter.WriteAsync(
-                packagePath,
-                new WikiPackageDescriptor(
-                    book.Id,
-                    book.Title,
-                    book.IsPageDownloaded,
-                    book.IsResourceDownloaded,
-                    book.UpdateTime,
-                    appVersion),
-                sources,
-                options,
-                cancellationToken);
-        }
-        finally
-        {
-            if (staging is not null) TryDeleteDirectory(staging);
-        }
-    }
-
-    public async Task<WikiPackageImportResult> ImportAsync(
-        WikiPackageImportRequest request,
-        WikiPackageOptions? options = null,
-        CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(request);
-        using var lease = await EnterAsync(cancellationToken);
-        ImportJournal? journal = null;
-        WikiBook? previousBook = null;
-        var activeTarget = false;
-        try
-        {
-            var inspection = await WikiPackageReader.InspectAsync(request.PackagePath, options, cancellationToken);
-            if (!string.Equals(inspection.InspectionToken, request.InspectionToken, StringComparison.Ordinal))
-                throw Error("inspection-token-mismatch", "The supplied inspection token does not match the package.");
-
-            var targetId = request.MapToWikiId ?? inspection.Metadata.Id;
-            var book = await _managerDatabase.GetItemAsync<WikiBook>(targetId, cancellationToken)
-                ?? throw Error("unknown-wiki", $"WikiBook {targetId} is not registered in Manager.db.");
-            if (targetId != inspection.Metadata.Id && request.MapToWikiId is null)
-                throw Error("unknown-wiki", $"Package WikiBook {inspection.Metadata.Id} requires an explicit mapping.");
-            if (LegacyWikiCompatibility.RequiresLegacyPackageConfirmation(inspection.Metadata.AppVersion)
-                && !request.AllowLegacyPackage)
-                throw Error("legacy-confirmation-required", "This package predates 0.4 and requires explicit confirmation.");
-
-            previousBook = CloneBook(book);
-            var paths = WikiDataPaths.Create(request.DataRoot, book);
-            var staging = paths.CreateUniqueStagingDirectory("import");
-            var importId = Path.GetFileName(staging)["import-".Length..];
-            var backup = paths.DataDirectory + $".import-backup-{importId}";
-            var journalPath = Path.Combine(paths.StagingRoot, $"import-{book.Id}.journal.json");
-            journal = new ImportJournal(
-                journalPath,
-                paths.RootPath,
-                book.Id,
-                importId,
-                paths.DataDirectory,
-                staging,
-                backup,
-                ImportPhase.Created,
-                CloneBook(book));
-            WriteJournal(journal);
-
-            await WikiPackageReader.ExtractAsync(
-                request.PackagePath,
-                staging,
-                inspection.InspectionToken,
-                options,
-                cancellationToken);
-            var normalized = LegacyWikiCompatibility.NormalizeDatabaseFamily(staging);
-            ValidateDatabase(normalized.DatabasePath);
-
-            var migrateAnchors = LegacyWikiCompatibility.RequiresLegacyPackageConfirmation(inspection.Metadata.AppVersion);
-            var anchorMigration = migrateAnchors
-                ? await LegacyWikiCompatibility.MigrateAnchorDataAsync(
-                    normalized.DatabasePath,
-                    book.DefaultPageTitle,
-                    cancellationToken)
-                : new LegacyAnchorMigrationResult(false, 0, 0);
-
-            journal = UpdateJournal(journal, ImportPhase.Validated);
-            activeTarget = PathsEqual(_activeContentDatabase.DatabasePath, paths.ContentDatabasePath);
-            if (activeTarget) await _activeContentDatabase.CloseConnection(cancellationToken);
-
-            var replaced = Directory.Exists(paths.DataDirectory);
-            if (replaced)
-            {
-                Directory.Move(paths.DataDirectory, backup);
-                journal = UpdateJournal(journal, ImportPhase.TargetBackedUp);
-            }
-
-            Directory.Move(staging, paths.DataDirectory);
-            journal = UpdateJournal(journal, ImportPhase.TargetInstalled);
-
-            book.IsPageDownloaded = inspection.Metadata.IsPageDownloaded;
-            book.IsResourceDownloaded = inspection.Metadata.IsResourceDownloaded;
-            book.UpdateTime = inspection.Metadata.UpdateTime;
-            await _managerDatabase.SaveItemAsync(book, cancellationToken);
-            journal = UpdateJournal(journal, ImportPhase.ManagerUpdated);
-
-            if (activeTarget)
-            {
-                await _activeContentDatabase.SwitchDatabaseAsync(paths.ContentDatabasePath, cancellationToken);
-                await _activeContentDatabase.Init(seedBook: book, cancellationToken: cancellationToken);
-            }
-
-            journal = UpdateJournal(journal, ImportPhase.Committed);
-            CompleteCommittedImport(journal);
-            return new WikiPackageImportResult(book, inspection, replaced, anchorMigration.Required);
-        }
-        catch (Exception importException)
-        {
-            if (journal is not null)
-            {
-                try
-                {
-                    await RollBackAsync(journal, previousBook, activeTarget, CancellationToken.None);
-                }
-                catch (Exception rollbackException)
-                {
-                    throw Error(
-                        "import-rollback-failed",
-                        "Package import failed and rollback did not complete.",
-                        new AggregateException(importException, rollbackException));
-                }
-            }
             throw;
         }
     }
@@ -312,17 +122,12 @@ public sealed class WikiPackageTransferService
             WriteJournal(journal);
 
             CopyAuxiliaryFiles(paths, staging, cancellationToken);
-            var stagedDatabase = Path.Combine(staging, LegacyWikiCompatibility.CurrentDatabaseName);
+            var stagedDatabase = Path.Combine(staging, "data.db");
             var copiedToken = await CopyAndHashAsync(sourcePath, stagedDatabase, cancellationToken);
             if (!string.Equals(copiedToken, request.InspectionToken, StringComparison.Ordinal))
                 throw Error("inspection-token-mismatch", "The database file changed after it was inspected.");
             var inspection = new WikiDatabaseInspection(sourcePath, sourceBytes, copiedToken);
-            ValidateDatabase(stagedDatabase);
-            var anchorMigration = await LegacyWikiCompatibility.MigrateAnchorDataAsync(
-                stagedDatabase,
-                book.DefaultPageTitle,
-                cancellationToken);
-
+            ValidateDatabase(stagedDatabase, book.Id);
             journal = UpdateJournal(journal, ImportPhase.Validated);
             activeTarget = true;
             await _activeContentDatabase.CloseConnection(cancellationToken);
@@ -350,7 +155,7 @@ public sealed class WikiPackageTransferService
 
             journal = UpdateJournal(journal, ImportPhase.Committed);
             CompleteCommittedImport(journal);
-            return new WikiDatabaseImportResult(book, inspection, replaced, anchorMigration.Required);
+            return new WikiDatabaseImportResult(book, inspection, replaced);
         }
         catch (Exception importException)
         {
@@ -429,7 +234,7 @@ public sealed class WikiPackageTransferService
 
         if (activeTarget && Directory.Exists(journal.TargetDirectory))
         {
-            var databasePath = Path.Combine(journal.TargetDirectory, LegacyWikiCompatibility.CurrentDatabaseName);
+            var databasePath = Path.Combine(journal.TargetDirectory, "data.db");
             await _activeContentDatabase.SwitchDatabaseAsync(databasePath, cancellationToken);
             await _activeContentDatabase.Init(seedBook: previousBook, cancellationToken: cancellationToken);
         }
@@ -445,15 +250,15 @@ public sealed class WikiPackageTransferService
     {
         var lease = await _operationGate.TryAcquireAsync(cancellationToken);
         if (lease is null)
-            throw Error("package-operation-in-progress", "Another package operation is already running.");
+            throw Error("database-operation-in-progress", "Another database operation is already running.");
         return lease;
     }
 
-    private static void ValidateDatabase(string databasePath)
+    private static void ValidateDatabase(string databasePath, int? expectedWikiId = null)
     {
         try
         {
-            WikiContentSchemaValidator.Validate(databasePath);
+            WikiContentSchemaValidator.Validate(databasePath, expectedWikiId);
         }
         catch (WikiContentSchemaValidationException exception)
         {
@@ -639,7 +444,7 @@ public sealed class WikiPackageTransferService
             journal = JsonSerializer.Deserialize<ImportJournal>(json, JournalJsonOptions)
                 ?? throw Error("import-journal-invalid", "The import recovery journal is empty.");
         }
-        catch (WikiPackageException)
+        catch (WikiDatabaseTransferException)
         {
             throw;
         }
@@ -731,7 +536,7 @@ public sealed class WikiPackageTransferService
         try { if (Directory.Exists(path)) Directory.Delete(path, recursive: true); } catch { }
     }
 
-    private static WikiPackageException Error(string code, string message, Exception? inner = null) =>
+    private static WikiDatabaseTransferException Error(string code, string message, Exception? inner = null) =>
         new(code, message, inner);
 
     private enum ImportPhase

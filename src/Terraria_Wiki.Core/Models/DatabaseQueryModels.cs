@@ -54,6 +54,15 @@ public class SearchResultItem
     public string Snippet { get; set; } = string.Empty;
     public WikiSearchMatchKind MatchKind { get; set; }
     public IReadOnlyList<WikiSearchHighlight> Highlights { get; set; } = [];
+    public long RegionId { get; set; }
+    public int RegionOrdinal { get; set; }
+    public string CanonicalTitle { get; set; } = string.Empty;
+    public string SectionPath { get; set; } = string.Empty;
+    public string Anchor { get; set; } = string.Empty;
+    public string EvidenceText { get; set; } = string.Empty;
+    public IReadOnlyList<WikiSearchEvidenceBlock> EvidenceRegions { get; set; } = [];
+    public WikiSearchEvidenceKind EvidenceKind { get; set; }
+    public WikiSearchScope Scope { get; set; }
 }
 
 /// <summary>
@@ -69,6 +78,36 @@ public enum WikiSearchMatchKind
     RedirectContains = 5,
     BodyFts = 6,
 }
+
+public enum WikiSearchEvidenceKind
+{
+    Body,
+    Heading,
+    TableRow,
+    ListItem,
+    Definition,
+    Infobox,
+    Generic,
+    ExactTitle,
+    ExactRedirect,
+    ExactCommunityAlias,
+}
+
+public enum WikiSearchScope
+{
+    SameRegion,
+    SameSection,
+    SamePage,
+    Partial,
+}
+
+public sealed record WikiSearchEvidenceBlock(
+    long RegionId,
+    int RegionOrdinal,
+    string SectionPath,
+    string Anchor,
+    WikiSearchEvidenceKind Kind,
+    string EvidenceText);
 
 /// <summary>
 /// A highlighted range in <see cref="SearchResultItem.Snippet"/>. Start and

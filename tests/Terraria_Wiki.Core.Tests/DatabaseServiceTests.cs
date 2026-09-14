@@ -98,7 +98,8 @@ public sealed class DatabaseServiceTests
         var tables = await fixture.Database.GetConnection().QueryScalarsAsync<string>(
             "SELECT name FROM sqlite_master WHERE type IN ('table', 'view') ORDER BY name");
         var ftsSql = await fixture.Database.GetConnection().ExecuteScalarAsync<string>(
-            "SELECT sql FROM sqlite_master WHERE name = 'WikiSearchIndex'");
+            "SELECT sql FROM sqlite_master WHERE name = 'WikiSearchRegionFts'");
+        var metadata = await fixture.Database.GetItemsAsync<WikiDatabaseMetadata>();
         var home = await fixture.Database.GetItemAsync<WikiPage>("Home");
 
         Assert.Contains("WikiPage", tables);
@@ -106,12 +107,47 @@ public sealed class DatabaseServiceTests
         Assert.Contains("WikiHistory", tables);
         Assert.Contains("WikiFavorite", tables);
         Assert.Contains("WikiAsset", tables);
-        Assert.Contains("WikiSearchIndex", tables);
+        Assert.Contains("WikiSearchRegion", tables);
+        Assert.Contains("WikiSearchRegionFts", tables);
         Assert.Contains("fts5", ftsSql, StringComparison.OrdinalIgnoreCase);
-        Assert.Contains("trigram", ftsSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains("unicode61", ftsSql, StringComparison.OrdinalIgnoreCase);
+        Assert.DoesNotContain("trigram", ftsSql, StringComparison.OrdinalIgnoreCase);
+        Assert.Contains(metadata, item => item.Key == "format_version" && item.Value == "2");
         Assert.NotNull(home);
         Assert.Equal("Download fixture data", home.Content);
         Assert.Equal(DateTime.UnixEpoch, home.LastModified);
+    }
+
+    [Fact]
+    public async Task Reopening_v2_database_does_not_scan_pages_or_build_missing_regions()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(new WikiBook
+        {
+            Id = 1,
+            Title = "Fixture",
+            DefaultPageTitle = "Home",
+            DefaultPageContent = "placeholder",
+        });
+        await fixture.Database.SaveItemAsync(new WikiPage
+        {
+            Title = "Unindexed",
+            Content = "<p>startup must not extract this marker</p>",
+            LastModified = DateTime.UtcNow,
+        });
+        Assert.Equal(0, await fixture.Database.GetCountAsync<WikiSearchRegion>());
+        await fixture.Database.CloseConnection();
+        var reopened = new ContentDbService(fixture.DatabasePath);
+
+        try
+        {
+            await reopened.Init(seedBook: new WikiBook { Id = 1 });
+            Assert.Equal(0, await reopened.GetCountAsync<WikiSearchRegion>());
+            Assert.Empty(await reopened.SearchAsync("marker", 10));
+        }
+        finally
+        {
+            await reopened.CloseConnection();
+        }
     }
 
     [Fact]

@@ -419,17 +419,17 @@ public sealed class WikiDataLifecycle
         var url = new Uri($"{book.ApiBaseUrl}?action=parse&page={Uri.EscapeDataString(pageInfo.Title)}&prop=text&format=xml");
         var xml = await _httpTransport.GetStringAsync(book, url, cancellationToken);
         var html = XDocument.Parse(xml).Descendants("text").FirstOrDefault()?.Value;
-        if (html is null) return;
+        if (html is null)
+            throw new InvalidDataException($"MediaWiki parse response did not contain page HTML for '{pageInfo.Title}'.");
 
-        var processed = WikiContentProcessor.Process(html, book);
+        var processed = WikiContentProcessor.Process(html, book, pageInfo.Title);
         foreach (var resource in processed.ResourceUrls) resourceWriter.Add(resource);
-        await _contentDatabase.SaveItemAsync(new WikiPage
+        await _contentDatabase.SavePageWithSearchAsync(new WikiPage
         {
             Title = pageInfo.Title,
             Content = processed.Html,
             LastModified = pageInfo.LastModified
-        }, cancellationToken);
-        await _contentDatabase.SaveSearchIndexAsync(pageInfo.Title, processed.SearchText, cancellationToken);
+        }, processed, cancellationToken);
     }
 
     private async Task<int> DownloadResourcesAsyncCore(

@@ -1,10 +1,10 @@
 # 重建本地 Wiki 数据库与区域搜索
 
-- 状态：in-progress；实现交付后等待用户下载真实数据验收
+- 状态：implemented；等待用户用本地 Release 下载真实数据后验收
 - Phase：无
 - 执行环境：WSL2 Codex CLI 实施；Windows 11 x64 构建、测试和本地 Release 验证
 - 创建日期：2026-09-13
-- 最后更新：2026-09-13
+- 最后更新：2026-09-14
 - 范围：SQLite 内容库 v2、HTML 区域提取、FTS5 搜索、社区 Alias、下载增量事务、Search DTO、必要的 Windows 结果适配、旧内容兼容与 `.pkg` 退休
 - 关联：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/specs/wiki-query-boundary/spec.md`、`openspec/specs/wiki-data-compatibility/spec.md`、`openspec/specs/application-use-cases/spec.md`、`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`
 
@@ -61,14 +61,14 @@
 
 ## 执行步骤
 
-- [ ] 建立新格式元数据、区域模型、确定性 HTML 提取与 token 编码，并完成结构测试。
-- [ ] 建立 contentless FTS5 的逐页事务写入、格式校验、增量更新与删除测试。
-- [ ] 实现 Alias、实体解析、多层召回/排序、Preview/完整证据/高亮与核心查询测试。
-- [ ] 扩展 Search DTO，适配 Application、WikiTools 兼容映射和 Windows 区域来源/Anchor 导航。
-- [ ] 收拢 raw `.db` 交换并删除 `.pkg`、旧内容迁移及过时契约。
-- [ ] 更新架构、spec、ADR、路线图与旧计划 superseded 记录。
-- [ ] 在 Windows 执行 Release build、相关及全量测试，构建本地 Release 目录并做隔离 smoke。
-- [ ] 核对并删除默认数据根旧内容，重置 Manager 下载统计，记录不可恢复边界和新程序下载步骤。
+- [x] 建立新格式元数据、区域模型、确定性 HTML 提取与 token 编码，并完成结构测试。
+- [x] 建立 contentless FTS5 的逐页事务写入、格式校验、增量更新与删除测试。
+- [x] 实现 Alias、实体解析、多层召回/排序、Preview/完整证据/高亮与核心查询测试。
+- [x] 扩展 Search DTO，适配 Application、WikiTools 兼容映射和 Windows 区域来源/Anchor 导航。
+- [x] 收拢 raw `.db` 交换并删除 `.pkg`、旧内容迁移及过时契约。
+- [x] 更新架构、spec、ADR、路线图与旧计划 superseded 记录。
+- [x] 在 Windows 执行 Release build、相关及全量测试，构建本地 Release 目录并做隔离 smoke。
+- [x] 核对并删除默认数据根旧内容，重置 Manager 下载统计，记录不可恢复边界和新程序下载步骤。
 - [ ] 用户下载真实数据后执行相关性、P50/P95、体积、全量构建和单页更新验收。
 
 ## 验证与回归计划
@@ -89,6 +89,9 @@
 
 - 2026-09-13：用户批准完整实施，并确认同页多区域、废除旧 `.pkg`/旧内容迁移、本地 Release 交付和下载后真实验收顺序。
 - 2026-09-13：从 `master@2497f9b` 建立 `codex/rebuild-local-wiki-search`；开始实现。
+- 2026-09-14：完成 v2 数据库、区域提取、contentless FTS5、Alias、多层搜索、raw `.db` 交换收拢及调用方适配。
+- 2026-09-14：Windows Release solution build 以 0 warning/0 error 通过；全量测试 307/307 通过；self-contained 本地 Release 与绑定 Python Runtime 构建完成，隔离 v2 数据库的搜索到 Reader smoke 通过。
+- 2026-09-14：关闭测试程序后核对默认数据根，只删除注册的 `Terraria_Wiki_zh/data.db` 所在内容目录并清空空的 `Temp`；Manager 对应下载统计重置为 0。配置、Manager 备份、日志、设置及 AI 会话未删除。
 
 ## 发现、偏差与决策
 
@@ -97,8 +100,12 @@
 
 ## 验证结果
 
-待实施记录。
+- `dotnet build Terraria_Wiki.Core.slnx -c Release --no-restore`：通过，0 warning、0 error。
+- `dotnet test Terraria_Wiki.Core.slnx -c Release --no-build --no-restore`：通过，Core 48、Application 51、WikiTools 45、Windows 163，共 307/307；合成语料覆盖八个核心查询。
+- 本地 Release：`artifacts/local-release/rebuild-local-wiki-search/Terraria_Wiki.Windows.exe`；self-contained win-x64，含 Viewer、Search Alias 与由锁定依赖生成的 Python Runtime。
+- 隔离 smoke：`success=true`，搜索返回 3 个区域结果，Redirect 页面打开、Reader/Viewer 导航、脚本、样式、图片、音频与退出清理均通过；证据位于 `artifacts/local-release/rebuild-local-wiki-search-smoke.json`。
+- 本轮没有使用真实下载语料，因此不报告相关性、P50/P95、真实数据库体积或构建成本达标。
 
 ## 完成摘要
 
-待用户下载真实数据并通过最终验收后填写。
+实现交付完成，等待用户使用本地 Release 重新下载 Wiki 数据并通知继续真实验收。真实验收完成前不归档本变更。

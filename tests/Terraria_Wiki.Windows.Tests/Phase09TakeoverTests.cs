@@ -90,7 +90,7 @@ public sealed class Phase09TakeoverTests
             ImportDatabase = (_, token, _) =>
             {
                 importedToken = token;
-                return Task.FromResult(new WikiDatabaseImportResponse(active, inspection, true, true));
+                return Task.FromResult(new WikiDatabaseImportResponse(active, inspection, true));
             },
         };
         viewModel.Attach(actions);

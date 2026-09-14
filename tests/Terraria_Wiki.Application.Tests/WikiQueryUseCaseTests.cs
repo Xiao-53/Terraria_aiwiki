@@ -1,3 +1,4 @@
+using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Core.Query;
 using Terraria_Wiki.Models;
 
@@ -12,26 +13,25 @@ public sealed class WikiQueryUseCaseTests
     {
         await using var fixture = await ApplicationFixture.CreateAsync(
             new ApplicationPreferences { SearchLimit = 25 });
-        await fixture.State.ContentDatabase.SaveItemsAsync(
-            Enumerable.Range(0, 30).Select(index => new WikiPage
-            {
-                Title = $"ore {index:D2}",
-                Content = "description",
-                LastModified = FixtureTime,
-            }));
+        await SavePagesAndIndexesAsync(
+            fixture,
+            Enumerable.Range(0, 30)
+                .Select(index => ($"ore {index:D2}", "description"))
+                .ToArray());
 
         var configured = await fixture.Application.Query.SearchAsync("ore");
         var overridden = await fixture.Application.Query.SearchAsync("ore", 30);
 
         Assert.Equal(25, configured.Count);
         Assert.Equal(30, overridden.Count);
-        Assert.All(overridden, item => Assert.Equal(WikiSearchMatchKind.TitlePrefix, item.MatchKind));
+        Assert.All(overridden, item => Assert.Equal(WikiSearchScope.SameRegion, item.Scope));
+        Assert.All(overridden, item => Assert.Contains("ore", item.EvidenceText, StringComparison.OrdinalIgnoreCase));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(
             () => fixture.Application.Query.SearchAsync("ore", 101));
     }
 
     [Fact]
-    public async Task SearchPreservesAllSevenCoreTiers()
+    public async Task SearchReturnsStableRegionResultsAcrossTitleAndBodySources()
     {
         await using var fixture = await ApplicationFixture.CreateAsync();
         await SavePagesAndIndexesAsync(
@@ -52,16 +52,12 @@ public sealed class WikiQueryUseCaseTests
 
         var results = await fixture.Application.Query.SearchAsync("crystal", 100);
 
-        Assert.Equal(
-        [
-            WikiSearchMatchKind.ExactTitle,
-            WikiSearchMatchKind.ExactRedirect,
-            WikiSearchMatchKind.TitlePrefix,
-            WikiSearchMatchKind.RedirectPrefix,
-            WikiSearchMatchKind.TitleContains,
-            WikiSearchMatchKind.RedirectContains,
-            WikiSearchMatchKind.BodyFts,
-        ], results.Select(item => item.MatchKind));
+        Assert.NotEmpty(results);
+        Assert.Equal(WikiSearchMatchKind.ExactTitle, results[0].MatchKind);
+        Assert.Equal("Crystal", results[0].CanonicalTitle);
+        Assert.Equal(results.OrderBy(item => item.Scope).Select(item => item.Scope),
+            results.Select(item => item.Scope));
+        Assert.All(results, item => Assert.NotEmpty(item.EvidenceText));
     }
 
     [Fact]
@@ -154,14 +150,22 @@ public sealed class WikiQueryUseCaseTests
         ApplicationFixture fixture,
         params (string Title, string PlainContent)[] pages)
     {
-        await fixture.State.ContentDatabase.SaveItemsAsync(
-            pages.Select(page => new WikiPage
+        foreach (var page in pages)
+        {
+            var entity = new WikiPage
             {
                 Title = page.Title,
                 Content = $"<p>{page.Title}</p>",
                 LastModified = FixtureTime,
-            }));
-        foreach (var page in pages)
-            await fixture.State.ContentDatabase.SaveSearchIndexAsync(page.Title, page.PlainContent);
+            };
+            await fixture.State.ContentDatabase.SavePageWithSearchAsync(
+                entity,
+                new ProcessedWikiContent(
+                    entity.Content,
+                    page.PlainContent,
+                    [new WikiSearchSectionDraft(0, page.Title, page.Title, string.Empty)],
+                    [new WikiSearchRegionDraft(0, 0, "paragraph", page.Title, string.Empty, page.Title, page.PlainContent)],
+                    []));
+        }
     }
 }

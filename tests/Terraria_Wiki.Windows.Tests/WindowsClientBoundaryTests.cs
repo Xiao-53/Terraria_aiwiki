@@ -1,10 +1,31 @@
 using System.Reflection;
+using System.Text.Json;
 using Terraria_Wiki.Application;
 
 namespace Terraria_Wiki.Windows.Tests;
 
 public sealed class WindowsClientBoundaryTests
 {
+    [Fact]
+    public void Versioned_community_alias_asset_is_shipped_for_the_primary_chinese_wiki()
+    {
+        var repositoryRoot = FindRepositoryRoot();
+        var path = Path.Combine(repositoryRoot, "assets", "search", "community-aliases.zh-cn.json");
+        using var document = JsonDocument.Parse(File.ReadAllText(path));
+        var root = document.RootElement;
+        var wiki = Assert.Single(root.GetProperty("wikis").EnumerateArray());
+        var aliases = wiki.GetProperty("aliases").EnumerateArray()
+            .ToDictionary(item => item.GetProperty("alias").GetString()!, item => item.GetProperty("target_title").GetString()!);
+
+        Assert.Equal(1, root.GetProperty("version").GetInt32());
+        Assert.Equal(1, wiki.GetProperty("wiki_id").GetInt32());
+        Assert.Equal("克苏鲁之眼", aliases["克眼"]);
+        Assert.Equal("猪龙鱼公爵", aliases["猪鲨"]);
+        Assert.Equal("光之女皇", aliases["光女"]);
+        Assert.Contains("CopySearchAssetsAfterPublish", File.ReadAllText(Path.Combine(
+            repositoryRoot, "src", "Terraria_Wiki.Windows", "Terraria_Wiki.Windows.csproj")));
+    }
+
     [Fact]
     public void ProjectReferencesApplicationAndPinnedAvaloniaWithoutMauiRazorOrSqlitePackages()
     {
