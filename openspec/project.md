@@ -84,7 +84,7 @@ Codex CLI 必须从 WSL 工作区根启动，使产品源码与根 `AGENTS.md` �
 - 新 Presentation 通过 Application 使用后端，不直接绑定数据库或平台 Runtime。
 - Local Viewer Adapter、Wiki Tool Adapter 和平台 Adapter 依赖向内的 Application/Core 边界；Core 不依赖 WebView、loopback、Python Runtime 或平台 Adapter。
 - AI 通过稳定的 Wiki Search / Read 边界获取本地事实，不直接建立第二套 Wiki 数据体系。
-- 搜索使用 ADR 0012 的单套区域级 contentless FTS5；不增加向量库、第二份正文或并行旧索引。
+- 搜索使用 ADR 0012 的单套区域级 contentless FTS5，结果按规范页面合并并保留区域证据；单概念查询优先标题候选与介绍正文。不增加向量库、第二份正文或并行旧索引。
 - Python Agent 业务逻辑与 Windows / Android Runtime 分离。
 - Windows 新版本不使用 MAUI；Phase 10 已在 P0 接管证据基础上移除旧 MAUI 参考 gitlink，不得把它重新引入产品 build/runtime。
 - Vector Search、Embedding Retrieval、Vector Database 和第二套 LLM Wiki 数据库不属于项目范围。

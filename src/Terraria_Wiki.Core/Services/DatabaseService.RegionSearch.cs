@@ -189,14 +189,17 @@ public partial class DatabaseService
 
         await AddEntityPageCandidatesAsync(resolved, pages, regions, fetchLimit, cancellationToken);
 
-        foreach (var page in pages.Values.Where(page => page.RegionIds.Count == 0).ToArray())
+        foreach (var page in pages.Values.Where(page => page.RegionIds.Count == 0
+                     || page.IdentityConcepts.Count > 0).ToArray())
         {
             var lead = await _db.QueryAsync<RegionQueryRow>(
-                "SELECT *, 0.0 AS RankScore FROM WikiSearchRegion WHERE PageTitle = ? ORDER BY RegionOrdinal LIMIT 1",
+                "SELECT *, 0.0 AS RankScore FROM WikiSearchRegion WHERE PageTitle = ? ORDER BY CASE WHEN Kind = 'paragraph' THEN 0 ELSE 1 END, RegionOrdinal LIMIT 1",
                 page.CanonicalTitle).WaitAsync(cancellationToken);
             if (lead.Count == 0) continue;
-            var region = new RegionHit(lead[0]);
+            var region = regions.TryGetValue(lead[0].Id, out var existingRegion)
+                ? existingRegion : new RegionHit(lead[0]);
             foreach (var concept in page.PageConcepts) region.Concepts.Add(concept);
+            foreach (var concept in page.IdentityConcepts) region.Concepts.Add(concept);
             regions[region.Row.Id] = region;
             page.RegionIds.Add(region.Row.Id);
         }
@@ -270,26 +273,39 @@ public partial class DatabaseService
                     page.IdentityQuality,
                     contextMatches,
                     bodyMatches,
-                    EvidencePriority(region.Row.Kind),
+                    conceptCount == 1 && region.Row.Kind == "paragraph" ? -1 : EvidencePriority(region.Row.Kind),
                     region.RankScore));
             }
         }
 
-        return results
+        var ranked = results
             .GroupBy(result => (result.Item.CanonicalTitle, result.Item.EvidenceText), StringTupleComparer.Instance)
             .Select(group => group.OrderBy(result => result.Item.RegionOrdinal).First())
             .OrderBy(result => result.Item.Scope)
+            // For a single name, related titles should precede incidental body mentions.
+            .ThenBy(result => conceptCount == 1 ? (int)result.Item.MatchKind : 0)
             .ThenByDescending(result => result.IdentityConceptCount)
             .ThenByDescending(result => result.CoverageCount)
             .ThenBy(result => result.EvidencePriority)
+            .ThenBy(result => conceptCount == 1 && result.Item.MatchKind != WikiSearchMatchKind.BodyFts
+                && result.EvidencePriority == -1 ? result.Item.RegionOrdinal : 0)
             .ThenByDescending(result => result.ContextMatches * 2 + result.BodyMatches)
             .ThenByDescending(result => result.IdentityQuality)
             .ThenBy(result => result.RankScore)
             .ThenBy(result => result.Item.CanonicalTitle, StringComparer.Ordinal)
-            .ThenBy(result => result.Item.RegionOrdinal)
+            .ThenBy(result => result.Item.RegionOrdinal);
+
+        return ranked.GroupBy(result => result.Item.CanonicalTitle, StringComparer.Ordinal)
             .Take(maxSearchItemCount)
-            .Select(result => result.Item)
-            .ToList();
+            .Select(group =>
+            {
+                var best = group.First().Item;
+                best.EvidenceRegions = group.SelectMany(result => result.Item.EvidenceRegions)
+                    .DistinctBy(region => region.RegionId)
+                    .OrderBy(region => region.RegionOrdinal)
+                    .ToArray();
+                return best;
+            }).ToList();
     }
 
     private static IReadOnlyList<ResolvedConcept> CollapseResolvedConcepts(
@@ -371,9 +387,9 @@ public partial class DatabaseService
         var escaped = EscapeLikePattern(concept.Original);
         var rows = await _db.QueryAsync<TitleCandidateRow>(
             """
-            SELECT Title, CASE WHEN Title LIKE ? ESCAPE '\\' THEN 2 ELSE 4 END AS MatchKind
+            SELECT Title, CASE WHEN Title LIKE ? ESCAPE '\' THEN 2 ELSE 4 END AS MatchKind
             FROM WikiPage
-            WHERE Title LIKE ? ESCAPE '\\'
+            WHERE Title LIKE ? ESCAPE '\'
             ORDER BY LENGTH(Title), Title
             LIMIT ?
             """,
@@ -386,7 +402,7 @@ public partial class DatabaseService
             page.PageConcepts.Add(concept.Ordinal);
             page.PageMatchKind ??= (WikiSearchMatchKind)row.MatchKind;
             var lead = await _db.QueryAsync<RegionQueryRow>(
-                "SELECT *, 0.0 AS RankScore FROM WikiSearchRegion WHERE PageTitle = ? ORDER BY RegionOrdinal LIMIT 1",
+                "SELECT *, 0.0 AS RankScore FROM WikiSearchRegion WHERE PageTitle = ? ORDER BY CASE WHEN Kind = 'paragraph' THEN 0 ELSE 1 END, RegionOrdinal LIMIT 1",
                 row.Title).WaitAsync(cancellationToken);
             if (lead.Count == 0) continue;
             if (!regions.TryGetValue(lead[0].Id, out var region))

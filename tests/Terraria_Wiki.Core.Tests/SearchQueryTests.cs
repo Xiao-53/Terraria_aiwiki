@@ -191,17 +191,62 @@ public sealed class SearchQueryTests
     }
 
     [Fact]
-    public async Task SamePageMayReturnSeveralDistinctRegions()
+    public async Task SamePageReturnsOneResultAndPreservesDistinctRegionEvidence()
     {
         await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
         await SaveAsync(fixture, "药水", "<h2 id='a'>制作</h2><p>药水需要水瓶。</p><h2 id='b'>使用</h2><p>药水提供增益。</p>");
 
         var results = await SearchAsync(fixture, "药水");
 
-        Assert.True(results.Count >= 2);
-        Assert.Equal(results.Count, results.Select(item => item.EvidenceText).Distinct().Count());
-        Assert.Contains(results, item => item.Anchor == "a");
-        Assert.Contains(results, item => item.Anchor == "b");
+        var result = Assert.Single(results);
+        Assert.Equal("a", result.Anchor);
+        Assert.Contains("水瓶", result.Snippet);
+        Assert.Contains(result.EvidenceRegions, item => item.Anchor == "a");
+        Assert.Contains(result.EvidenceRegions, item => item.Anchor == "b");
+        Assert.Equal(result.EvidenceRegions.Count, result.EvidenceRegions.Select(item => item.RegionId).Distinct().Count());
+    }
+
+    [Fact]
+    public async Task SnowmanSearchRanksRelatedTitlesAndAppliesLimitAfterPageGrouping()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        await SaveAsync(fixture, "雪人", "<p>雪人是一种敌怪。</p><h2 id='drops'>掉落</h2><p>雪人掉落钱币。</p><h2 id='history'>历史</h2><p>雪人曾调整过。</p>");
+        await SaveAsync(fixture, "雪人炮", "<div class='infobox'><div class='title'>雪人炮</div><ul><li>伤害 67</li></ul></div><p>雪人炮是一种发射火箭的武器。</p><h2 id='history'>历史</h2><p>雪人炮在历史中调整了雪人炮的伤害。</p>");
+        await SaveAsync(fixture, "巨型雪人", "<p>一种相关敌怪。</p>");
+        await SaveAsync(fixture, "事件", "<div class='infobox'><div class='title'>雪人</div><ul><li>雪人 雪人 雪人</li></ul></div>");
+
+        var results = await SearchAsync(fixture, "雪人", 4);
+        Assert.Equal(new[] { "雪人", "雪人炮", "巨型雪人", "事件" }, results.Select(item => item.CanonicalTitle));
+        Assert.Equal(WikiSearchMatchKind.TitlePrefix, results[1].MatchKind);
+        Assert.Contains("发射火箭", results[1].Snippet);
+        Assert.DoesNotContain("伤害 67", results[1].Snippet);
+        Assert.Equal(string.Empty, results[1].Anchor);
+        var limited = await SearchAsync(fixture, "雪人", 2);
+        Assert.Equal(new[] { "雪人", "雪人炮" }, limited.Select(item => item.CanonicalTitle));
+        Assert.Equal("雪人", Assert.Single(await SearchAsync(fixture, "雪人", 1)).CanonicalTitle);
+        var exact = Assert.Single(await SearchAsync(fixture, "雪人炮", 1));
+        Assert.Equal("雪人炮", exact.CanonicalTitle);
+        Assert.Contains("发射火箭", exact.Snippet);
+        Assert.All(results, item => Assert.Contains(item.EvidenceRegions, region => region.RegionId == item.RegionId));
+    }
+
+    [Fact]
+    public async Task TitleWildcardsAreLiteralAndPrefixCandidatesBeatContainsCandidates()
+    {
+        await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
+        foreach (var term in new[] { "%", "_", "\\" })
+        {
+            await SaveAsync(fixture, term + "指南", "<p>这是介绍正文。</p>");
+            await SaveAsync(fixture, "关于" + term, "<p>这是另一段正文。</p>");
+        }
+        await SaveAsync(fixture, "普通页面", "<p>不应匹配符号查询。</p>");
+        foreach (var term in new[] { "%", "_", "\\" })
+        {
+            var results = await SearchAsync(fixture, term);
+            Assert.Equal(new[] { term + "指南", "关于" + term }, results.Select(item => item.CanonicalTitle));
+            Assert.Equal(WikiSearchMatchKind.TitlePrefix, results[0].MatchKind);
+            Assert.Equal(WikiSearchMatchKind.TitleContains, results[1].MatchKind);
+        }
     }
 
     [Fact]
