@@ -31,7 +31,7 @@ public sealed class WindowsClientSmokeFixtureTests
             var home = new WikiPage
             {
                 Title = book.DefaultPageTitle,
-                Content = "<p>Smoke home.</p><a data-wiki='Smoke Alias'>Open target</a><img src='/src/smoke.png'><audio src='/src/smoke.ogg'></audio>",
+                Content = "<p>Smoke home.</p><a title='Smoke Alias'>Open target</a><img src='/src/smoke.png'><audio src='/src/smoke.ogg'></audio>",
                 LastModified = DateTime.UtcNow,
             };
             await content.SavePageWithSearchAsync(home, WikiContentProcessor.Process(home.Content, book, home.Title));

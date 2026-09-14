@@ -162,7 +162,6 @@
         // 处理所有链接点击
         document.addEventListener('click', function (e) {
             const targetLink = e.target.closest('a');
-            console.log('点击了',targetLink);
             if (targetLink) {
                 // 点击缩略图（thumb）中的图片链接 -> 打开图片查看器
                 // 注意：thumbcaption 说明文字里的普通文本链接（无 <img>）不属于图片，
@@ -179,8 +178,11 @@
                     return;
                 }
 
-                const wikiTitle = targetLink.getAttribute('data-wiki');
                 const href = targetLink.getAttribute('href') || '';
+                // 新数据使用 data-wiki；既有数据库在加工时只保留了 title。
+                // title 回退只用于没有 href 的普通链接，避免把外链或页内锚点误当成 Wiki 页面。
+                const wikiTitle = targetLink.getAttribute('data-wiki')
+                    || (!href ? targetLink.getAttribute('title') : null);
                 // 外链 -> 交给 C# 用系统浏览器打开
                 if (href.startsWith('http')) {
                     e.preventDefault();
@@ -189,7 +191,9 @@
                 }
                 // 带 data-wiki 属性的站内链接 -> 应用内跳转
                 if (wikiTitle && !href) {
-                    gotoPage(wikiTitle, config);
+                    e.preventDefault();
+                    void gotoPage(wikiTitle, config)
+                        .catch(error => console.error('Viewer link navigation failed:', error));
                 }
             }
         });

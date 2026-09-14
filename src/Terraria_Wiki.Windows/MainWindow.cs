@@ -526,7 +526,16 @@ internal sealed partial class MainWindow : Window
             if (search.Count == 0)
                 throw new InvalidOperationException("Synthetic smoke search returned no results.");
 
-            await session.OpenPageAsync("Smoke Alias", _lifetime.Token);
+            await _shellView.WebView.InvokeScript(
+                "document.getElementById('wiki-frame')?.contentDocument?.querySelector('#mw-content-text a[title=\"Smoke Alias\"]')?.click()");
+            var linkDeadline = DateTime.UtcNow + TimeSpan.FromSeconds(10);
+            while (DateTime.UtcNow < linkDeadline
+                   && !string.Equals(session.CurrentPage?.CanonicalTitle, "Smoke Target", StringComparison.Ordinal))
+            {
+                await Task.Delay(100, _lifetime.Token);
+            }
+            if (!string.Equals(session.CurrentPage?.CanonicalTitle, "Smoke Target", StringComparison.Ordinal))
+                throw new InvalidOperationException("Viewer internal link click did not navigate to the target page.");
             await session.ChangeThemeAsync(isDark: true, _lifetime.Token);
             await session.BackAsync(_lifetime.Token);
             await session.ForwardAsync(_lifetime.Token);

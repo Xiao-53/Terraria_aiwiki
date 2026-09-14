@@ -40,6 +40,7 @@ public sealed class DataPathsAndContentTests : IDisposable
         const string html = """
             <div class="infobox"><p>Excluded from search but retained in stored HTML</p></div>
             <p>Main&nbsp;text <a href="/wiki/Target#Part" title="Target">go</a></p>
+            <p><a href="https://example.test/reference" title="Reference">external</a></p>
             <a class="image" href="/image"><img loading="lazy" src="/images/thumb/a.png/20px-a.png?x=1" srcset="x" /></a>
             <audio><source src="/audio/transcoded/a.ogg"/><source src="/audio/a.ogg"/></audio>
             """;
@@ -51,7 +52,9 @@ public sealed class DataPathsAndContentTests : IDisposable
         Assert.Contains(result.SearchRegions, region => region.Kind == "infobox");
         Assert.Contains("Main text", result.SearchText);
         Assert.Contains("title=\"Target#Part\"", result.Html);
+        Assert.Contains("data-wiki=\"Target#Part\"", result.Html);
         Assert.DoesNotContain("href=\"/wiki/Target#Part\"", result.Html);
+        Assert.Contains("href=\"https://example.test/reference\"", result.Html);
         Assert.Contains("src=\"/src/a.png\"", result.Html);
         Assert.DoesNotContain("loading=", result.Html);
         Assert.DoesNotContain("transcoded", result.Html);

@@ -410,9 +410,14 @@ public static partial class WikiContentProcessor
         node.SelectNodes("//a[@href and @title]")?.ToList().ForEach(anchor =>
         {
             var href = anchor.Attributes["href"].Value;
+            if (href.StartsWith("http://", StringComparison.OrdinalIgnoreCase)
+                || href.StartsWith("https://", StringComparison.OrdinalIgnoreCase)
+                || href.StartsWith("//", StringComparison.Ordinal))
+                return;
             var hashIndex = href.IndexOf('#');
             if (hashIndex >= 0)
                 anchor.SetAttributeValue("title", anchor.GetAttributeValue("title", string.Empty) + href[hashIndex..]);
+            anchor.SetAttributeValue("data-wiki", anchor.GetAttributeValue("title", string.Empty));
             anchor.Attributes.Remove("href");
         });
     }
