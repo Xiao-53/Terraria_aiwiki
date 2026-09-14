@@ -18,7 +18,7 @@ public enum DbMode
 public partial class DatabaseService
 {
     internal const int ContentFormatVersion = 2;
-    internal const int SearchExtractorVersion = 1;
+    internal const int SearchExtractorVersion = 2;
     private readonly SemaphoreSlim _connectionGate = new(1, 1);
     private SQLiteAsyncConnection _db;
     private WikiSearchAliasCatalog _searchAliases = WikiSearchAliasCatalog.Empty;
@@ -100,6 +100,21 @@ public partial class DatabaseService
         {
             _connectionGate.Release();
         }
+    }
+
+    public async Task OptimizeSearchIndexAsync(
+        bool reclaimSpace = false,
+        CancellationToken cancellationToken = default)
+    {
+        if (Mode != DbMode.Content)
+            throw new InvalidOperationException("Search index maintenance requires a content database.");
+        await Init(cancellationToken: cancellationToken);
+        await _db.ExecuteAsync(
+            "INSERT INTO WikiSearchRegionFts(WikiSearchRegionFts) VALUES('optimize');")
+            .WaitAsync(cancellationToken);
+        await _db.ExecuteAsync("PRAGMA optimize;").WaitAsync(cancellationToken);
+        if (reclaimSpace)
+            await _db.ExecuteAsync("VACUUM;").WaitAsync(cancellationToken);
     }
 
     public SQLiteAsyncConnection GetConnection() => _db;

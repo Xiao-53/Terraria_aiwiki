@@ -3,7 +3,7 @@
 - 状态：accepted
 - 日期：2026-09-14
 - 决策范围：内容数据库格式、HTML 搜索加工、FTS5、旧内容格式与 `.pkg` 兼容
-- 关联：`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`、`openspec/specs/wiki-query-boundary/spec.md`、`openspec/specs/wiki-data-compatibility/spec.md`、`openspec/changes/rebuild-local-wiki-search/plan.md`
+- 关联：`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`、`openspec/specs/wiki-query-boundary/spec.md`、`openspec/specs/wiki-data-compatibility/spec.md`、`openspec/changes/archive/rebuild-local-wiki-search/plan.md`
 
 ## 背景
 
@@ -28,7 +28,7 @@
 - 新程序不能读取旧开发期内容库；内容须由新版下载流程重建。代码回退也不能恢复已明确删除的本机内容。
 - contentless FTS 避免重复保存正文，但逐页替换必须保留由旧正文生成删除词元的事务规则。
 - raw `.db` 具有稳定 Wiki 身份，导入不再依靠当前目标之外的猜测。
-- 真实相关性、性能和体积结论必须等待用户用交付程序下载完整语料后验证。
+- 真实相关性、性能和体积必须用用户下载的完整语料验证；2026-09-14 的验收结果记录在归档 change 的 `real-acceptance.md`。
 
 ## 被否决方案
 
@@ -40,4 +40,4 @@
 
 ## 验证
 
-合成 HTML、SQLite 故障注入、raw 数据库交换、Application/WikiTools/Windows 回归和本地 Release 构建在 change 计划中记录。完整真实 Wiki 的八个查询、P50/P95、体积和更新成本在用户下载后验收。
+合成 HTML、SQLite 故障注入、raw 数据库交换、Application/WikiTools/Windows 回归和本地 Release 构建在 change 计划中记录。完整真实 Wiki 的八个查询、P50/P95、体积、全库构建、单页更新和候选索引对照于 2026-09-14 通过验收；最终选择保持单套字符位置 FTS5。

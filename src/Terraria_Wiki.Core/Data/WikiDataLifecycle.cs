@@ -51,6 +51,7 @@ public sealed class WikiDataLifecycle
             var redirects = await FetchRedirectsAsync(book, options, progress, cancellationToken);
             var pagesListed = await FetchPageListAsync(book, paths.PageListPath, options, progress, cancellationToken);
             var pages = await DownloadPagesAsync(book, paths.PageListPath, paths.ResourceListPath, paths.FailedPageListPath, options, progress, cancellationToken);
+            await _contentDatabase.OptimizeSearchIndexAsync(reclaimSpace: true, cancellationToken);
             var resources = includeResources
                 ? await DownloadResourcesAsyncCore(book, paths.ResourceListPath, paths.TemporaryResourceListPath, paths.FailedResourceListPath, options, progress, cancellationToken)
                 : 0;
@@ -111,6 +112,8 @@ public sealed class WikiDataLifecycle
                 return new WikiOperationSummary(Redirects: redirects);
 
             var pages = await DownloadPagesAsync(book, paths.UpdatePageListPath, paths.UpdateResourceListPath, paths.FailedPageListPath, options, progress, cancellationToken);
+            if (pages > 0)
+                await _contentDatabase.OptimizeSearchIndexAsync(cancellationToken: cancellationToken);
             await WikiFileOperations.AppendFileAsync(paths.UpdateResourceListPath, paths.ResourceListPath, cancellationToken);
             DeduplicateInPlace(paths.ResourceListPath);
             var resources = includeResources
@@ -147,6 +150,8 @@ public sealed class WikiDataLifecycle
                 DeleteIfExists(paths.TemporaryFailedPageListPath);
                 DeleteIfExists(paths.UpdateResourceListPath);
                 pages = await DownloadPagesAsync(book, paths.FailedPageListPath, paths.UpdateResourceListPath, paths.TemporaryFailedPageListPath, options with { PageConcurrency = 1 }, progress, cancellationToken);
+                if (pages > 0)
+                    await _contentDatabase.OptimizeSearchIndexAsync(cancellationToken: cancellationToken);
                 await WikiFileOperations.AppendFileAsync(paths.UpdateResourceListPath, paths.ResourceListPath, cancellationToken);
                 DeduplicateInPlace(paths.ResourceListPath);
                 DeleteIfExists(paths.UpdateResourceListPath);

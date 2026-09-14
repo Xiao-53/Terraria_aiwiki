@@ -187,6 +187,8 @@ public partial class DatabaseService
             await AddTitleCandidatesAsync(concept, pages, regions, fetchLimit, cancellationToken);
         }
 
+        await AddEntityPageCandidatesAsync(resolved, pages, regions, fetchLimit, cancellationToken);
+
         foreach (var page in pages.Values.Where(page => page.RegionIds.Count == 0).ToArray())
         {
             var lead = await _db.QueryAsync<RegionQueryRow>(
@@ -278,10 +280,10 @@ public partial class DatabaseService
             .Select(group => group.OrderBy(result => result.Item.RegionOrdinal).First())
             .OrderBy(result => result.Item.Scope)
             .ThenByDescending(result => result.IdentityConceptCount)
-            .ThenByDescending(result => result.IdentityQuality)
             .ThenByDescending(result => result.CoverageCount)
-            .ThenByDescending(result => result.ContextMatches * 2 + result.BodyMatches)
             .ThenBy(result => result.EvidencePriority)
+            .ThenByDescending(result => result.ContextMatches * 2 + result.BodyMatches)
+            .ThenByDescending(result => result.IdentityQuality)
             .ThenBy(result => result.RankScore)
             .ThenBy(result => result.Item.CanonicalTitle, StringComparer.Ordinal)
             .ThenBy(result => result.Item.RegionOrdinal)
@@ -335,8 +337,14 @@ public partial class DatabaseService
             var targetExists = await _db.ExecuteScalarAsync<int>(
                 "SELECT COUNT(*) FROM WikiPage WHERE Title = ?", target).WaitAsync(cancellationToken);
             if (targetExists > 0)
+            {
+                var variants = target.Contains(value, StringComparison.OrdinalIgnoreCase)
+                    || value.Contains(target, StringComparison.OrdinalIgnoreCase)
+                    ? new[] { value, target }
+                    : [target];
                 return new ResolvedConcept(ordinal, value, target, true, 2,
-                    WikiSearchEvidenceKind.ExactRedirect, [value, target]);
+                    WikiSearchEvidenceKind.ExactRedirect, variants);
+            }
         }
 
         if (_searchAliases.TryResolve(_wikiId, value, out var aliasTarget))
@@ -346,7 +354,7 @@ public partial class DatabaseService
                 .WaitAsync(cancellationToken);
             if (!string.IsNullOrEmpty(target))
                 return new ResolvedConcept(ordinal, value, target, true, 1,
-                    WikiSearchEvidenceKind.ExactCommunityAlias, [value, target]);
+                    WikiSearchEvidenceKind.ExactCommunityAlias, [target]);
         }
 
         return new ResolvedConcept(ordinal, value, value, false, 0,
@@ -388,6 +396,55 @@ public partial class DatabaseService
             }
             region.Concepts.Add(concept.Ordinal);
             page.RegionIds.Add(lead[0].Id);
+        }
+    }
+
+    private async Task AddEntityPageCandidatesAsync(
+        IReadOnlyList<ResolvedConcept> concepts,
+        IDictionary<string, PageHit> pages,
+        IDictionary<long, RegionHit> regions,
+        int limit,
+        CancellationToken cancellationToken)
+    {
+        foreach (var entity in concepts.Where(concept => concept.IsEntity))
+        {
+            var page = GetOrCreatePage(pages, entity.Canonical);
+            foreach (var concept in concepts.Where(concept => concept.Ordinal != entity.Ordinal))
+            {
+                foreach (var variant in concept.Variants)
+                {
+                    var phrase = WikiSearchText.EncodePhrase(variant);
+                    if (phrase.Length == 0) continue;
+                    var hits = await _db.QueryAsync<RegionQueryRow>(
+                        """
+                        SELECT region.*, bm25(WikiSearchRegionFts, 2.0, 1.0) AS RankScore
+                        FROM WikiSearchRegionFts
+                        INNER JOIN WikiSearchRegion AS region ON region.Id = WikiSearchRegionFts.rowid
+                        WHERE WikiSearchRegionFts MATCH ? AND region.PageTitle = ?
+                        ORDER BY RankScore, region.RegionOrdinal
+                        LIMIT ?
+                        """,
+                        phrase,
+                        entity.Canonical,
+                        limit).WaitAsync(cancellationToken);
+                    foreach (var hit in hits)
+                    {
+                        if (!regions.TryGetValue(hit.Id, out var region))
+                        {
+                            region = new RegionHit(hit);
+                            regions.Add(hit.Id, region);
+                        }
+                        region.Concepts.Add(concept.Ordinal);
+                        region.Concepts.Add(entity.Ordinal);
+                        region.RankScore = Math.Min(region.RankScore, hit.RankScore);
+                        page.RegionIds.Add(hit.Id);
+                    }
+                }
+            }
+
+            foreach (var regionId in page.RegionIds)
+                if (regions.TryGetValue(regionId, out var region))
+                    region.Concepts.Add(entity.Ordinal);
         }
     }
 

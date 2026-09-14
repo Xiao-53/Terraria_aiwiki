@@ -33,6 +33,7 @@ public sealed class SearchQueryTests
     {
         await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
         await SaveAsync(fixture, "光之女皇", "<div class='infobox'><div class='title'>光之女皇</div><div class='section drops'><div class='title'>掉落</div><ul><li>宝藏袋 100%</li></ul></div></div>");
+        await SaveAsync(fixture, "宝藏袋", "<h2>历史</h2><p>增加了光之女皇的宝藏袋。</p>");
         await SaveAsync(fixture, "猪龙鱼公爵", "<h2 id='loot'>掉落</h2><p>猪龙鱼公爵会掉落多种武器。</p>");
         await SaveAsync(fixture, "克苏鲁之眼", "<h2 id='loot'>掉落</h2><p>克苏鲁之眼掉落恶魔矿。</p>");
         await SaveAsync(fixture, "武器指南", "<p>剑和弓都是武器。</p>");
@@ -75,6 +76,8 @@ public sealed class SearchQueryTests
             var results = await SearchAsync(fixture, check.Query);
             Assert.Contains(results, result => result.CanonicalTitle == check.CanonicalTitle
                 && result.EvidenceText.Contains(check.EvidenceTerm, StringComparison.Ordinal));
+            if (check.Query.Contains(' '))
+                Assert.Equal(check.CanonicalTitle, results[0].CanonicalTitle);
         }
     }
 
@@ -144,6 +147,7 @@ public sealed class SearchQueryTests
     {
         await using var fixture = await TestDatabase.CreateContentAsync(CreateBook());
         await SaveAsync(fixture, "猪龙鱼公爵", "<h2 id='drops'>掉落</h2><p>会掉落多种强力武器。</p>");
+        await SaveAsync(fixture, "武器", "<h2 id='flails'>连枷</h2><p>猪鲨链球是一种武器。</p>");
         var aliasPath = Path.Combine(fixture.RootPath, "aliases.json");
         await File.WriteAllTextAsync(aliasPath, JsonSerializer.Serialize(new
         {

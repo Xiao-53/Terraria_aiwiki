@@ -371,12 +371,14 @@ public static partial class WikiContentProcessor
     }
 
     private static string FindNearestAnchor(HtmlNode node) =>
-        node.AncestorsAndSelf().Select(FindAnchor).FirstOrDefault(value => value.Length > 0) ?? string.Empty;
+        node.AncestorsAndSelf()
+            .Select(item => NormalizeText(item.GetAttributeValue("id", string.Empty)))
+            .FirstOrDefault(value => value.Length > 0) ?? string.Empty;
 
     private static string FindAnchor(HtmlNode node) =>
         NormalizeText(node.GetAttributeValue("id", string.Empty).Length > 0
             ? node.GetAttributeValue("id", string.Empty)
-            : node.Descendants().Select(item => item.GetAttributeValue("id", string.Empty))
+            : node.ChildNodes.Select(item => item.GetAttributeValue("id", string.Empty))
                 .FirstOrDefault(value => value.Length > 0));
 
     private static bool TryHeadingLevel(string name, out int level)

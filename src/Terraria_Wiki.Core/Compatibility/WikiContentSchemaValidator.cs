@@ -1,5 +1,6 @@
 using System.Text.RegularExpressions;
 using SQLite;
+using Terraria_Wiki.Services;
 
 namespace Terraria_Wiki.Core.Compatibility;
 
@@ -170,7 +171,8 @@ internal static class WikiContentSchemaValidator
             "SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'extractor_version';");
         var wikiId = connection.ExecuteScalar<string>(
             "SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'wiki_id';");
-        if (version != "2" || extractorVersion != "1"
+        if (version != DatabaseService.ContentFormatVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)
+            || extractorVersion != DatabaseService.SearchExtractorVersion.ToString(System.Globalization.CultureInfo.InvariantCulture)
             || !int.TryParse(wikiId, out var parsedWikiId) || parsedWikiId <= 0)
             throw Error("database-format-unsupported", "The database does not declare the supported content format and Wiki identity.");
         if (expectedWikiId.HasValue && parsedWikiId != expectedWikiId.Value)

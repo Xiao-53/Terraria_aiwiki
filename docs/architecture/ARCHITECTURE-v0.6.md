@@ -208,7 +208,7 @@ Phase 11 关闭后的候选队列和遗留项见 `openspec/changes/post-phase-11
 | 源码所有权 | 当前仓库统一拥有产品源码/测试/Agent/构建资产；旧 MAUI gitlink 已退休，上游固定来源由 ADR/资产记录追溯 |
 | Core | 外层产品仓库中的单一平台无关 .NET 10 Wiki Core；不复制第二套实现 |
 | 数据根 | Core 只接收宿主提供的绝对根，原位沿用 `<root>/Manager.db` 与 `<root>/<DataFolder>/data.db`；Windows 使用 LocalAppData 宿主管理默认根，普通 UI 不切换地址，数据管理页以当前 Wiki 的单文件 `data.db` 导入导出提供可移植性 |
-| 数据库与搜索 | 使用单一 v2 SQLite 内容库和区域级 contentless FTS5；真实质量与性能在完整下载后验收 |
+| 数据库与搜索 | 使用单一 v2 SQLite 内容库和区域级 contentless FTS5；完整中文 Wiki 的真实质量、性能、体积与更新成本已验收 |
 | 客户端首选 | Avalonia + NativeWebView；Phase 00 Windows 11 x64 门槛已通过 |
 | Application | 保持薄，只表达真实用例和必要 ports |
 | Viewer | 内容与数据链路保留；Windows 使用受限动态 loopback，Android 后续独立验证 |

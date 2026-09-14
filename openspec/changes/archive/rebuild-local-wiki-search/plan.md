@@ -1,7 +1,7 @@
 # 重建本地 Wiki 数据库与区域搜索
 
-- 状态：实现交付，等待用户下载后真实验收
-- 当前进度：实施交付项 8/8 已完成；真实数据库验收项 0/1，等待用户完成下载
+- 状态：archived；真实数据库验收通过并已归档
+- 当前进度：实施与真实数据库验收 9/9 已完成
 - Phase：无
 - 执行环境：WSL2 Codex CLI 实施；Windows 11 x64 构建、测试和本地 Release 验证
 - 创建日期：2026-09-13
@@ -23,7 +23,7 @@
 4. Search 返回页面、区域、章节来源、Anchor、完整证据、Preview 和高亮；同一页面可返回多个去重区域。
 5. 页面 HTML、区域和 FTS 在单个事务内更新；少量页面更新不全库重建，应用启动不扫描旧 HTML 建索引。
 6. 删除旧 `.pkg` 公共 API/实现及旧内容库迁移；保留并验证新 `.db` 的检查、快照、staging、journal 与 rollback。
-7. Windows Release 构建与自动化通过，交付可运行目录。计划保持等待真实下载验收状态，真实指标通过后再完成归档。
+7. Windows Release 构建与自动化通过，交付可运行目录；真实语料的查询、性能、体积、构建和更新成本通过验收后完成归档。
 
 ## 前置条件
 
@@ -70,16 +70,16 @@
 - [x] 更新架构、spec、ADR、路线图与旧计划 superseded 记录。
 - [x] 在 Windows 执行 Release build、相关及全量测试，构建本地 Release 目录并做隔离 smoke。
 - [x] 核对并删除默认数据根旧内容，重置 Manager 下载统计，记录不可恢复边界和新程序下载步骤。
-- [ ] 用户下载真实数据后执行相关性、P50/P95、体积、全量构建和单页更新验收。
+- [x] 用户下载真实数据后执行相关性、P50/P95、体积、全量构建、单页更新、索引对照和受保护数据库交换验收。
 
-当前实施进度为 8/9。唯一未完成项是真实数据库验收；该项依赖用户使用本地 Release 完成 Wiki 数据下载，因此计划保持打开，不归档。
+当前实施与真实验收进度为 9/9。验收明细见 `real-acceptance.md`；本计划已按治理规则归档。
 
 ## 验证与回归计划
 
 - Core：表格合并单元格、Infobox 掉落、嵌套列表、异常 HTML、单字/双字、多词顺序、Alias/Redirect、层级排序、去重、取消、字面符号和事务回滚。
 - Application/Windows：Search 透传、结果来源、Anchor 点击、Viewer/收藏/Wiki 切换、raw 数据库导入导出和恢复。
 - Windows：Release solution build、全量 .NET tests、本地 Release 运行目录、搜索到唯一 Reader 的隔离 smoke。
-- 后续真实库：八个核心查询；冷暖延迟及 P50/P95；各表/索引体积；下载构建与单页更新成本。暖查询 P95 目标不超过 200 ms。
+- 真实库：八个核心查询；冷暖延迟及 P50/P95；各表/索引体积；下载构建与单页更新成本。暖查询 P95 目标不超过 200 ms。
 
 ## 风险与回退
 
@@ -95,20 +95,32 @@
 - 2026-09-14：完成 v2 数据库、区域提取、contentless FTS5、Alias、多层搜索、raw `.db` 交换收拢及调用方适配。
 - 2026-09-14：Windows Release solution build 以 0 warning/0 error 通过；全量测试 307/307 通过；self-contained 本地 Release 与绑定 Python Runtime 构建完成，隔离 v2 数据库的搜索到 Reader smoke 通过。
 - 2026-09-14：关闭测试程序后核对默认数据根，只删除注册的 `Terraria_Wiki_zh/data.db` 所在内容目录并清空空的 `Temp`；Manager 对应下载统计重置为 0。配置、Manager 备份、日志、设置及 AI 会话未删除。
+- 2026-09-14：用户确认完整下载结束。下载库包含 4359 页、28700 条 Redirect、25730 个资源、25022 个章节和 332386 个搜索区域。
+- 2026-09-14：真实查询发现全局候选上限会遮蔽实体页面区域，并发现区域 Anchor 会误取后代引用 ID；增加实体页内召回、收紧 Redirect/Alias 变体和真实 Anchor 选择，加工版本升至 2。
+- 2026-09-14：真实库八个查询全部通过；200 个暖查询样本 P50 21.8570 ms、P95 81.2922 ms。全库重建 124.6768 秒，代表页事务更新 P95 78.5299 ms。
+- 2026-09-14：同语料索引对照后保留字符位置索引；验收副本经受保护 raw `.db` 交换安装为默认活动库。最终 Release build、310/310 测试和隔离 GUI smoke 通过。
 
 ## 发现、偏差与决策
 
 - 被否决旧方案保留 trigram 与 ShortTerm 派生表，并在启动后台构建；本轮不复用该路径。
-- 官方页面在线访问返回 403；本地页面 HTML 足以确认 Boss 掉落位于 Infobox 分组列表，宝藏袋页面存在 colspan/rowspan 表格。本轮自动化使用合成 HTML，真实验收等待新下载库。
+- 官方页面在线访问返回 403；下载后的本地 HTML 和数据库成为真实验收事实源。
+- 初次隔离 smoke 的显式 `--data-root` 被既有 Host 设置逻辑持久化，导致用户下载落入 smoke 目录。下载完成后核对库身份、计数与合成标记，将完整内容目录移回默认数据根，同步 Manager 统计并恢复 Host 设置；后续 smoke 固定使用独立 `--host-settings`。
+- 全局 FTS 候选上限不能保证实体页面的相关区域进入排序。搜索现在对已解析实体页补充受页面约束的其他概念召回，且 Redirect 只在名称包含关系成立时同时检索原名；社区 Alias 只检索规范实体名，避免“猪鲨链球”等偶然正文抢占实体结果。
+- 后代引用 ID 不是区域位置。加工版本 2 只接受区域自身/祖先 ID，标题只接受自身/直接子节点 ID；旧加工版本由启动与导入校验明确拒绝。
+- 真实全库逐页替换会留下可合并的 FTS 段。完整下载增加 FTS5/SQLite 优化和空间回收，增量与失败重试只优化实际变更后的索引。
 
 ## 验证结果
 
-- `dotnet build Terraria_Wiki.Core.slnx -c Release --no-restore`：通过，0 warning、0 error。
-- `dotnet test Terraria_Wiki.Core.slnx -c Release --no-build --no-restore`：通过，Core 48、Application 51、WikiTools 45、Windows 163，共 307/307；合成语料覆盖八个核心查询。
+- `dotnet build Terraria_Wiki.Core.slnx -c Release --no-restore`：最终源码在 Windows 通过，9 projects，0 warning、0 error。
+- `dotnet test Terraria_Wiki.Core.slnx -c Release --no-build --no-restore`：最终源码通过，Core 51、Application 51、WikiTools 45、Windows 163，共 310/310。
 - 本地 Release：`artifacts/local-release/rebuild-local-wiki-search/Terraria_Wiki.Windows.exe`；self-contained win-x64，含 Viewer、Search Alias 与由锁定依赖生成的 Python Runtime。
-- 隔离 smoke：`success=true`，搜索返回 3 个区域结果，Redirect 页面打开、Reader/Viewer 导航、脚本、样式、图片、音频与退出清理均通过；证据位于 `artifacts/local-release/rebuild-local-wiki-search-smoke.json`。
-- 本轮没有使用真实下载语料，因此不报告相关性、P50/P95、真实数据库体积或构建成本达标。
+- 最终隔离 smoke：使用独立 Host 设置和合成数据根，`success=true`，搜索返回 3 个区域结果，Redirect 页面打开、Reader/Viewer 导航、脚本、样式、图片、音频与退出清理均通过；证据为 `artifacts/acceptance/rebuild-local-wiki-search/final-windows-smoke.json`。
+- 真实库：格式 2、加工版本 2、Wiki ID 1，`integrity_check=ok`；数据库 4,132,286,464 字节，其中媒体 Blob 3,512,314,689 字节、页面 HTML 470,447,097 字节、区域行 55,326,370 字节、FTS 载荷 38,965,260 字节。
+- 八个查询均返回有效区域和完整证据；三个组合查询首项分别为光之女皇、猪龙鱼公爵和克苏鲁之眼。暖查询 P50 21.8570 ms、P95 81.2922 ms，满足 200 ms 目标。
+- 全库加工版本 2 重建：4359 页、124.6768 秒、平均 28.6022 ms/页；“光之女皇”20 次页面事务更新 P50 44.7355 ms、P95 78.5299 ms。
+- 索引对照：当前字符位置独立索引 42,627,072 字节，trigram+短词扫描 69,296,128 字节，unigram/bigram 63,873,024 字节；当前方案在完整排序下八个预期页面均为首项，故保持不变。
+- raw `.db` 真实交换使用 inspection token、staging、backup、journal 与 rollback 路径，通过后无交换残留，默认数据根和 Manager 统计正确。
 
 ## 完成摘要
 
-实现交付完成，等待用户使用本地 Release 重新下载 Wiki 数据并通知继续真实验收。真实验收完成前不归档本变更。
+实现与真实数据库验收均已完成。最终程序继续使用单一 v2 内容库和区域级字符位置 FTS5；未制作安装包或公开发布。详细证据见 `real-acceptance.md`，本变更进入归档。

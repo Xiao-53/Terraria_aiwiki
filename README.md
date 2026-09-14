@@ -29,7 +29,7 @@ codex
 - Windows 默认数据根决策：[`docs/adr/0009-use-managed-default-windows-data-root.md`](./docs/adr/0009-use-managed-default-windows-data-root.md)
 - Windows 单文件数据库交换决策：[`docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md`](./docs/adr/0011-use-managed-data-root-and-raw-database-transfer.md)
 - v2 区域索引 Wiki 数据库决策：[`docs/adr/0012-use-v2-region-indexed-wiki-database.md`](./docs/adr/0012-use-v2-region-indexed-wiki-database.md)
-- 进行中的本地 Wiki 区域搜索重构：[`openspec/changes/rebuild-local-wiki-search/plan.md`](./openspec/changes/rebuild-local-wiki-search/plan.md)
+- 已归档的本地 Wiki 区域搜索重构与真实数据库验收：[`openspec/changes/archive/rebuild-local-wiki-search/plan.md`](./openspec/changes/archive/rebuild-local-wiki-search/plan.md)
 - 已完成 Phase 00 记录：[`openspec/changes/archive/phase-00-migration-baseline/plan.md`](./openspec/changes/archive/phase-00-migration-baseline/plan.md)
 - 已完成 Phase 01 记录：[`openspec/changes/archive/phase-01-portable-wiki-core/plan.md`](./openspec/changes/archive/phase-01-portable-wiki-core/plan.md)
 - 已完成 Phase 02 记录：[`openspec/changes/archive/phase-02-search-fix/plan.md`](./openspec/changes/archive/phase-02-search-fix/plan.md)
@@ -138,7 +138,7 @@ Migration Baseline & Host Spike
 
 已完整关闭并归档的 AI 会话 Token 优化变更在源码中把 AI Read 改为章节化、有界、可 continuation 的 `wiki_blocks_v1` 纯文本证据，把 Sidecar 升级到 NDJSON v2，并增加最多最近 4 轮纯文本上下文、本地完整 transcript、新对话、自动保存、整段收藏和对话历史。原 Wiki 浏览历史入口及 Application/Viewer 读写已下线，但旧 WikiHistory 表、FTS5、Redirect、Application/Viewer 完整 HTML、来源和唯一 Reader 内存返回栈保持兼容。旧 change 未执行的真实 Token、答案、来源与窗口验收保留为历史边界，不再作为开放项；后续优化另建 plan，本仓库验证不得自行产生付费请求。
 
-本地 Wiki 正在按 ADR 0012 切换到 v2 内容库：页面下载事务同时提交完整 HTML、章节、搜索区域和 contentless FTS5，启动只恢复 raw import journal、检查格式/身份并使用 Manager 统计快照。旧内容库、Anchor 迁移和 `.pkg` 已退休；真实语料的相关性、性能与体积等待用户用新 Release 下载后验收。
+本地 Wiki 已按 ADR 0012 切换到 v2 内容库：页面下载事务同时提交完整 HTML、章节、搜索区域和 contentless FTS5，启动只恢复 raw import journal、检查格式/身份并使用 Manager 统计快照。旧内容库、Anchor 迁移和 `.pkg` 已退休。完整中文 Wiki 的八个查询与 Viewer Anchor 验收通过，200 个暖查询样本 P95 为 81.2922 ms；完整证据见归档 change。
 
 当前合并源码最近记录的 Windows Release solution build 已通过 9 项目、0 warning / 0 error，全量 .NET tests 为 349/349；AI evidence 变更的 Python lint、format、strict mypy 通过，离线 tests 为 109 passed / 7 deselected，并完成两组五轮真实 DeepSeek 验收。各证据边界和未验证项以相应归档计划为准；本轮治理整理未重新运行产品构建、发布或付费请求。
 
