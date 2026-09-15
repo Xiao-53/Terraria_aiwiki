@@ -10,6 +10,7 @@ public sealed record ApplicationPreferences
     public const int DefaultResourceConcurrency = 10;
     public const int DefaultRetryAttempts = 5;
     public const int DefaultActiveWikiId = 1;
+    public const int DefaultWikiFullScanIntervalDays = 14;
 
     public string Language { get; init; } = DefaultLanguage;
     public string AppTheme { get; init; } = DefaultAppTheme;
@@ -19,4 +20,6 @@ public sealed record ApplicationPreferences
     public int PageConcurrency { get; init; } = DefaultPageConcurrency;
     public int ResourceConcurrency { get; init; } = DefaultResourceConcurrency;
     public int RetryAttempts { get; init; } = DefaultRetryAttempts;
+    // null disables periodic checks, but never recovery or identity checks.
+    public int? WikiFullScanIntervalDays { get; init; } = DefaultWikiFullScanIntervalDays;
 }

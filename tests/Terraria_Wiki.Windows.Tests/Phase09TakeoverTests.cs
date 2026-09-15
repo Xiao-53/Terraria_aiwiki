@@ -9,6 +9,27 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class Phase09TakeoverTests
 {
     [Fact]
+    public async Task UpdateReportsActualDownloadsSkippedDeletedAndIncompleteFailures()
+    {
+        var active = Wiki(1, "同步测试");
+        using var viewModel = new WikiManagementViewModel();
+        viewModel.Attach(Actions(
+            list: _ => Task.FromResult<IReadOnlyList<WikiBookSnapshot>>([active]),
+            active: _ => Task.FromResult(active)) with
+        {
+            Update = (_, _, _) => Task.FromResult(new WikiOperationSummary(
+                Pages: 3, Failed: 1, Changed: true, Checked: 10000, Skipped: 9996, Deleted: 1))
+        });
+        await viewModel.RefreshAsync();
+        await viewModel.UpdateAsync();
+        Assert.Contains("未完成", viewModel.StatusMessage);
+        Assert.Contains("下载页面 3", viewModel.StatusMessage);
+        Assert.Contains("跳过 9,996", viewModel.StatusMessage);
+        Assert.Contains("删除 1", viewModel.StatusMessage);
+        Assert.Contains("失败 1", viewModel.StatusMessage);
+    }
+
+    [Fact]
     public async Task ManagementSwitchesOnlyAfterConfirmationAndRequestsViewerRebind()
     {
         var first = Wiki(1, "泰拉瑞亚中文 Wiki");
@@ -174,10 +195,12 @@ public sealed class Phase09TakeoverTests
         Assert.DoesNotContain("页面下载完成：", viewModel.StatusMessage, StringComparison.Ordinal);
     }
 
-    [Fact]
-    public async Task SettingsSaveAllValidatedFieldsAndApplyThemToCurrentSession()
+    [Theory]
+    [InlineData(null)]
+    [InlineData(90)]
+    public async Task SettingsSaveAllValidatedFieldsAndApplyThemToCurrentSession(int? fullScanDays)
     {
-        var original = new ApplicationPreferences();
+        var original = new ApplicationPreferences { WikiFullScanIntervalDays = fullScanDays };
         ApplicationPreferences? saved = null;
         ApplicationPreferences? applied = null;
         using var viewModel = new SettingsViewModel(value =>
@@ -215,6 +238,7 @@ public sealed class Phase09TakeoverTests
         Assert.Equal(3, saved.PageConcurrency);
         Assert.Equal(15, saved.ResourceConcurrency);
         Assert.Equal(10, saved.RetryAttempts);
+        Assert.Equal(fullScanDays, saved.WikiFullScanIntervalDays);
         Assert.Equal(saved, applied);
         Assert.False(viewModel.IsDirty);
     }

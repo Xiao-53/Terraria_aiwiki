@@ -749,6 +749,16 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         IsProgressIndeterminate = progress.Total <= 0;
         ProgressMaximum = Math.Max(1, progress.Total);
         ProgressValue = Math.Clamp(progress.Current, 0, (int)ProgressMaximum);
+        label = progress.Code switch
+        {
+            "sync-discovery" => "发现远端变化",
+            "sync-full-scan" => "核对完整目录",
+            "sync-delete" => "同步删除与重定向",
+            "sync-index-maintenance" => "整理更新后的搜索索引",
+            "page-download" => "下载页面",
+            "resource-downloaded" or "resource-skipped" => "核对媒体资源",
+            _ => label
+        };
         StatusMessage = progress.Total > 0
             ? $"{label}：{progress.Current:N0} / {progress.Total:N0}"
             : $"{label}正在进行…";
@@ -808,7 +818,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     }
 
     private static string FormatSummary(string label, WikiOperationSummary summary) =>
-        $"{label}完成：页面 {summary.Pages:N0}、重定向 {summary.Redirects:N0}、资源 {summary.Resources:N0}、失败 {summary.Failed:N0}。";
+        $"{label}{(summary.Failed > 0 ? "未完成" : "完成")}：下载页面 {summary.Pages:N0}、跳过 {summary.Skipped:N0}、删除 {summary.Deleted:N0}、重定向 {summary.Redirects:N0}、资源 {summary.Resources:N0}、失败 {summary.Failed:N0}。";
 
     private static string FormatBytes(long bytes)
     {

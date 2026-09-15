@@ -110,11 +110,13 @@ public partial class DatabaseService
             throw new InvalidOperationException("Search index maintenance requires a content database.");
         await Init(cancellationToken: cancellationToken);
         await _db.ExecuteAsync(
-            "INSERT INTO WikiSearchRegionFts(WikiSearchRegionFts) VALUES('optimize');")
-            .WaitAsync(cancellationToken);
-        await _db.ExecuteAsync("PRAGMA optimize;").WaitAsync(cancellationToken);
+            "INSERT INTO WikiSearchRegionFts(WikiSearchRegionFts) VALUES('optimize');");
+        cancellationToken.ThrowIfCancellationRequested();
+        await _db.ExecuteAsync("PRAGMA optimize;");
+        cancellationToken.ThrowIfCancellationRequested();
         if (reclaimSpace)
-            await _db.ExecuteAsync("VACUUM;").WaitAsync(cancellationToken);
+            await _db.ExecuteAsync("VACUUM;");
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public SQLiteAsyncConnection GetConnection() => _db;
@@ -241,7 +243,9 @@ public partial class DatabaseService
                 cancellationToken);
             return;
         }
-        await _db.InsertOrReplaceAsync(item).WaitAsync(cancellationToken);
+        cancellationToken.ThrowIfCancellationRequested();
+        await _db.InsertOrReplaceAsync(item);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public async Task SaveItemsAsync<T>(

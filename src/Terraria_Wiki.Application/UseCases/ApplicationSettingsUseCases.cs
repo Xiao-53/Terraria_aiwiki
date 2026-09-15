@@ -106,6 +106,9 @@ public sealed class ApplicationSettingsUseCases
             RetryAttempts = stored.RetryAttempts is >= 0 and <= 20
                 ? stored.RetryAttempts
                 : ApplicationPreferences.DefaultRetryAttempts,
+            WikiFullScanIntervalDays = stored.WikiFullScanIntervalDays is <= 0
+                ? ApplicationPreferences.DefaultWikiFullScanIntervalDays
+                : stored.WikiFullScanIntervalDays,
         };
     }
 
@@ -125,6 +128,8 @@ public sealed class ApplicationSettingsUseCases
             throw Invalid(nameof(preferences.ResourceConcurrency));
         if (preferences.RetryAttempts is < 0 or > 20)
             throw Invalid(nameof(preferences.RetryAttempts));
+        if (preferences.WikiFullScanIntervalDays is <= 0)
+            throw Invalid(nameof(preferences.WikiFullScanIntervalDays));
     }
 
     private static ApplicationUseCaseException Invalid(string propertyName) => new(

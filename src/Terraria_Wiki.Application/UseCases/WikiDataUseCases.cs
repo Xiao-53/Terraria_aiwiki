@@ -222,7 +222,8 @@ public sealed class WikiDataUseCases
             preferences.SearchLimit,
             preferences.PageConcurrency,
             preferences.ResourceConcurrency,
-            preferences.RetryAttempts).Validate();
+            preferences.RetryAttempts,
+            preferences.WikiFullScanIntervalDays).Validate();
     }
 
     private WikiDataPaths Paths(WikiBook book) => WikiDataPaths.Create(_state.DataRoot, book);

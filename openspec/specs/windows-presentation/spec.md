@@ -50,6 +50,7 @@
 
 - 左侧“数据管理”只经 Application `ActiveWikiUseCases` 与 `WikiDataUseCases` 列出/切换 Wiki、刷新统计，并执行页面/资源下载、更新、失败项重试或清理、数据库整理、资源删除和整库删除；Presentation 不直接访问 SQLite 或复制 Core 生命周期实现。
 - 下载、更新、重试和维护等长操作显示页内进度、当前动作与取消入口。失败只显示不含本机路径的安全状态，不阻塞 Chat、资料库和离线设置访问。
+- Wiki 更新沿用现有控件，区分发现变化、完整目录核对、页面下载、媒体核对、删除和索引维护；完成摘要显示实际下载页面、跳过、删除、重定向、资源与失败数，有失败时明确显示“未完成”。
 - 切换 Wiki、清理失败项、删除资源、删除整库和导入覆盖必须先显示目标与影响范围，再经页内确认调用既有 Application 用例。活动数据变化后刷新搜索、收藏和资料库；需要时让同一个 Viewer/Reader 重新绑定动态 loopback，AI 继续通过同一个 Application 查询边界读取新内容，不创建第二个会话或要求重启应用。
 - Windows 数据管理页只交换当前活动 Wiki 的完整 SQLite `data.db`。导入先调用 `InspectDatabaseAsync` 完整检查并保存 inspection token，显示文件名、大小、当前目标 Wiki 与覆盖范围；用户确认后才调用 `ImportDatabaseAsync`。成功后刷新统计并重绑唯一 Viewer，失败或中断由既有 staging/backup/journal 恢复原库。
 - Windows 导出调用 `ExportDatabaseAsync` 从活动连接生成包含 WAL 最新提交的独立单文件快照。原生保存选择器决定 `.db` 目标；若目标已存在，宿主先在同目录写唯一临时文件，完整成功后才替换目标，失败或取消清理临时文件并保留旧目标。

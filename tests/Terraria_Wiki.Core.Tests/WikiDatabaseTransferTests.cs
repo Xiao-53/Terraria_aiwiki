@@ -38,6 +38,7 @@ public sealed class WikiDatabaseTransferTests : IAsyncLifetime
     {
         var (book, paths, transfer) = await CreateTransferAsync();
         await _content!.SaveItemAsync(Page("Snapshot Page", "snapshot"));
+        await _content.WriteSyncMetadataAsync("sync_state", "{\"Version\":1,\"AnchorId\":123}", default);
         await File.WriteAllTextAsync(paths.ResourceListPath, "keep auxiliary data");
         var exportPath = Path.Combine(_root, "exports", "wiki.db");
         await transfer.ExportDatabaseAsync(paths, exportPath, _content);
@@ -50,6 +51,9 @@ public sealed class WikiDatabaseTransferTests : IAsyncLifetime
         Assert.True(result.ReplacedExistingData);
         Assert.Equal("snapshot", (await _content.GetItemAsync<WikiPage>("Snapshot Page"))?.Content);
         Assert.Null(await _content.GetItemAsync<WikiPage>("After Export"));
+        Assert.Null(await _content.ReadSyncMetadataAsync("sync_state", default));
+        using (var source = new SQLiteConnection(exportPath, SQLiteOpenFlags.ReadOnly))
+            Assert.Contains("123", source.ExecuteScalar<string>("SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'sync_state'"));
         Assert.Equal("keep auxiliary data", await File.ReadAllTextAsync(paths.ResourceListPath));
         Assert.Empty(Directory.EnumerateDirectories(_root, "*.import-backup-*"));
         Assert.Empty(Directory.EnumerateFiles(paths.StagingRoot, "*.journal.json"));

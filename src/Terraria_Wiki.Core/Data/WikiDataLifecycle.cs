@@ -10,7 +10,7 @@ using Terraria_Wiki.Services;
 
 namespace Terraria_Wiki.Core.Data;
 
-public sealed class WikiDataLifecycle
+public sealed partial class WikiDataLifecycle
 {
     private static readonly JsonSerializerOptions JsonOptions = new()
     {
@@ -47,6 +47,7 @@ public sealed class WikiDataLifecycle
             options = (options ?? new WikiOperationOptions()).Validate();
             Prepare(paths);
             progress?.Report(new WikiProgress("download-start"));
+            await _contentDatabase.WriteSyncMetadataAsync("sync_state", "null", cancellationToken);
 
             var redirects = await FetchRedirectsAsync(book, options, progress, cancellationToken);
             var pagesListed = await FetchPageListAsync(book, paths.PageListPath, options, progress, cancellationToken);
@@ -99,38 +100,8 @@ public sealed class WikiDataLifecycle
         WikiOperationOptions? options = null,
         IProgress<WikiProgress>? progress = null,
         CancellationToken cancellationToken = default) =>
-        RunExclusiveAsync(async () =>
-        {
-            options = (options ?? new WikiOperationOptions()).Validate();
-            Prepare(paths);
-            progress?.Report(new WikiProgress("update-start"));
-
-            var redirects = await FetchRedirectsAsync(book, options, progress, cancellationToken);
-            await FetchPageListAsync(book, paths.PageListPath, options, progress, cancellationToken);
-            var updateCount = await BuildUpdateListAsync(paths.PageListPath, paths.UpdatePageListPath, options, progress, cancellationToken);
-            if (updateCount == 0)
-                return new WikiOperationSummary(Redirects: redirects);
-
-            var pages = await DownloadPagesAsync(book, paths.UpdatePageListPath, paths.UpdateResourceListPath, paths.FailedPageListPath, options, progress, cancellationToken);
-            if (pages > 0)
-                await _contentDatabase.OptimizeSearchIndexAsync(cancellationToken: cancellationToken);
-            await WikiFileOperations.AppendFileAsync(paths.UpdateResourceListPath, paths.ResourceListPath, cancellationToken);
-            DeduplicateInPlace(paths.ResourceListPath);
-            var resources = includeResources
-                ? await DownloadResourcesAsyncCore(book, paths.UpdateResourceListPath, paths.TemporaryResourceListPath, paths.FailedResourceListPath, options, progress, cancellationToken)
-                : 0;
-            book.UpdateTime = DateTime.Now;
-            await _managerDatabase.SaveItemAsync(book, cancellationToken);
-            await RefreshBookStatisticsCoreAsync(book, cancellationToken);
-            CleanTransientFiles(paths);
-
-            return new WikiOperationSummary(
-                Pages: pages,
-                Redirects: redirects,
-                Resources: resources,
-                Failed: CountLines(paths.FailedPageListPath) + CountLines(paths.FailedResourceListPath),
-                Changed: true);
-        });
+        RunExclusiveAsync(() => SynchronizeAsync(book, paths, includeResources,
+            (options ?? new WikiOperationOptions()).Validate(), progress, cancellationToken));
 
     public Task<WikiOperationSummary> RetryFailuresAsync(
         WikiBook book,
@@ -141,6 +112,8 @@ public sealed class WikiDataLifecycle
         RunExclusiveAsync(async () =>
         {
             options = (options ?? new WikiOperationOptions()).Validate();
+            if ((await ReadSyncStateAsync(cancellationToken))?.Incomplete == true)
+                return await SynchronizeAsync(book, paths, book.IsResourceDownloaded, options, progress, cancellationToken);
             Prepare(paths, cleanTransient: false);
             var pages = 0;
             var resources = 0;
@@ -363,34 +336,6 @@ public sealed class WikiDataLifecycle
         return total;
     }
 
-    private async Task<int> BuildUpdateListAsync(
-        string pageListPath,
-        string updateListPath,
-        WikiOperationOptions options,
-        IProgress<WikiProgress>? progress,
-        CancellationToken cancellationToken)
-    {
-        DeleteIfExists(updateListPath);
-        using var writer = new BatchLineWriter(updateListPath);
-        var total = CountLines(pageListPath);
-        var current = 0;
-        var updates = 0;
-        foreach (var line in File.ReadLines(pageListPath))
-        {
-            cancellationToken.ThrowIfCancellationRequested();
-            var page = ParsePageInfo(line);
-            if (page is null) continue;
-            var existing = await _contentDatabase.GetItemAsync<WikiPage>(page.Title, cancellationToken);
-            if (existing is null || existing.LastModified != page.LastModified)
-            {
-                writer.Add(line);
-                updates++;
-            }
-            progress?.Report(new WikiProgress("update-check", ++current, total, page.Title));
-        }
-        return updates;
-    }
-
     private async Task<int> DownloadPagesAsync(
         WikiBook book,
         string pageListPath,
@@ -429,6 +374,8 @@ public sealed class WikiDataLifecycle
 
         var processed = WikiContentProcessor.Process(html, book, pageInfo.Title);
         foreach (var resource in processed.ResourceUrls) resourceWriter.Add(resource);
+        await _contentDatabase.WriteSyncMetadataAsync("sync_resources:" + pageInfo.Title,
+            JsonSerializer.Serialize(processed.ResourceUrls), cancellationToken);
         await _contentDatabase.SavePageWithSearchAsync(new WikiPage
         {
             Title = pageInfo.Title,
@@ -471,18 +418,22 @@ public sealed class WikiDataLifecycle
     {
         var fileName = WikiContentProcessor.GetFileNameFromUrl(url);
         var existing = await _contentDatabase.GetItemAsync<WikiAsset>(fileName, cancellationToken);
-        DateTimeOffset? modified = existing?.LastModified is { } value
+        DateTimeOffset? modified = existing?.LastModified is { } value && value != DateTime.MinValue
             ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
             : null;
         var response = await _httpTransport.GetContentAsync(book, new Uri(url), modified, cancellationToken);
-        if (response.IsNotModified) return false;
+        if (response.IsNotModified)
+        {
+            if (existing is null) throw new InvalidDataException("Resource returned 304 without a local copy.");
+            return false;
+        }
 
         await _contentDatabase.SaveItemAsync(new WikiAsset
         {
             FileName = fileName,
             Data = response.Data,
             MimeType = response.ContentType,
-            LastModified = response.LastModified?.UtcDateTime ?? DateTime.UtcNow
+            LastModified = response.LastModified?.UtcDateTime ?? DateTime.MinValue
         }, cancellationToken);
         return true;
     }
@@ -533,9 +484,9 @@ public sealed class WikiDataLifecycle
             cancellationToken.ThrowIfCancellationRequested();
             try { return await action(); }
             catch (OperationCanceledException) { throw; }
-            catch when (++retry <= retryAttempts)
+            catch (Exception exception) when (++retry <= retryAttempts)
             {
-                await Task.Delay(1000, cancellationToken);
+                await WikiHttpRetry.DelayAsync(exception, retry, cancellationToken);
             }
         }
     }

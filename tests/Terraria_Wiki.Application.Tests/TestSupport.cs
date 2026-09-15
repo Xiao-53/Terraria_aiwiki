@@ -193,6 +193,31 @@ internal sealed class LifecycleFixtureTransport : IWikiHttpTransport
             return Task.FromResult("<div class='mw-spcontent'><ol><li><a>Blade</a><a>Sword</a></li></ol></div>");
         if (value.Contains("action=query", StringComparison.Ordinal))
         {
+                if (value.Contains("formatversion=2", StringComparison.Ordinal))
+                {
+                    var query = uri.Query.TrimStart('?').Split('&').Select(part => part.Split('=', 2))
+                        .ToDictionary(part => part[0], part => Uri.UnescapeDataString(part[1]));
+                    if (query.ContainsKey("curtimestamp"))
+                        return Task.FromResult("{\"curtimestamp\":\"2026-09-15T00:00:00Z\",\"query\":{}}");
+                    if (query.GetValueOrDefault("list") is { } list)
+                        return Task.FromResult("{\"query\":{\"" + list + "\":[]}}");
+                    if (query.ContainsKey("redirects"))
+                        return Task.FromResult("{\"query\":{\"redirects\":[{\"from\":\"Blade\",\"to\":\"Sword\"}]}}");
+                    var titles = query.GetValueOrDefault("titles")?.Split('|') ?? ["Sword", "Blade"];
+                    var pages = titles.Select(title =>
+                    {
+                        var page = new Dictionary<string, object> { ["title"] = title, ["ns"] = 0 };
+                        if (title is "Sword" or "Blade")
+                        {
+                            page["pageid"] = title == "Sword" ? 1 : 2;
+                            page["touched"] = PageTouched;
+                            if (title == "Blade") page["redirect"] = true;
+                        }
+                        else page["missing"] = true;
+                        return page;
+                    }).ToArray();
+                    return Task.FromResult(System.Text.Json.JsonSerializer.Serialize(new { query = new { pages } }));
+                }
             return Task.FromResult(
                 "{\"query\":{\"pages\":{\"1\":{\"title\":\"Sword\",\"touched\":\""
                 + PageTouched

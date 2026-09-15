@@ -128,6 +128,12 @@ public sealed class WikiDatabaseTransferService
                 throw Error("inspection-token-mismatch", "The database file changed after it was inspected.");
             var inspection = new WikiDatabaseInspection(sourcePath, sourceBytes, copiedToken);
             ValidateDatabase(stagedDatabase, book.Id);
+            using (var stagedConnection = new SQLiteConnection(stagedDatabase))
+            {
+                var syncState = stagedConnection.ExecuteScalar<string>("SELECT Value FROM WikiDatabaseMetadata WHERE Key = 'sync_state'");
+                if (!WikiSyncState.CanPreserveOnImport(syncState, book))
+                    stagedConnection.Execute("DELETE FROM WikiDatabaseMetadata WHERE Key = 'sync_state'");
+            }
             journal = UpdateJournal(journal, ImportPhase.Validated);
             activeTarget = true;
             await _activeContentDatabase.CloseConnection(cancellationToken);

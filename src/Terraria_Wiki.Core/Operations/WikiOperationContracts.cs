@@ -4,7 +4,8 @@ public sealed record WikiOperationOptions(
     int MaxSearchResults = 50,
     int PageConcurrency = 2,
     int ResourceConcurrency = 10,
-    int MaxRetryAttempts = 5)
+    int MaxRetryAttempts = 5,
+    int? FullScanIntervalDays = 14)
 {
     public WikiOperationOptions Validate()
     {
@@ -12,6 +13,7 @@ public sealed record WikiOperationOptions(
         if (PageConcurrency is < 1 or > 3) throw new ArgumentOutOfRangeException(nameof(PageConcurrency));
         if (ResourceConcurrency is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(ResourceConcurrency));
         if (MaxRetryAttempts is < 0 or > 20) throw new ArgumentOutOfRangeException(nameof(MaxRetryAttempts));
+        if (FullScanIntervalDays is <= 0) throw new ArgumentOutOfRangeException(nameof(FullScanIntervalDays));
         return this;
     }
 }
@@ -27,7 +29,11 @@ public sealed record WikiOperationSummary(
     int Redirects = 0,
     int Resources = 0,
     int Failed = 0,
-    bool Changed = false);
+    bool Changed = false,
+    int Checked = 0,
+    int Skipped = 0,
+    int Deleted = 0,
+    bool UsedFullScan = false);
 
 public sealed class WikiOperationException : Exception
 {

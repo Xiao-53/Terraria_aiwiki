@@ -330,7 +330,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         IsDirty = false;
     }
 
-    private ApplicationPreferences BuildPreferences() => new()
+    private ApplicationPreferences BuildPreferences() => (_savedPreferences ?? new ApplicationPreferences()) with
     {
         Language = LanguageIndex == 1 ? "en-us" : "zh-cn",
         AppTheme = AppThemeIndex switch { 1 => "light", 2 => "dark", _ => "auto" },

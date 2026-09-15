@@ -52,6 +52,7 @@ public sealed class ApplicationSettingsTests
             PageConcurrency = 0,
             ResourceConcurrency = 21,
             RetryAttempts = -1,
+            WikiFullScanIntervalDays = 0,
         };
         await using var fixture = await ApplicationFixture.CreateAsync(invalid, initialize: false);
 
@@ -65,6 +66,7 @@ public sealed class ApplicationSettingsTests
         Assert.Equal(2, repaired.PageConcurrency);
         Assert.Equal(10, repaired.ResourceConcurrency);
         Assert.Equal(5, repaired.RetryAttempts);
+        Assert.Equal(14, repaired.WikiFullScanIntervalDays);
         Assert.Equal(repaired, fixture.Settings.Preferences);
         Assert.Equal(1, fixture.Settings.PreferencesSaveCount);
     }
@@ -94,5 +96,24 @@ public sealed class ApplicationSettingsTests
         new ApplicationPreferences { PageConcurrency = 4 },
         new ApplicationPreferences { ResourceConcurrency = 0 },
         new ApplicationPreferences { RetryAttempts = 21 },
+        new ApplicationPreferences { WikiFullScanIntervalDays = 0 },
+        new ApplicationPreferences { WikiFullScanIntervalDays = -1 },
     };
+
+    [Theory]
+    [InlineData(null)]
+    [InlineData(1)]
+    [InlineData(30)]
+    [InlineData(int.MaxValue)]
+    public async Task Full_scan_interval_is_saved_without_touching_content_state(int? days)
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        var database = fixture.State.ContentDatabase;
+        await database.SaveItemAsync(new Terraria_Wiki.Models.WikiDatabaseMetadata { Key = "sync_state", Value = "preserve exactly" });
+        var settings = await fixture.Application.Settings.GetAsync();
+        var updated = await fixture.Application.Settings.SaveAsync(settings with { WikiFullScanIntervalDays = days });
+        Assert.Equal(days, updated.WikiFullScanIntervalDays);
+        Assert.Equal(days, fixture.Settings.Preferences!.WikiFullScanIntervalDays);
+        Assert.Equal("preserve exactly", (await database.GetItemAsync<Terraria_Wiki.Models.WikiDatabaseMetadata>("sync_state"))!.Value);
+    }
 }

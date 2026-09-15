@@ -17,6 +17,7 @@
 ## 设置与活动 Wiki
 
 - 强类型设置包含语言、主题、鼠标侧键、Search 上限、页面/资源并发和重试次数；活动 Wiki ID 独立存取。
+- WikiFullScanIntervalDays 默认为 14，接受正整数天数，null 关闭定期核对；非法存储值修复为默认，显式非法设置拒绝。保存周期只更新应用设置，不清除同步状态、不联网、不启动后台任务；首次同步、失败恢复和锚点失效仍强制核对。设置控件另由后续 UI change 实施。
 - 默认 Search 上限为 50，允许范围为 `1..100`；页面并发为 `1..3`，资源并发为 `1..20`，重试为 `0..20`。
 - 初始化打开 Manager、恢复全部已注册 Wiki 的未完成 raw import，再选择保存的 Wiki。
 - Content 初始化只检查 v2 格式、加工版本、Wiki 身份和状态，不迁移旧目录、不扫描 HTML、不全库建索引。没有数据库时创建当前 Wiki 的空 v2 库。
@@ -42,6 +43,7 @@
 
 - 下载、资源下载、更新、失败重试/清理、统计、VACUUM、删除资源和删除整库只作用于活动 Wiki。
 - 页面下载与更新复用 Core 页面事务；解析或事务失败保留在失败重试状态。
+- `UpdateAsync(bool includeResources, ...)` 保持签名，透传 Core 的增量/完整核对及恢复语义；summary 的 Pages 只计实际成功替换，Checked/Skipped/Deleted/UsedFullScan 区分检查、跳过、删除与完整核对。无内容变化时 Changed=false，仍可推进成功覆盖时间。
 - raw export 作用于活动 Wiki，通过 Core SQLite backup 返回独立 v2 `.db` 快照。
 - raw import 固定为 Inspect → inspection token → 调用方确认 → 当前活动 Wiki 覆盖；不从路径或文件名猜测目标。
 - import 使用消费者 pause、共享 gate、staging/backup/journal/rollback；成功后刷新 Wiki 统计，失败恢复原数据源。

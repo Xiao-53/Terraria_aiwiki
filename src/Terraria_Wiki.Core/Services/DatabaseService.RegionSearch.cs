@@ -35,6 +35,7 @@ public partial class DatabaseService
             transaction.Execute("DELETE FROM WikiSearchRegion WHERE PageTitle = ?", page.Title);
             transaction.Execute("DELETE FROM WikiSearchSection WHERE PageTitle = ?", page.Title);
             transaction.InsertOrReplace(page);
+            transaction.Execute("DELETE FROM WikiRedirect WHERE FromName = ?", page.Title);
 
             foreach (var draft in processed.SearchSections)
             {
@@ -68,7 +69,8 @@ public partial class DatabaseService
                     WikiSearchText.EncodeForIndex(region.ContextText),
                     WikiSearchText.EncodeForIndex(region.BodyText));
             }
-        }).WaitAsync(cancellationToken);
+        });
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     public async Task DeletePageWithSearchAsync(
@@ -82,7 +84,8 @@ public partial class DatabaseService
             DeleteRegionIndex(transaction, "WHERE PageTitle = ?", pageTitle);
             transaction.Execute("DELETE FROM WikiSearchSection WHERE PageTitle = ?", pageTitle);
             transaction.Execute("DELETE FROM WikiPage WHERE Title = ?", pageTitle);
-        }).WaitAsync(cancellationToken);
+        });
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private async Task DeleteAllPagesWithSearchAsync(CancellationToken cancellationToken)

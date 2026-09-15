@@ -9,6 +9,27 @@ namespace Terraria_Wiki.Core.Tests;
 public sealed class TransportModelTests
 {
     [Fact]
+    public async Task Rate_limit_preserves_retry_after_and_does_not_retry_before_long_server_delay()
+    {
+        using var client = new HttpClient(new ThrottledHandler());
+        var transport = new HttpClientWikiHttpTransport(client);
+        var exception = await Assert.ThrowsAsync<WikiHttpThrottleException>(() =>
+            transport.GetStringAsync(new WikiBook(), new Uri("https://wiki.test/api.php")));
+        Assert.Equal(TimeSpan.FromMinutes(5), exception.RetryAfter);
+        Assert.Same(exception, await Assert.ThrowsAsync<WikiHttpThrottleException>(() => WikiHttpRetry.DelayAsync(exception, 1, default)));
+    }
+
+    private sealed class ThrottledHandler : HttpMessageHandler
+    {
+        protected override Task<HttpResponseMessage> SendAsync(HttpRequestMessage request, CancellationToken cancellationToken)
+        {
+            var response = new HttpResponseMessage(HttpStatusCode.TooManyRequests);
+            response.Headers.RetryAfter = new System.Net.Http.Headers.RetryConditionHeaderValue(TimeSpan.FromMinutes(5));
+            return Task.FromResult(response);
+        }
+    }
+
+    [Fact]
     public async Task HttpTransportSendsDescriptiveUserAgentForWikiRequests()
     {
         using var handler = new RecordingHandler();
