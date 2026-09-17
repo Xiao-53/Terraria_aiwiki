@@ -25,10 +25,24 @@ publish/
 *.db-shm
 *.db-wal
 *.sqlite
+*.sqlite3
 *.sqlite-shm
 *.sqlite-wal
+*.sqlite3-shm
+*.sqlite3-wal
 *.pkg
 *.pak
+
+# Logs and local temporary files
+*.log
+*.tmp
+*.temp
+*.bak
+*.old
+*.orig
+*.rej
+**/node_modules/
+**/.cache/
 
 # Local secrets and editor / OS state
 .env
