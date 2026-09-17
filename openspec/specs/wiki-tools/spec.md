@@ -64,10 +64,10 @@
 
 v2 found 另有 `scope`，v1 与 not-found 不含此字段：
 
-- `mode`、`selected_section`、`anchor_found`：选择模式、章节路径及精确锚点是否匹配。section 要求明确 anchor（可由 Redirect 提供）；匹配真实 id，缺少 id 时允许标题名。缺失 anchor 返回空 blocks、目录及 `anchor_found=false`，不得当作成功目标证据。
+- `mode`、`selected_section`、`anchor_found`：选择模式、章节路径及精确锚点是否匹配。section 要求明确 anchor（可由 Redirect 提供）；匹配标题自身或其标题结构后代上的真实 `id` / `name`，同一标题的多个真实标记都精确指向同一章节且按 Ordinal 区分。没有任何真实标记时才允许用标题名回退；存在真实标记时标题显示名不是额外别名。缺失 anchor 返回空 blocks、目录及 `anchor_found=false`，不得当作成功目标证据。
 - `page_complete`：仅 page 模式全部遍历后为 true；`is_complete` 在 v2 只表示选择范围已遍历。section 完整不等于全页完整，即使该章节恰为唯一章节。
 - `content_version`：完整 HTML 的 SHA-256 内容身份，仅用于当次证据版本比较；`continuation_token`：存在后续块时非空。
-- `sections`：`{path, anchor}` 目录，最多 64 项，path 与 anchor 文本合计最多 4096 scalar。目录有界，不保证枚举所有章节；完整列表问题应通过 page continuation 验证覆盖。可用无 anchor 的原页 title 配合 mode=page 回到全页路径。
+- `sections`：`{path, anchor}` 目录，最多 64 项，path 与 anchor 文本合计最多 4096 scalar；每节仍只输出一个首选真实标记（无标记时为标题名），不把同节别名扩展为额外目录项。目录有界，不保证枚举所有章节；完整列表问题应通过 page continuation 验证覆盖。可用无 anchor 的原页 title 配合 mode=page 回到全页路径。
 
 Adapter 仍通过现有 `WikiReadResponse` 取得完整存储 HTML，但只在 WikiTools 内使用锁定的 HtmlAgilityPack 1.12.4 转换。模型工具结果不得包含完整 HTML、标签、属性、脚本、注释、隐藏/导航或媒体节点；正文中的非隐藏图标仅保留 alt 纯文本语义，不保留媒体对象或 URL。Application 与 Viewer 仍获得原始完整 HTML。标题层级、段落、列表、定义、代码、带列名的表格行、嵌套表格和多级表头及 infobox 语义必须保留。同章节正文去重使用精确文本，不规范化数字、标点或否定词。每次全部 `blocks.text` 合计最多 16384 个 Unicode scalar（与 Python `len` 对有效 Unicode 字符串的计数一致），分块不得切断 surrogate pair；超出时返回非空 `next_cursor`，不得把截断误报为 complete。page 首次排序是显式 anchor → 页面标题/导语 → focus 命中章节 → 其余正文；not-found 是成功结构化结果。Read 不写任何持久 Wiki 浏览历史。
 

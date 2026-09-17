@@ -4,7 +4,7 @@
 - Phase：无；跨 change 路线图
 - 执行环境：WSL2 Codex CLI 维护计划与平台无关检查；Windows 专属工作仍须在对应 Windows 目标环境验证
 - 创建日期：2026-09-12
-- 最后更新：2026-09-13
+- 最后更新：2026-09-17
 - 范围：Phase 11 关闭后的 Windows UI、AI/Token、公开发行遗留与未来 Phase 候选排序
 - 关联架构/规范/ADR：`docs/architecture/ARCHITECTURE-v0.6.md`、`openspec/project.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/ai-backend/spec.md`、`openspec/specs/windows-productization/spec.md`、`docs/adr/0008-use-github-releases-windows-distribution.md`
 
@@ -48,7 +48,7 @@
 
 1. **已完成：Wiki 收藏同步 + 页面身份修复 + 单顶栏**：独立 change 已通过自动化、Windows smoke、窗口检查和用户实机验收，计划已归档。后续只在发现回归时建立新的局部 change。
 2. **已完成：本地 Wiki 搜索能力优化**：首次方案被否决后，由 [区域搜索重建](../archive/rebuild-local-wiki-search/plan.md) 完成实现及真实数据库验收；按页聚合与后续增量同步保留独立归档证据。旧否决方案仅为历史，不再作为当前前置阻塞。
-3. **实施中：AI / Token 后续优化**：[AI 搜索与证据读取协同优化](../optimize-ai-search-evidence/plan.md) 已完成实现与用户确认的5题共10轮真实对照，累计input减少32.5%、关键答案与来源通过；模型请求和延迟增加，Search/Read多Anchor兼容问题已移交[独立 draft](../fix-ai-search-read-anchor-compatibility/plan.md)，下个会话讨论方案。关键词提示词已于2026-09-17实施并通过24项定向离线/本地跨语言检查，模型端收益未复验；独立Anchor修复范围待本轮用户确认，修复前不归档。设置控件继续记录于后续维修计划，不追加付费重跑。
+3. **已完成：AI / Token 后续优化**：[AI 搜索与证据读取协同优化](../archive/optimize-ai-search-evidence/plan.md) 已完成实现与用户确认的5题共10轮真实对照，累计input减少32.5%、关键答案与来源通过；模型请求和延迟增加。关键词提示词已于2026-09-17实施并通过24项定向离线/本地跨语言检查；独立 [多 Anchor 修复](../archive/fix-ai-search-read-anchor-compatibility/plan.md) 已通过 Windows WikiTools 57/57、Python 跨语言 3 passed 和固定快照六次直接读取验证，未追加付费模型请求。上述 Token/延迟数据仍只属于原对照，不声明本修复带来模型收益；设置控件继续记录于后续维修计划。
 4. **全局 Quick Access AI/Wiki 悬浮窗口 + 托盘常驻**：在本地 Wiki 搜索与 AI / Token 两项优化完成并验证后推进。使用 Windows 全局快捷键唤起 Topmost 悬浮窗，在 AI 问答与 Wiki 搜索之间切换；Wiki 搜索复用主程序搜索并回到唯一 Viewer，AI 复用现有 AI Runtime；增加关闭到托盘、托盘恢复和真正退出。实施前建立并批准独立 change/plan。
 5. **Windows 公开发行准备**：仅在仓库、版本、许可证/权利和外部写入授权齐备后，从本计划末尾遗留清单选择独立 change。
 6. **Phase 12 — Extensions**：只有出现明确 Toolset 需求并获用户授权后，才创建 `openspec/changes/phase-12-extensions/plan.md`。
@@ -71,7 +71,7 @@
 - [x] 第 1 项完成、验证、用户验收并归档；其结果已合并到 `master`。
 - [x] 第 2 项首次实现路线已否决并回退到实施前保存点，历史证据保留。
 - [x] 第 2 项由区域搜索重建完成并通过真实数据库验收，解除第 3 项前置阻塞。
-- [ ] 为第 3 项 AI / Token 建立并批准独立计划，完成实施和验证。
+- [x] 为第 3 项 AI / Token 建立并批准独立计划，完成实施和验证；多 Anchor 遗留已关闭并归档。
 - [ ] 第 2、3 项完成并验证后，为第 4 项 Quick Access + 托盘常驻建立并批准独立计划。
 - [ ] 完成一个后续 change 后，只更新对应候选状态和实际证据，不批量宣称其他候选完成。
 
@@ -93,6 +93,8 @@
 ## 进度记录
 
 - 2026-09-16：多Anchor兼容问题按用户要求拆为独立 draft；当前只登记移交关系，不调查或实施方案，Quick Access继续后置。
+
+- 2026-09-17：多 Anchor 修复按用户授权完成；标题清理后真实 `id` / `name` 集合精确匹配，Windows WikiTools 57/57、Python 跨语言 3 passed，固定快照六次中文 Anchor 与编码 Anchor 范围对照通过。AI / Token 计划及独立修复计划已归档；未追加付费模型请求，Quick Access 仍需另建并批准自己的 change。
 
 - 2026-09-16：用户将付费验收缩至5题前后各1次并确认向DeepSeek发送问题/必要证据；10轮完成，小样本输入减少32.5%，多Anchor兼容缺陷保留待修复，AI阶段不标记全面完成，Quick Access继续后置。
 
@@ -124,7 +126,7 @@
 
 ## 完成摘要
 
-本路线图继续作为 Phase 11 关闭后的候选登记入口。Wiki 收藏/页面身份/单顶栏、本地 Wiki 区域搜索已完成并归档；AI / Token 后续优化5题真实对照完成，Search/Read多Anchor兼容仍待修复。全局 Quick Access AI/Wiki 悬浮窗口 + 托盘常驻继续后置。
+本路线图继续作为 Phase 11 关闭后的候选登记入口。Wiki 收藏/页面身份/单顶栏、本地 Wiki 区域搜索和 AI / Token 后续优化（含多 Anchor 兼容修复）已完成并归档；全局 Quick Access AI/Wiki 悬浮窗口 + 托盘常驻仍需独立计划和批准。
 
 ## Phase 11 未完成内容
 

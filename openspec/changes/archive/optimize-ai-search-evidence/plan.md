@@ -1,10 +1,10 @@
 # AI 搜索与证据读取协同优化
 
-- 状态：in-progress；2026-09-17 用户要求完成本计划，关键词提示词已实施并通过定向检查；独立多Anchor修复范围等待本轮确认。原付费授权已结束，不调用 DeepSeek 或其他模型 API。
+- 状态：completed；2026-09-17 关键词提示词和独立多 Anchor 修复均已实施并通过定向检查；原付费授权已结束，本次未追加 DeepSeek 或其他模型 API 请求。
 - Phase：无；承接 Phase 11 后续路线图的 AI / Token 后续优化。
 - 创建日期：2026-09-16；最后更新：2026-09-17。
 - 执行环境：原实施在 Windows Codex 中完成（当时 WSL 启动返回 E_ACCESSDENIED）；本轮实施使用 WSL 读写与检查（需提升权限启动；未安装 rg，使用已有工具）；Python 离线及真实工具宿主验证使用已有 Windows 环境。仅主会话执行。
-- 关联：`../../specs/application-use-cases/spec.md`、`../../specs/wiki-tools/spec.md`、`../../specs/ai-backend/spec.md`、`../post-phase-11-roadmap/plan.md`、ADR 0010 / 0012；[关键词调研](keyword-exploration.md)、[原对照验收](evaluation.md)。
+- 关联：`../../specs/application-use-cases/spec.md`、`../../specs/wiki-tools/spec.md`、`../../specs/ai-backend/spec.md`、`../../post-phase-11-roadmap/plan.md`、ADR 0010 / 0012；[关键词调研](keyword-exploration.md)、[原对照验收](evaluation.md)。
 
 ## 背景、前置与范围
 
@@ -71,11 +71,11 @@
 - [x] 定向 .NET / Python / Windows 跨语言验证与 Release 构建。
 - [x] 固定隔离真实数据库快照、SHA-256 与已核对的12题oracle，详见 evaluation.md。
 - [x] 按用户收窄后的5题共10轮执行付费对照，记录Token、答案与来源；发现多Anchor衔接缺陷。
-- [ ] 多Anchor兼容问题已移交独立 draft `../fix-ai-search-read-anchor-compatibility/plan.md`，下个会话讨论方案；当前源码与付费结果保持原样供审查。
+- [x] 多Anchor兼容问题已移交独立计划 `../fix-ai-search-read-anchor-compatibility/plan.md`，已完成 formatter 内部多标记匹配、Windows/Python 回归和固定快照复验；当前源码与付费结果保持原样供审查。
 - [x] 合入关键词调研，区分报告证据、候选提示词和未验证收益，保留原附件。
 - [x] 关键词后续：2026-09-17 获得实施授权，按意图分组压缩候选文本；不纳入证据不足的波数 query、语音映射等规则，不重跑完整调研。
 - [x] 关键词后续：修改现有提示词，完成 lint、格式及24项导航/协议检查；未做模型对照，模型端效果未验证。
-- [ ] 关闭多Anchor兼容遗留，并完成获授权的关键词实施与相应检查；如决定不实施，记录明确的范围收束。满足完成门槛后更新路线图并归档，不重复已结束的原付费验收。
+- [x] 关闭多Anchor兼容遗留，并完成获授权的关键词实施与相应检查；已更新路线图并归档，不重复已结束的原付费验收。
 
 ## 验证与完成定义
 
@@ -101,6 +101,8 @@
 
 - 2026-09-17（关键词实施）：用户要求完成本计划。建立仅包含当前提示词与计划的 Git 恢复点 17c0d6575eb5195c78f9d8fe64b7aea539690229（分支 codex/ai-search-keywords-before-20260917），不改变当前索引或纳入无关工作。现有提示词增加9组紧凑意图表，区分 Search 与 focus/返回目录用途；复用既有证据、限位、重试和导航规则。选择保守省略未充分验证词而非扩大调研；未请求真实模型。Windows ruff check 与 format --check 通过；导航及两协议测试首轮22 passed / 2 skipped，随后显式开启本地跨语言检查补跑2 passed（另2项 deselected），合计24项通过。后两项使用已有 Windows TestHost 与 MockTransport，未发起真实 provider 请求。未更改 C#，未重复构建或全量测试。
 
+- 2026-09-17（多 Anchor 修复）：在独立 `fix-ai-search-read-anchor-compatibility` 计划中完成清理后标题真实 `id` / `name` 集合匹配；Windows WikiTools 57/57、Python 真实 Windows MCP 3 passed，固定快照六次中文 Anchor 读取及编码 Anchor 范围对照通过。未追加真实模型请求，不对 Token、延迟或回答质量作新声明。
+
 - 2026-09-17（关键词调研合并）：按用户要求读取调研附件、现有计划、计划规范及当前提示词，合入本地64次Search/41次Read的报告依据与局限；归并制作相关词，纠正药水效果问题一律读制作章节等过宽候选规则，新增draft实施与最小验证项。仅更新本计划，未重跑调研、修改产品或调用模型 API。文档内容、相对链接与 `git diff --check` 检查通过。
 
 - 2026-09-16（10轮结束）：基线/优化版各5题全部完成，input 115781→78112（-32.5%），模型请求15→21，实际工具16→20，耗时25.773→33.181秒；费用字段null。关键答案/来源核对通过，未运行其他题或追加付费重跑。6次section未命中暴露Search导航中文id与Read只选首个编码id的不兼容，明确保留未关闭项；详见evaluation.md及忽略目录的原始计量产物。
@@ -124,6 +126,6 @@
 
 ## 完成摘要
 
-产品实现、自动化和用户收窄的5题共10轮真实对照已执行。此次累计输入减少32.5%，最终核心答案与来源通过；同时暴露6次Anchor未命中、调用次数和延迟增加。Search/Read章节多Anchor兼容仍待修复，因此不归档或宣称AI阶段全面完成。设置控件继续留给后续维修计划；源码、恢复分支、冻结快照及原始报告保留，未追加付费请求。
+产品实现、自动化和用户收窄的5题共10轮真实对照已执行。此次累计输入减少32.5%，最终核心答案与来源通过；原先暴露的 Search/Read 多 Anchor 兼容问题已由独立计划修复并完成 Windows、Python 与固定快照验证。上述 Token/延迟数据仍只属于原付费对照，不因本修复新增收益结论；设置控件继续留给后续维修计划，源码、恢复分支、冻结快照及原始报告保留，未追加付费请求。
 
-关键词调研已于2026-09-17合入本计划，报告保留为证据附件；紧凑意图表已于本轮加入现有 Agent 提示词，lint/format 和24项定向测试通过。没有追加真实模型对照，不声明关键词表改善回答质量、调用次数或 Token。独立 Anchor 修复范围已向用户确认、尚待答复；此项未关闭前计划保持 in-progress，不归档，不将整个计划记为完成。
+关键词调研已于2026-09-17合入本计划，报告保留为证据附件；紧凑意图表已加入现有 Agent 提示词，lint/format 和24项定向测试通过。没有追加真实模型对照，不声明关键词表改善回答质量、调用次数或 Token。独立 Anchor 修复已完成并归档，本计划满足完成门槛，随证据附件一并归档。

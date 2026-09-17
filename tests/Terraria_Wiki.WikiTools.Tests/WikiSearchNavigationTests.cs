@@ -1,3 +1,4 @@
+using System.Text.Json;
 using Terraria_Wiki.Core.Data;
 using Terraria_Wiki.Models;
 
@@ -80,5 +81,76 @@ public sealed class WikiSearchNavigationTests
         Assert.Contains("击败守卫后", text);
         Assert.Contains("数量2", text);
         Assert.DoesNotContain("不应混入", text);
+    }
+
+    [Fact]
+    public async Task RealProcessedSearchNavigationReadsSecondaryHeadingAnchorAndRedirect()
+    {
+        await using var fixture = await WikiToolFixture.CreateAsync();
+        var book = new WikiBook();
+        const string html = """
+            <p>仅专家模式。</p>
+            <h2 id="encoded-anchor">
+              <span id="制作" name="legacy-name">制作</span>
+            </h2>
+            <p>多锚点配方需要12石块，在工作台制作。</p>
+            <h3 id="child">子配方</h3><p>子配方正文。</p>
+            <h2 id="other">其他</h2><p>无关兄弟章节。</p>
+            """;
+
+        await fixture.WithContentDatabaseAsync(async database =>
+        {
+            var processed = WikiContentProcessor.Process(html, book, "多锚点样本");
+            await database.SavePageWithSearchAsync(new WikiPage
+            {
+                Title = "多锚点样本",
+                Content = processed.Html,
+                LastModified = new DateTime(2026, 9, 16),
+            }, processed);
+            await database.SaveItemAsync(new WikiRedirect
+            {
+                FromName = "多锚点别名",
+                ToTarget = "多锚点样本#制作",
+            });
+        });
+
+        await using var client = await fixture.CreateClientAsync();
+        var search = await client.CallToolAsync("search_wiki", new Dictionary<string, object?>
+        {
+            ["query"] = "制作",
+        });
+        Assert.False(search.IsError);
+        var candidate = search.StructuredContent!.Value.GetProperty("results").EnumerateArray()
+            .First(item => item.GetProperty("canonical_title").GetString() == "多锚点样本");
+        Assert.Contains(candidate.GetProperty("matched_sections").EnumerateArray(), section =>
+            section.GetProperty("anchor").GetString() == "制作");
+
+        async Task<JsonElement> ReadAsync(string title)
+        {
+            var response = await client.CallToolAsync("read_wiki", new Dictionary<string, object?>
+            {
+                ["title"] = title,
+                ["mode"] = "section",
+            });
+            Assert.False(response.IsError);
+            var body = response.StructuredContent!.Value;
+            Assert.True(body.GetProperty("scope").GetProperty("anchor_found").GetBoolean());
+            return body;
+        }
+
+        var encoded = await ReadAsync("多锚点样本#encoded-anchor");
+        var localized = await ReadAsync("多锚点样本#制作");
+        var legacy = await ReadAsync("多锚点样本#legacy-name");
+        var redirected = await ReadAsync("多锚点别名");
+
+        var expected = new[] { "多锚点样本", "仅专家模式。", "制作", "多锚点配方需要12石块，在工作台制作。", "子配方", "子配方正文。" };
+        foreach (var body in new[] { encoded, localized, legacy, redirected })
+        {
+            Assert.Equal(expected, body.GetProperty("blocks").EnumerateArray()
+                .Select(block => block.GetProperty("text").GetString()).ToArray());
+            Assert.DoesNotContain(body.GetProperty("blocks").EnumerateArray(), block =>
+                block.GetProperty("text").GetString()!.Contains("无关兄弟章节", StringComparison.Ordinal));
+        }
+        Assert.Equal("制作", redirected.GetProperty("redirect_target_anchor").GetString());
     }
 }

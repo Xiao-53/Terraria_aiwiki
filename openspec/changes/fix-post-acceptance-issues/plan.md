@@ -6,7 +6,7 @@
 - 创建日期：2026-09-14
 - 最后更新：2026-09-16
 - 范围：Windows 导航、首页入口、收藏视觉、数据管理页布局、下载选项、设置页 AI 模型配置、AI 搜索候选数与 Wiki 完整核对周期设置
-- 关联：`openspec/changes/archive/rebuild-local-wiki-search/plan.md`、`openspec/changes/optimize-ai-search-evidence/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
+- 关联：`openspec/changes/archive/rebuild-local-wiki-search/plan.md`、`openspec/changes/archive/optimize-ai-search-evidence/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
 
 ## 背景与当前证据
 

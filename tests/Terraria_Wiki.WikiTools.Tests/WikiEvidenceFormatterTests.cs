@@ -42,6 +42,105 @@ public sealed class WikiEvidenceFormatterTests
         Assert.Equal("actual-id", Assert.Single(result.Scope.Sections).Anchor);
     }
 
+    [Fact]
+    public void SectionReadAcceptsAllRealHeadingAnchorsButCatalogKeepsPreferredAnchor()
+    {
+        const string html = """
+            <p>页面导语</p>
+            <h2 id="encoded-anchor">
+              <span id="制作" name="legacy-name">制作</span>
+              <span hidden id="removed-anchor">隐藏定位</span>
+            </h2>
+            <p>目标正文</p>
+            <h3 id="child">子章节</h3><p>子正文</p>
+            <h2 id="other">其他</h2><p>不应混入</p>
+            """;
+        var expected = new[] { "页", "页面导语", "制作", "目标正文", "子章节", "子正文" };
+
+        foreach (var anchor in new[] { "encoded-anchor", "制作", "legacy-name" })
+        {
+            var result = WikiEvidenceFormatter.Format("页", html, anchor, null, null, "section");
+
+            Assert.True(result.Scope!.AnchorFound);
+            Assert.Equal("页 > 制作", result.Scope.SelectedSection);
+            Assert.Equal(expected, result.Blocks.Select(block => block.Text));
+            Assert.DoesNotContain(result.Blocks, block => block.Text.Contains("不应混入", StringComparison.Ordinal));
+        }
+
+        var removed = WikiEvidenceFormatter.Format("页", html, "removed-anchor", null, null, "section");
+        Assert.Empty(removed.Blocks);
+        Assert.False(removed.Scope!.AnchorFound);
+
+        var page = WikiEvidenceFormatter.Format("页", html, null, null, null, "page");
+        Assert.Equal("encoded-anchor", page.Scope!.Sections[0].Anchor);
+    }
+
+    [Fact]
+    public void SectionReadDoesNotTreatDisplayNameAsAliasWhenRealAnchorExists()
+    {
+        var result = WikiEvidenceFormatter.Format(
+            "页", "<h2 id='real-anchor'>显示标题</h2><p>目标正文</p>",
+            "显示标题", null, null, "section");
+
+        Assert.Empty(result.Blocks);
+        Assert.False(result.Scope!.AnchorFound);
+        Assert.Null(result.Scope.SelectedSection);
+    }
+
+    [Fact]
+    public void SectionReadKeepsRealAnchorMatchingOrdinal()
+    {
+        var result = WikiEvidenceFormatter.Format(
+            "页", "<h2 id='real-anchor'>显示标题</h2><p>目标正文</p>",
+            "REAL-ANCHOR", null, null, "section");
+
+        Assert.Empty(result.Blocks);
+        Assert.False(result.Scope!.AnchorFound);
+    }
+
+    [Fact]
+    public void SectionReadFallsBackToDisplayNameOnlyWhenHeadingHasNoRealAnchor()
+    {
+        var result = WikiEvidenceFormatter.Format(
+            "页", "<h2>无标记</h2><p>目标正文</p>",
+            "无标记", null, null, "section");
+
+        Assert.True(result.Scope!.AnchorFound);
+        Assert.Equal("页 > 无标记", result.Scope.SelectedSection);
+        Assert.Contains(result.Blocks, block => block.Text == "目标正文");
+    }
+
+    [Fact]
+    public void DuplicateRealAnchorsSelectFirstHeadingWithoutMergingRanges()
+    {
+        const string html = """
+            <h2 id="duplicate">第一章节</h2><p>第一正文</p>
+            <h2 id="duplicate">第二章节</h2><p>第二正文</p>
+            """;
+
+        var result = WikiEvidenceFormatter.Format("页", html, "duplicate", null, null, "section");
+
+        Assert.True(result.Scope!.AnchorFound);
+        Assert.Equal("页 > 第一章节", result.Scope.SelectedSection);
+        Assert.Contains(result.Blocks, block => block.Text == "第一正文");
+        Assert.DoesNotContain(result.Blocks, block => block.Text == "第二正文");
+    }
+
+    [Fact]
+    public void ContinuationTokenCannotSwitchBetweenHeadingAnchorAliases()
+    {
+        var html = "<h2 id='encoded'><span id='localized'>目标</span></h2>"
+            + string.Concat(Enumerable.Range(0, 20).Select(index => $"<p>条目{index} {new string('文', 1800)}</p>"));
+        var first = WikiEvidenceFormatter.Format("页", html, "localized", null, null, "section");
+
+        Assert.False(first.IsComplete);
+        Assert.Throws<ArgumentException>(() => WikiEvidenceFormatter.Format(
+            "页", html, "encoded", null, first.NextCursor, "section", first.Scope!.ContinuationToken));
+        var next = WikiEvidenceFormatter.Format(
+            "页", html, "localized", null, first.NextCursor, "section", first.Scope!.ContinuationToken);
+        Assert.NotEmpty(next.Blocks);
+    }
+
     [Theory]
     [InlineData("page")]
     [InlineData("section")]

@@ -1,11 +1,11 @@
 # 修复 AI Search / Read 章节 Anchor 兼容问题
 
-- 状态：draft；原因调查已完成，修复方案待实施授权。本轮用户要求创建修复 plan，仅更新文档。
+- 状态：completed；多 Anchor 修复、Windows 定向回归、Python 跨语言验证和固定快照复验均已完成；不调用真实模型 API。
 - Phase：无；optimize-ai-search-evidence 的独立缺陷修复。
 - 执行环境：WSL 读取、编辑和静态检查；Windows 执行 .NET 与本地跨语言验证；仅主会话执行。
 - 创建日期：2026-09-16；最后更新：2026-09-17。
 - 范围：WikiTools 对同一章节多个真实 Anchor 的识别，不改变搜索或持久数据。
-- 关联：[上游计划](../optimize-ai-search-evidence/plan.md)、[原验收](../optimize-ai-search-evidence/evaluation.md)、[Wiki Tools 契约](../../specs/wiki-tools/spec.md)、[AI Backend 契约](../../specs/ai-backend/spec.md)、[路线图](../post-phase-11-roadmap/plan.md)。
+- 关联：[上游计划](../optimize-ai-search-evidence/plan.md)、[原验收](../optimize-ai-search-evidence/evaluation.md)、[Wiki Tools 契约](../../specs/wiki-tools/spec.md)、[AI Backend 契约](../../specs/ai-backend/spec.md)、[路线图](../../post-phase-11-roadmap/plan.md)。
 
 ## 背景与已确认原因
 
@@ -30,7 +30,7 @@
 
 ## 前置条件与授权
 
-本轮仅编写计划，不实施修复、不运行产品验证。用户明确要求实施后将状态改为 approved / in-progress；先检查工作树，为本次相关文件建立可恢复 Git 保存点，不夹带既有无关修改。
+用户已明确要求实施。2026-09-17 先检查并保存现有工作树，建立 checkpoint `71bcf42`（`Checkpoint existing workspace before multi-anchor fix`）；后续只在此点之上增加本变更，不回退或覆盖既有工作。
 
 使用既有忽略目录 artifacts/ai-search-evidence-evaluation/2026-09-16/ 的隔离快照、manifest 与原始调用。实施时核对快照身份及文件可用性。若制品缺失，不以合成测试冒充真实六次复验，记录阻塞；不得自动改用活动数据库。
 
@@ -60,7 +60,8 @@
 - MODIFY src/Terraria_Wiki.WikiTools/WikiEvidenceFormatter.cs：内部标记集合、精确匹配；保留首选目录与旧排序。
 - MODIFY tests/Terraria_Wiki.WikiTools.Tests/WikiEvidenceFormatterTests.cs：多 id/name、负例、范围与续读回归。
 - MODIFY tests/Terraria_Wiki.WikiTools.Tests/WikiSearchNavigationTests.cs：真实标题结构的 Core 加工 → Search → section Read 集成用例，含 Redirect。
-- MODIFY candidate tests/Terraria_Wiki.WikiTools.TestHost/WikiToolTestHost.cs 与 agent/tests/test_cross_language.py：仅补真实 MCP 多标记解析/来源的最小 fixture 与断言，复用现有宿主。
+- ADD agent/tests/manual_anchor_snapshot_acceptance.py：复用固定快照和现有 Release TestHost，直接记录 Search 导航、六次 Read 及编码 Anchor 对照；不调用 provider。
+- KEEP tests/Terraria_Wiki.WikiTools.TestHost/WikiToolTestHost.cs 与 agent/tests/test_cross_language.py：已有 TestHost 和严格跨语言测试已覆盖所需路径，本次无需扩展产品 fixture 或 Python parser。
 - MODIFY openspec/specs/wiki-tools/spec.md：实施时明确精确接受同一章节真实标记及单首选目录，不改变 JSON。
 - MODIFY 本计划、上游计划与路线图：只更新实际进度、证据和依赖状态。
 - KEEP Core、Application、Python 产品源码、WikiToolContracts、依赖、数据库及原始付费验收附件。
@@ -69,12 +70,12 @@
 
 - [x] 建立独立问题记录并链接原始验收。
 - [x] 按用户要求核对当前调用链和六次失败记录，确认原因，形成局部修复草案。
-- [ ] 获得实施授权、检查工作树并建立相关文件恢复点。
-- [ ] 先在现有 formatter / 导航测试中加入多 id 真实结构，确认修复前因次级标记不命中而失败。
-- [ ] 实施内部集合匹配，保持首选目录、范围和续读绑定；同步持续契约。
-- [ ] Windows 执行受影响测试、构建测试宿主，运行定向 Python 跨语言测试。
-- [ ] 用固定快照复查原六次失败读取，记录 Anchor、选中范围与证据结果；不重跑模型问答。
-- [ ] 检查 diff、临时制品和测试证据；完成后回填上游、路线图并归档。
+- [x] 获得实施授权、检查工作树并建立相关文件恢复点；checkpoint 为 `71bcf42`。
+- [x] 先在现有 formatter / 导航测试中加入多 id 真实结构，确认修复前因次级标记不命中而失败。
+- [x] 实施内部集合匹配，保持首选目录、范围和续读绑定；同步持续契约。
+- [x] Windows 执行受影响测试、构建测试宿主，运行定向 Python 跨语言测试。
+- [x] 用固定快照复查原六次失败读取，记录 Anchor、选中范围与证据结果；不重跑模型问答。
+- [x] 检查 diff、临时制品和测试证据；回填上游、路线图并归档。
 
 ## 最小验证与回归
 
@@ -108,7 +109,12 @@
 - 2026-09-16：按用户要求建立独立 draft，暂不调查或实施。
 - 2026-09-17：用户随后要求查找原因；已只读核对 Core / WikiTools、现有测试及六次原始失败调用。源码确认单值丢失真实别名；尚未运行修复前后回归。
 - 2026-09-17：用户要求创建修复 plan，扩充本既有计划，不另建重复 change。仅文档规划；产品实现、Windows 测试、真实快照复验和付费模型复验均未在本轮执行。
+- 2026-09-17：用户明确要求完成多 Anchor 修复。已将计划置为 in-progress，并在 `71bcf42` 保存既有工作树；本轮继续执行局部 formatter 修复与离线/Windows 定向验证，不追加真实模型请求。
+- 2026-09-17：在 `WikiEvidenceFormatter` 内为每个标题收集清理后标题自身及后代的真实 `id` / `name` 集合；首选 Anchor、目录预算、page/v1 排序和 continuation 绑定保持不变。section 精确匹配改为集合成员，只有无真实标记时才按标题名回退。
+- 2026-09-17：新增 formatter 负例、隐藏标记、重复标记、别名续读绑定和真实 Core → Search → section Read / Redirect 回归；修复前定向测试按预期失败，修复后 Windows Release WikiTools 全量定向测试 57/57 通过。
+- 2026-09-17：新增 `manual_anchor_snapshot_acceptance.py`，在快照 `831562c0…` 上复查 Q02/Q05/Q06（两页）/Q10（两 focus）六次读取；全部 `anchor_found=true`，与 Search 导航中的编码 Anchor 对照范围一致，结果写入 ignored `multi-anchor-read-verification.json`。
+- 2026-09-17：Python 真实 Windows MCP 跨语言回归 3 passed、3 deselected（付费项）；新增复验脚本 ruff check 与 format check 通过。未调用 DeepSeek 或其他 provider。
 
 ## 完成摘要
 
-修复草案已形成，尚未实施，缺陷仍未关闭。下一步为按本计划实施并取得离线、Windows 跨语言及固定快照证据；原 AI 优化计划保持未完成，不提前归档。
+已完成局部多 Anchor 修复：同一标题清理后真实存在的编码、中文及 `name` 标记均可精确选择同一章节，目录仍只保留首选 Anchor；显示名称、隐藏标记、大小写变体和不存在标记不会被错误接受。Windows 57 项 WikiTools 回归、Python 3 项跨语言回归和固定快照六次直接读取均通过。未重跑付费模型，因此不对 Token、延迟或回答质量改善作新声明；上游 AI 计划与路线图已回填，本计划按规范归档。

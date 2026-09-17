@@ -68,7 +68,7 @@ internal static partial class WikiEvidenceFormatter
         RemoveUnsafeAndNonContentNodes(document.DocumentNode);
 
         var sections = new List<Section>();
-        var root = new Section(title, title, null, true, 0);
+        var root = new Section(title, title, null, new HashSet<string>(StringComparer.Ordinal), true, 0);
         sections.Add(root);
         var sectionStack = new List<Section> { root };
         var seen = new HashSet<string>(StringComparer.Ordinal);
@@ -89,7 +89,9 @@ internal static partial class WikiEvidenceFormatter
                     sectionStack.RemoveAt(sectionStack.Count - 1);
                 var parent = sectionStack[^1];
                 var path = parent.IsRoot ? $"{title} > {text}" : $"{parent.Path} > {text}";
-                var section = new Section(text, path, NodeAnchor(node), false, level, parent);
+                var nodeAnchors = GetNodeAnchors(node);
+                var section = new Section(text, path, nodeAnchors.Preferred, nodeAnchors.All,
+                    false, level, parent);
                 sections.Add(section);
                 sectionStack.Add(section);
                 AddBlock(section, "heading", text, seen, deduplicate: false);
@@ -116,9 +118,7 @@ internal static partial class WikiEvidenceFormatter
 
         root.Blocks.Insert(0, new WikiEvidenceBlock(title, "heading", title));
         var availableSections = BuildSectionCatalog(sections.Skip(1));
-        var match = sections.Skip(1).FirstOrDefault(section =>
-            string.Equals(section.Anchor, anchor, StringComparison.Ordinal)
-            || (section.Anchor is null && string.Equals(section.Name, anchor, StringComparison.Ordinal)));
+        var match = sections.Skip(1).FirstOrDefault(section => section.MatchesExactAnchor(anchor));
         IEnumerable<Section> chosen = OrderSections(sections, anchor, focus);
         if (mode == "section")
         {
@@ -484,17 +484,28 @@ internal static partial class WikiEvidenceFormatter
 
     private static bool IsCjk(char value) => value is >= '\u3400' and <= '\u9fff';
 
-    private static string? NodeAnchor(HtmlNode node)
+    private static AnchorSet GetNodeAnchors(HtmlNode node)
     {
-        var id = node.GetAttributeValue("id", string.Empty);
-        if (!string.IsNullOrWhiteSpace(id))
-            return id;
-        var named = node.DescendantsAndSelf()
-            .Select(candidate => candidate.GetAttributeValue("id", string.Empty) is { Length: > 0 } candidateId
-                ? candidateId
-                : candidate.GetAttributeValue("name", string.Empty))
-            .FirstOrDefault(value => !string.IsNullOrWhiteSpace(value));
-        return named;
+        var anchors = new HashSet<string>(StringComparer.Ordinal);
+        string? preferred = null;
+        foreach (var candidate in node.DescendantsAndSelf())
+        {
+            var id = candidate.GetAttributeValue("id", string.Empty);
+            var name = candidate.GetAttributeValue("name", string.Empty);
+            if (!string.IsNullOrWhiteSpace(id))
+                anchors.Add(id);
+            if (!string.IsNullOrWhiteSpace(name))
+                anchors.Add(name);
+
+            if (preferred is null)
+            {
+                // Preserve NodeAnchor's depth-first id-before-name preference for the catalog.
+                var candidatePreferred = id.Length > 0 ? id : name;
+                if (!string.IsNullOrWhiteSpace(candidatePreferred))
+                    preferred = candidatePreferred;
+            }
+        }
+        return new(preferred, anchors);
     }
 
     private static bool TryHeadingLevel(string name, out int level)
@@ -510,6 +521,7 @@ internal static partial class WikiEvidenceFormatter
         string name,
         string path,
         string? anchor,
+        IReadOnlySet<string> anchors,
         bool isRoot,
         int level,
         Section? parent = null)
@@ -517,14 +529,22 @@ internal static partial class WikiEvidenceFormatter
         public string Name { get; } = name;
         public string Path { get; } = path;
         public string? Anchor { get; } = anchor;
+        public IReadOnlySet<string> Anchors { get; } = anchors;
         public bool IsRoot { get; } = isRoot;
         public int Level { get; } = level;
         public Section? Parent { get; } = parent;
         public List<WikiEvidenceBlock> Blocks { get; } = [];
 
+        public bool MatchesExactAnchor(string? value) =>
+            !string.IsNullOrEmpty(value)
+            && (Anchors.Contains(value)
+                || (Anchors.Count == 0 && string.Equals(Name, value, StringComparison.Ordinal)));
+
         public bool MatchesAnchor(string normalizedAnchor) =>
             NormalizeKey(Anchor) == normalizedAnchor || NormalizeKey(Name) == normalizedAnchor;
     }
+
+    private sealed record AnchorSet(string? Preferred, IReadOnlySet<string> All);
 
     private sealed record TableCell(string Value, bool IsHeader);
 
