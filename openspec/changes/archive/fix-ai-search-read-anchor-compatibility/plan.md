@@ -1,6 +1,6 @@
 # 修复 AI Search / Read 章节 Anchor 兼容问题
 
-- 状态：completed；多 Anchor 修复、Windows 定向回归、Python 跨语言验证和固定快照复验均已完成；不调用真实模型 API。
+- 状态：completed；多 Anchor 修复、Windows 定向回归、Python 跨语言验证和固定快照复验均已完成；实施阶段不调用真实模型 API，归档后另有用户授权的修复版付费复验记录。
 - Phase：无；optimize-ai-search-evidence 的独立缺陷修复。
 - 执行环境：WSL 读取、编辑和静态检查；Windows 执行 .NET 与本地跨语言验证；仅主会话执行。
 - 创建日期：2026-09-16；最后更新：2026-09-17。
@@ -34,7 +34,7 @@
 
 使用既有忽略目录 artifacts/ai-search-evidence-evaluation/2026-09-16/ 的隔离快照、manifest 与原始调用。实施时核对快照身份及文件可用性。若制品缺失，不以合成测试冒充真实六次复验，记录阻塞；不得自动改用活动数据库。
 
-原十轮付费授权已结束。本计划的验证不调用 DeepSeek 或其他真实模型 API。
+原十轮付费授权对应的实施验收已结束。本计划的实施验证不调用 DeepSeek 或其他真实模型 API；归档后用户另行授权的修复版单独复验见上游 `evaluation.md`，不构成新的基线对照。
 
 ## 拟采用方案与兼容性
 
@@ -110,6 +110,7 @@
 - 2026-09-17：用户随后要求查找原因；已只读核对 Core / WikiTools、现有测试及六次原始失败调用。源码确认单值丢失真实别名；尚未运行修复前后回归。
 - 2026-09-17：用户要求创建修复 plan，扩充本既有计划，不另建重复 change。仅文档规划；产品实现、Windows 测试、真实快照复验和付费模型复验均未在本轮执行。
 - 2026-09-17：用户明确要求完成多 Anchor 修复。已将计划置为 in-progress，并在 `71bcf42` 保存既有工作树；本轮继续执行局部 formatter 修复与离线/Windows 定向验证，不追加真实模型请求。
+- 2026-09-17（归档后复验）：用户明确要求“只跑修复版”，在修复提交 `a6589b53658d72f21741d15a32f7d067e0908dda` 与同一固定快照上完成5题一轮付费复验。Q02/Q05/Q06/Q10 为 `answered`，Q12 为 `insufficient_evidence`；无基线重跑，不据此宣称 Token、延迟或回答质量改善。详细用量和原始结果见上游 `evaluation.md` 与忽略目录报告。
 - 2026-09-17：在 `WikiEvidenceFormatter` 内为每个标题收集清理后标题自身及后代的真实 `id` / `name` 集合；首选 Anchor、目录预算、page/v1 排序和 continuation 绑定保持不变。section 精确匹配改为集合成员，只有无真实标记时才按标题名回退。
 - 2026-09-17：新增 formatter 负例、隐藏标记、重复标记、别名续读绑定和真实 Core → Search → section Read / Redirect 回归；修复前定向测试按预期失败，修复后 Windows Release WikiTools 全量定向测试 57/57 通过。
 - 2026-09-17：新增 `manual_anchor_snapshot_acceptance.py`，在快照 `831562c0…` 上复查 Q02/Q05/Q06（两页）/Q10（两 focus）六次读取；全部 `anchor_found=true`，与 Search 导航中的编码 Anchor 对照范围一致，结果写入 ignored `multi-anchor-read-verification.json`。
@@ -117,4 +118,4 @@
 
 ## 完成摘要
 
-已完成局部多 Anchor 修复：同一标题清理后真实存在的编码、中文及 `name` 标记均可精确选择同一章节，目录仍只保留首选 Anchor；显示名称、隐藏标记、大小写变体和不存在标记不会被错误接受。Windows 57 项 WikiTools 回归、Python 3 项跨语言回归和固定快照六次直接读取均通过。未重跑付费模型，因此不对 Token、延迟或回答质量改善作新声明；上游 AI 计划与路线图已回填，本计划按规范归档。
+已完成局部多 Anchor 修复：同一标题清理后真实存在的编码、中文及 `name` 标记均可精确选择同一章节，目录仍只保留首选 Anchor；显示名称、隐藏标记、大小写变体和不存在标记不会被错误接受。Windows 57 项 WikiTools 回归、Python 3 项跨语言回归和固定快照六次直接读取均通过。归档后另行完成用户授权的修复版5题一轮付费复验，但没有基线重跑，因此不对 Token、延迟或回答质量改善作新声明；上游 AI 计划与路线图已回填，本计划按规范归档。
