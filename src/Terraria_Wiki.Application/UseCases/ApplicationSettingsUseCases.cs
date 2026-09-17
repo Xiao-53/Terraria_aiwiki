@@ -97,6 +97,9 @@ public sealed class ApplicationSettingsUseCases
             SearchLimit = stored.SearchLimit is >= 1 and <= 100
                 ? stored.SearchLimit
                 : ApplicationPreferences.DefaultSearchLimit,
+            AiSearchLimit = stored.AiSearchLimit is >= 1 and <= 100
+                ? stored.AiSearchLimit
+                : ApplicationPreferences.DefaultAiSearchLimit,
             PageConcurrency = stored.PageConcurrency is >= 1 and <= 3
                 ? stored.PageConcurrency
                 : ApplicationPreferences.DefaultPageConcurrency,
@@ -122,6 +125,8 @@ public sealed class ApplicationSettingsUseCases
             throw Invalid(nameof(preferences.ContentTheme));
         if (preferences.SearchLimit is < 1 or > 100)
             throw Invalid(nameof(preferences.SearchLimit));
+        if (preferences.AiSearchLimit is < 1 or > 100)
+            throw Invalid(nameof(preferences.AiSearchLimit));
         if (preferences.PageConcurrency is < 1 or > 3)
             throw Invalid(nameof(preferences.PageConcurrency));
         if (preferences.ResourceConcurrency is < 1 or > 20)

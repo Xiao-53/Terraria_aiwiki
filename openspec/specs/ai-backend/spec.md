@@ -40,7 +40,9 @@
 ## 模型证据投影
 
 - 两项工具保留输入 schema 和必要调用说明，不向模型附加完整输出 schema；宿主仍先严格验证完整 Search/Read 响应，校验失败不进入下一次模型输入。
-- Search 模型投影保留全部候选的原顺序、title、redirect_target、summary 和 match_type，仅去掉 UI highlights；MCP Search 契约与数量范围不变。
+- Search 模型投影保留全部候选原顺序、title、redirect_target、summary、match_type 及有界章节导航，仅去掉 UI highlights。导航字段 canonical_title、match_scope、matched_sections、matched_sections_truncated 必须全部有效或全部缺失；旧响应缺失时不虚构导航。校验数量、Unicode 字符预算、重复章节和纯文本。
+- Agent 默认省略 max_results，采用 Application 独立 AI 默认 5 或用户保存的值；证据不足可显式扩大到原允许范围。搜索优先实体/别名/主题关键词；有适用导航时以规范标题和原样 Anchor 定向 Read，无 Anchor 或匹配失败使用 page/catalog。Search 导航不是事实或完整性证明。
+- 带 continuation_token 的 Read 收到确切 `invalid-arguments` 工具错误时，进入原一次有界 ModelRetry，提示重新 page 读取且不使用旧游标/token，不混合内容版本。其他工具错误保持安全失败；不提高重试或运行限位。最终回答遵守用户篇幅要求，不暴露导航/续读/完整性协议字段。
 - Read 同时支持默认 `wiki_blocks_v1` 与显式 `wiki_blocks_v2`。完整身份/来源先由宿主校验和记录，再投影页面 title、anchor、按 section 分组的 kind/text、完整性、续读及目录。宿主字符统计与重复 requested/redirect 字段不进入模型载荷。
 - v2 目标 anchor 缺失的空证据不生成来源，最小轨迹/工具完成状态为 not_found；模型仍能取得可用目录以纠正读取。没有有效 Read 来源时，在首个正文 delta 发布前归一为固定不足证据。
 - 同次运行内，每次重复 Read 仍真实调用 MCP 并严格验证；同页面、同可信内容版本/修改时间、同章节、同 kind 及精确文本的块，可用 `ref` 指向先前模型输入中仍存在的完整 `id` 块。新增或变化的块原样发送，版本未知或原消息已不在上下文时不压缩。并行同批首次读取保留实际正文，避免循环引用。

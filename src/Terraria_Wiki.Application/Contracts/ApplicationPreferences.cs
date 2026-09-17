@@ -6,6 +6,7 @@ public sealed record ApplicationPreferences
     public const string DefaultAppTheme = "auto";
     public const string DefaultContentTheme = "auto";
     public const int DefaultSearchLimit = 50;
+    public const int DefaultAiSearchLimit = 5;
     public const int DefaultPageConcurrency = 2;
     public const int DefaultResourceConcurrency = 10;
     public const int DefaultRetryAttempts = 5;
@@ -17,6 +18,7 @@ public sealed record ApplicationPreferences
     public string ContentTheme { get; init; } = DefaultContentTheme;
     public bool IsSideButtonBackEnabled { get; init; } = true;
     public int SearchLimit { get; init; } = DefaultSearchLimit;
+    public int AiSearchLimit { get; init; } = DefaultAiSearchLimit;
     public int PageConcurrency { get; init; } = DefaultPageConcurrency;
     public int ResourceConcurrency { get; init; } = DefaultResourceConcurrency;
     public int RetryAttempts { get; init; } = DefaultRetryAttempts;

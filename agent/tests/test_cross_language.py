@@ -18,7 +18,7 @@ from pydantic_ai.models.function import AgentInfo
 from pydantic_ai.usage import RequestUsage
 
 from terraria_wiki_agent import TerrariaWikiAgent, WikiAgentSettings, WikiToolConnection
-from terraria_wiki_agent.agent import _WikiReadResponse
+from terraria_wiki_agent.agent import _WikiReadResponse, _WikiSearchResponse
 
 from .fakes import OfflineFunctionModel
 
@@ -287,5 +287,35 @@ def test_real_v2_sections_continuation_missing_anchor_and_strict_parser():
                 text = " ".join(block.text for page in pages for block in page.blocks)
                 for index in range(20):
                     assert text.count(f"唯一序号{index:02}") == 1
+
+    asyncio.run(run())
+
+
+@pytest.mark.cross_language
+def test_real_search_navigation_drives_section_read():
+    if os.environ.get("TERRARIA_RUN_CROSS_LANGUAGE") != "1":
+        pytest.skip("Explicit cross-language opt-in required")
+
+    async def run():
+        async with real_test_host() as connection:
+            transport = StreamableHttpTransport(
+                connection.endpoint, headers=connection._authorization_headers()
+            )
+            async with Client(transport) as client:
+                result = await client.call_tool("search_wiki", {"query": "导航样本 配方"})
+                search = _WikiSearchResponse.model_validate(result.structured_content)
+                assert 1 <= len(search.results) <= 5
+                item = search.results[0]
+                assert item.canonical_title == "导航样本" and item.matched_sections
+                section = next(s for s in item.matched_sections if s.anchor == "recipe-real")
+                result = await client.call_tool(
+                    "read_wiki",
+                    {"title": item.canonical_title + "#" + section.anchor, "mode": "section"},
+                )
+                read = _WikiReadResponse.model_validate(result.structured_content)
+                assert read.scope and read.scope.anchor_found
+                text = " ".join(block.text for block in read.blocks)
+                assert all(fact in text for fact in ["专家模式", "击败守卫后", "12石块", "工作台"])
+                assert "无关兄弟章节" not in text
 
     asyncio.run(run())

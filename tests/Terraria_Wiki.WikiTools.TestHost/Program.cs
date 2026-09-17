@@ -7,7 +7,9 @@ Console.OutputEncoding = new UTF8Encoding(encoderShouldEmitUTF8Identifier: false
 
 try
 {
-    await using var host = await WikiToolTestHost.StartAsync();
+    if (args.Length != 0 && (args.Length != 2 || args[0] != "--snapshot"))
+        throw new ArgumentException("Invalid test host arguments.");
+    await using var host = await WikiToolTestHost.StartAsync(snapshotPath: args.Length == 2 ? args[1] : null);
     Console.WriteLine(JsonSerializer.Serialize(new
     {
         endpoint = host.Connection.Endpoint.AbsoluteUri,

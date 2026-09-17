@@ -1,6 +1,6 @@
 ---
 name: terraria-ui
-description: "Design, implement, or review new and materially changed Avalonia Windows pages and shared visual components in Terraria AI Wiki. Use for page creation, navigation views, layouts, forms, lists, cards, buttons, empty states, responsive behavior, and visual refreshes under Terraria_Wiki.Windows. Do not use for backend-only work, the legacy MAUI UI, or Android UI."
+description: "Design, implement, or review new or materially changed Windows Avalonia pages and shared visual components in Terraria AI Wiki. Excludes copy-only fixes, backend, legacy MAUI, and Android work."
 ---
 
 # Terraria Windows UI
@@ -12,9 +12,9 @@ description: "Design, implement, or review new and materially changed Avalonia W
 1. 按根 `AGENTS.md` 与 `INIT.md` 读取当前任务所需的架构、spec、进行中 change/plan 和 ADR。
 2. 完整读取 [Windows UI 规范](references/windows-ui-standard.md)。
 3. 涉及源码时读取：
-   - `terraria-wiki-offline/src/Terraria_Wiki.Windows/Presentation/Styles/ThemeResources.axaml`
-   - `terraria-wiki-offline/src/Terraria_Wiki.Windows/Presentation/Styles/Controls.axaml`
-   - `terraria-wiki-offline/src/Terraria_Wiki.Windows/Presentation/Shell/ShellView.axaml`
+   - `src/Terraria_Wiki.Windows/Presentation/Styles/ThemeResources.axaml`
+   - `src/Terraria_Wiki.Windows/Presentation/Styles/Controls.axaml`
+   - 涉及 Shell/Reader 布局时的 `src/Terraria_Wiki.Windows/Presentation/Shell/ShellView.axaml`
    - 与新页面最接近的现有 view、view model、直接调用方和测试。
 4. 用户提供截图或参考图时先实际查看，区分内容、布局、样式和功能问题，不凭缩略图猜测。
 
@@ -25,7 +25,7 @@ description: "Design, implement, or review new and materially changed Avalonia W
 1. 先明确页面任务、主操作、信息层级、空/加载/错误/禁用状态和宽窄布局，再决定控件。
 2. 优先复用现有布局模式、语义 token 和共享 style class。只有现有语义确实不匹配且新样式可复用时，才在共享样式中增加命名明确的 class。
 3. 保持 Presentation 薄：页面通过现有 view model/Application 用例工作，不直接访问 Core、SQLite、Viewer backend 或平台外部状态。
-4. 实现最小范围的 XAML、状态和测试；不借视觉任务重构业务逻辑、添加第二套 UI 框架或升级依赖。
+4. 实现最小范围的 XAML 和状态；不借视觉任务重构业务逻辑、添加第二套 UI 框架或升级依赖。
 5. 按改动风险验证 XAML 编译、状态行为、明暗主题、键盘/焦点、默认与最小窗口、宽窄布局和真实 Windows 外观。
 
 ## 强制视觉护栏
@@ -43,7 +43,7 @@ description: "Design, implement, or review new and materially changed Avalonia W
 ## 完成门槛
 
 - 检查新增页面是否覆盖规范中的页面、组件、状态、响应式和可访问性清单。
-- 为关键视觉边界增加有意义的静态或行为回归，不用只匹配无关文案的脆弱测试充数。
+- 按根 `AGENTS.md` 选择受影响的验证；关键状态或视觉边界缺少覆盖时才补回归，不用只匹配文案的脆弱测试充数，不默认追加 smoke 或全量测试。
 - Windows 专属 XAML 必须用 Windows .NET 环境实际编译；显著页面或布局变化应运行真实窗口检查。无法执行的主题、缩放或目标环境检查必须明确说明。
-- 完成前检查 diff、临时截图/脚本、生成物、两个 Git 状态和当前 plan；只提交当前授权范围。
+- 完成前检查 diff、临时截图/脚本、生成物、当前仓库状态和适用的 plan；只提交当前授权范围。
 - 最终报告只陈述实际变更、实际验证和仍未验证事项。

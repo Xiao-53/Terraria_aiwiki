@@ -79,6 +79,8 @@ Terraria facts.
 
 Mandatory evidence workflow:
 1. For every factual Terraria question, call search_wiki before relying on any fact.
+   Prefer entity/alias and topic keywords, resolving references from history first. Normally omit
+   max_results to use the user's independent AI search setting; increase explicitly only if needed.
 2. Call read_wiki for every page whose facts you use. Pass the current question or specific topic as
    focus. You may search and read several pages and use next_cursor or a precise #anchor whenever
    the current evidence blocks are incomplete or insufficient.
@@ -93,12 +95,39 @@ Evidence coverage:
   prerequisite and conflicting condition against the current reads. History is not factual proof.
 - Prefer mode=section with a known title#anchor for targeted questions; mode=page provides the
   catalog. A complete section is not a complete page. Missing anchors provide no target evidence.
+- Use search canonical_title and a relevant matched_sections anchor unchanged for section reads.
+  Empty anchors require page reads. Navigation and match_scope describe matches, not evidence
+  completeness; matched_sections_truncated means more matching sections were omitted. If navigation
+  is absent or the anchor is missing, use the page catalog. After an expired continuation error,
+  restart the page read without the old cursor/token; never combine different content versions.
 - For all-items lists and comparisons, verify coverage across relevant sections/pages before
   claiming completeness. Partial page reads may suffice for a specific fact, but found is not proof.
 - Evidence groups preserve section paths. A block ref points to the exact earlier block id still
   in this run's tool messages; it adds no new fact. Continue using the returned cursor and token.
 - available_sections lists readable sections; catalog_ref reuses the earlier catalog_id. Catalogs
   are bounded, so use page continuation for complete enumerations beyond the listed sections.
+
+Keyword selection (optional guidance, not evidence):
+- Prefer a known entity alone or with one relevant topic; never concatenate a row of terms.
+  Search terms below are alternatives. Use focus to express the question; choose sections only
+  from returned navigation, never turn these labels into guessed anchors.
+  Intent | Search topic choices | Read focus / navigation guidance
+  Crafting | 制作, 配方, 制作树, 制作站 | Distinguish direct recipe, full chain and station.
+  Drops / rewards | 掉落, 宝藏袋 | Distinguish enemy drops from bag contents; generic drop pages
+    do not establish all rewards for a specific Boss.
+  Summoning / events | 召唤, 召唤和生成, 生成条件 | Start with the entity; event 内容 is a catalog
+    choice when returned, while ending conditions may be in the introduction.
+  Equipment | 套装, 功能 | Select the requested bonus or function from actual navigation.
+  Potions / status | 配方, 增益, 减益 | Use recipes only for crafting; effects and 持续时间 belong
+    in relevant prose/status tables. 增益药水 is a possible returned category section.
+  NPCs | 出售物品, 快乐 | Focus on 入住 or 生活偏好 as asked; arrival conditions may be in prose.
+  Environment | 生物群系, 地层 | These are distinct topics; read each only when relevant.
+  Fishing / containers | 钓鱼, 宝匣, 宝箱 | Select 渔获 or 机制 from a returned catalog as needed;
+    fishing crates and chests are different objects.
+  Growing plants | specific plant/seed, 种植盆 | Focus on 生长 or 收获; do not replace every plant
+    with 种植盆 or assume a dedicated section exists.
+- Prefer the specific entity page for its facts; use general pages for relevant tables/mechanics.
+  These choices add no mandatory calls and do not change the single shorter-search retry rule.
 
 Bounded tool strategy:
 - Use as many necessary Search/Read calls as the question and evidence require, within the host's
@@ -136,6 +165,20 @@ class _WikiSearchHighlight(BaseModel):
     length: int = Field(ge=0)
 
 
+class _WikiSearchSection(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    section_path: str
+    anchor: str
+
+    @field_validator("section_path", "anchor")
+    @classmethod
+    def reject_html(cls, value: str) -> str:
+        if _HTML_TAG.search(value):
+            raise ValueError("Wiki search navigation must be plain text")
+        return value
+
+
 class _WikiSearchResult(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -152,6 +195,34 @@ class _WikiSearchResult(BaseModel):
         "body_fts",
     ]
     highlights: list[_WikiSearchHighlight]
+    canonical_title: str | None = Field(default=None, min_length=1)
+    match_scope: Literal["same_region", "same_section", "same_page", "partial"] | None = None
+    matched_sections: list[_WikiSearchSection] | None = Field(default=None, max_length=5)
+    matched_sections_truncated: bool | None = Field(default=None, strict=True)
+
+    @model_validator(mode="after")
+    def validate_navigation(self) -> _WikiSearchResult:
+        fields = {
+            "canonical_title",
+            "match_scope",
+            "matched_sections",
+            "matched_sections_truncated",
+        }
+        present = fields & self.model_fields_set
+        if not present:
+            return self  # Legacy Search response: use the page/read catalog.
+        if present != fields or any(getattr(self, name) is None for name in fields):
+            raise ValueError("Search navigation must be complete or entirely absent")
+        assert self.canonical_title is not None and self.matched_sections is not None
+        if _HTML_TAG.search(self.canonical_title):
+            raise ValueError("Wiki search navigation must be plain text")
+        pairs = [(section.section_path, section.anchor) for section in self.matched_sections]
+        if (
+            len(set(pairs)) != len(pairs)
+            or sum(len(path) + len(anchor) for path, anchor in pairs) > 2048
+        ):
+            raise ValueError("Invalid search navigation bounds or duplicates")
+        return self
 
     @field_validator("title", "redirect_target", "summary")
     @classmethod
@@ -447,7 +518,20 @@ class _RunEvidence:
                 raise ModelRetry(
                     "Call search_wiki successfully in an earlier turn before read_wiki."
                 )
-            result = await call_tool(name, tool_args)
+            try:
+                result = await call_tool(name, tool_args)
+            except ToolError as error:
+                if (
+                    name == "read_wiki"
+                    and tool_args.get("continuation_token")
+                    and str(error) == "invalid-arguments"
+                ):
+                    raise ModelRetry(
+                        "Continuation is no longer valid. Restart read_wiki in page mode without "
+                        "cursor or continuation_token, and recheck the required facts in current "
+                        "evidence; do not combine different content versions."
+                    ) from None
+                raise
             if name == "read_wiki":
                 read = _WikiReadResponse.model_validate(result)
                 if read.requested_title != tool_args.get("title"):
@@ -461,7 +545,10 @@ class _RunEvidence:
                 self._search_steps.add(ctx.run_step)
                 search = _WikiSearchResponse.model_validate(result)
                 projected: ToolResult = {
-                    "results": [item.model_dump(exclude={"highlights"}) for item in search.results]
+                    "results": [
+                        item.model_dump(exclude={"highlights"}, exclude_none=True)
+                        for item in search.results
+                    ]
                 }
             else:
                 read = _WikiReadResponse.model_validate(result)

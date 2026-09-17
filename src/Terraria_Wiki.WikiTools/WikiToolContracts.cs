@@ -10,7 +10,15 @@ internal sealed record WikiSearchToolResult(
     [property: JsonPropertyName("redirect_target")] string RedirectTarget,
     [property: JsonPropertyName("summary")] string Summary,
     [property: JsonPropertyName("match_type")] string MatchType,
-    [property: JsonPropertyName("highlights")] IReadOnlyList<WikiSearchToolHighlight> Highlights);
+    [property: JsonPropertyName("highlights")] IReadOnlyList<WikiSearchToolHighlight> Highlights,
+    [property: JsonPropertyName("canonical_title")] string CanonicalTitle,
+    [property: JsonPropertyName("match_scope")] string MatchScope,
+    [property: JsonPropertyName("matched_sections")] IReadOnlyList<WikiSearchToolSection> MatchedSections,
+    [property: JsonPropertyName("matched_sections_truncated")] bool MatchedSectionsTruncated);
+
+internal sealed record WikiSearchToolSection(
+    [property: JsonPropertyName("section_path")] string SectionPath,
+    [property: JsonPropertyName("anchor")] string Anchor);
 
 internal readonly record struct WikiSearchToolHighlight(
     [property: JsonPropertyName("start")] int Start,

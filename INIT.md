@@ -23,27 +23,18 @@ codex
 - 项目基线：`openspec/project.md`
 - 计划规范：`.agent/PLANS.md`
 
-产品源码和工作区治理文件都属于当前仓库；不得重新引入旧 MAUI checkout 作为产品 build/runtime 依赖。修改 `AGENTS.md` 后重新启动 Codex 会话。
+产品源码和工作区治理文件都属于当前仓库；不得重新引入旧 MAUI checkout 作为产品 build/runtime 依赖。Agent 规则修改后的加载方式见 `AGENTS.md`。
 
-## 新任务读取顺序
+## 新任务上下文
 
-1. 确认 Codex 已从外层工作区根启动并自动加载 `AGENTS.md`。
-2. `INIT.md`
-3. `README.md`
-4. `docs/architecture/ARCHITECTURE-v0.6.md`
-5. `openspec/project.md`
-6. 与任务相关的 `openspec/specs/`、`openspec/changes/` 和 `docs/adr/`
-7. 需要建立计划时完整读取 `.agent/PLANS.md`
-8. 涉及源码时，再读取根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、调用方、实现、数据模型和测试；只有核对旧行为或资产来源时，才读取归档记录或 ADR 0007 固定的上游提交
-
-只读取与当前任务有关的 specs、changes、ADR 和源码，不要无目的加载整个仓库。
+`AGENTS.md` 自动加载，其“开始任务前”规定按需读取方式。上面的固定位置用于查找资料，不是逐项必读清单；简单局部修改只读取相关文件与适用规则。
 
 ## 开始工作
 
 - 回答或审查任务：读取证据后直接报告，不修改文件。
 - 诊断任务：确定原因和影响；用户未要求修复时不实施修复。
 - 简单局部修改：确认范围和验证方式后实施。
-- 多文件、跨模块、跨平台、高风险或 Phase 工作：先按 `.agent/PLANS.md` 建立可持久化的 change 和计划，不依赖会话内临时状态。
+- 需要跨模块协调、跨会话跟踪、高风险或 Phase 工作：按 `.agent/PLANS.md` 建立持久计划；文件数量本身不触发计划。
 - 只要求生成 Phase 计划时：生成计划，不自动进入实现。
 
 若文档互相冲突、前置 Phase 未完成或任务需要超出当前授权的结构性决策，停止扩展并向用户说明。

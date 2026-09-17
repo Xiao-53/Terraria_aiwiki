@@ -22,7 +22,9 @@ public sealed class WikiToolTestHost : IAsyncDisposable
     public string DataRoot { get; }
     public WikiToolConnection Connection => _server.Connection;
 
-    public static async Task<WikiToolTestHost> StartAsync(CancellationToken cancellationToken = default)
+    public static async Task<WikiToolTestHost> StartAsync(
+        CancellationToken cancellationToken = default,
+        string? snapshotPath = null)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var dataRoot = Path.Combine(
@@ -37,8 +39,18 @@ public sealed class WikiToolTestHost : IAsyncDisposable
         WikiToolServer? server = null;
         try
         {
+            if (snapshotPath is not null)
+            {
+                // Acceptance only: use an isolated copy, never the user's active database/settings.
+                if (!Path.IsPathFullyQualified(snapshotPath) || !File.Exists(snapshotPath))
+                    throw new ArgumentException("An existing absolute snapshot path is required.");
+                var folder = Path.Combine(dataRoot, "Terraria_Wiki_zh");
+                Directory.CreateDirectory(folder);
+                File.Copy(snapshotPath, Path.Combine(folder, "data.db"), overwrite: false);
+            }
             await application.ActiveWiki.InitializeAsync(cancellationToken);
-            await SeedFixtureAsync(application, dataRoot, cancellationToken);
+            if (snapshotPath is null)
+                await SeedFixtureAsync(application, dataRoot, cancellationToken);
             server = await WikiToolServer.StartAsync(application.Query, coordinator, cancellationToken);
             return new WikiToolTestHost(dataRoot, application, server);
         }
@@ -133,6 +145,13 @@ public sealed class WikiToolTestHost : IAsyncDisposable
                     []);
                 await database.SavePageWithSearchAsync(entity, processed, cancellationToken);
             }
+            // A real processor fixture for Search navigation -> section Read integration.
+            var navigation = WikiContentProcessor.Process(
+                "<p>仅专家模式。</p><h2 id='prerequisite'>前提</h2><p>击败守卫后。</p>"
+                + "<h3 id='recipe-real'>配方</h3><p>导航样本需要12石块，在工作台制作。</p>"
+                + "<h2 id='other'>其他</h2><p>无关兄弟章节。</p>", new WikiBook(), "导航样本");
+            await database.SavePageWithSearchAsync(new WikiPage
+            { Title = "导航样本", Content = navigation.Html, LastModified = modified }, navigation, cancellationToken);
         }
         finally
         {

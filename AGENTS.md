@@ -8,6 +8,7 @@
 - 工作区治理、架构、规范、计划和 ADR 必须放在本仓库的对应目录中；不得在仓库内建立第二套产品源码或治理体系。
 - Phase 10 已移除本地旧 MAUI 参考仓库。旧实现、历史行为和资产来源优先通过归档计划、ADR 0007 与 `assets/windows/README.md` 核对；确需读取上游源码时使用其中记录的 URL 和固定提交，并且不得把临时 checkout 加入产品仓库或作为 build/runtime 依赖。
 - 用户要求检查、解释或诊断时，只做读取与报告；只有用户明确要求修改或实现时，才写入相应范围。
+- 用户已要求实施时，持续完成授权范围内的修改、必要验证和本次引入问题的修复；常规可回退操作无需逐步确认，遇到超范围决策再询问。
 - 不得把当前任务扩展成相邻重构、依赖升级、目录整理或后续 Phase 实施。
 
 ## Codex CLI 启动与执行环境
@@ -19,14 +20,8 @@ Windows: C:\Users\Xiao\mypython\terraria_aiwiki
 WSL:     /mnt/c/Users/Xiao/mypython/terraria_aiwiki
 ```
 
-每个主开发会话都应从外层工作区根启动：
+从外层工作区根启动，命令见 `INIT.md`。修改 Agent 规则后，下次会话重新加载；当前已授权任务继续完成。
 
-```bash
-cd /mnt/c/Users/Xiao/mypython/terraria_aiwiki
-codex
-```
-
-- Codex CLI 在会话开始时自动发现并加载 `AGENTS.md`。修改本文件后应结束并重新启动 Codex 会话，使新指令链生效。
 - 日常读取、搜索、编辑、脚本和平台无关检查使用 WSL/Linux 工具与 `/mnt/c/...` 路径。
 - Windows 负责新 .NET/Avalonia 客户端的构建、运行、调试、发布及其他必须在 Windows 执行的验证。不得把 WSL 中的 `dotnet` 结果等同于 Windows 客户端验证。
 - Windows 新版本不得使用 .NET MAUI，也不得为了当前 Windows 开发安装 MAUI workload、Android SDK、JDK 或 Emulator。Android 工具链只允许在用户批准进入 Android Phase 后安装和使用。
@@ -54,13 +49,12 @@ codex
 
 ## 开始任务前
 
-Codex CLI 已自动加载本文件；随后按 `INIT.md` 的顺序读取必要上下文。最低要求是：
+按任务读取上下文，不把文档表当作每次必读清单；已读取且未变化的内容无需重复加载。
 
-1. 阅读根 `README.md`、Master Architecture 与 `openspec/project.md`。
-2. 查找当前任务相关的 specs、进行中 changes 和 ADR；不得只看摘要或文件名。
-3. 涉及源码时，先阅读根 solution 与 `src/`、`tests/`、`agent/`、`assets/` 中的相关配置、入口、直接调用方、核心实现、数据模型和已有测试；只有需要核对旧行为或来源时，才读取归档记录或 ADR 0007 固定的上游提交。
-4. 满足 `.agent/PLANS.md` 的触发条件时，先创建并持续维护 `openspec/changes/<change-id>/plan.md`。
-5. 如果任务属于 Roadmap Phase，确认前置 Phase 和阶段边界；只计划、实施用户指定的 Phase。
+- 入口或当前状态不清楚时查 `INIT.md`、`README.md`；涉及分层、P0 或 Phase 时读 Master Architecture，技术基线查 `openspec/project.md`。
+- 改变行为前阅读相关 spec、当前 change 和 ADR 的适用正文；涉及源码时沿实际调用关系读取实现、配置、模型和测试，不预先盘点整个仓库。
+- 需要持久计划时按 `.agent/PLANS.md` 创建或维护现有 change；Roadmap Phase 必须确认前置结果和阶段边界。
+- 核对旧行为或资产来源时才读取归档记录、ADR 0007 与资产说明。
 
 找不到事实依据时明确标为待确认，不得用经验或架构图补全不存在的实现。
 
@@ -69,7 +63,6 @@ Codex CLI 已自动加载本文件；随后按 `INIT.md` 的顺序读取必要�
 - 新建 Windows Avalonia 页面或共享视觉组件、增加导航/表单/列表/卡片/按钮，或显著重做现有页面布局与视觉时，必须使用项目级 `.agents/skills/terraria-ui/` Skill，并完整读取其 `SKILL.md` 与 `references/windows-ui-standard.md`。
 - 当前用户需求、持续 Presentation spec、当前 change/plan 与 ADR 决定产品行为和架构边界；UI Skill 负责默认视觉、组件复用和验收流程。发现冲突时按职责报告，不得用视觉规范自行改变行为契约。
 - 小型文案修正、纯后端任务、Legacy MAUI UI 和未来 Android UI 不触发该 Skill。Windows 规范不得被解释为其他平台实现授权。
-- Skill 或本文件变更后应重新启动 Codex 会话，使新的项目级发现和指令链完整生效。
 
 ## 实施纪律
 
@@ -109,9 +102,13 @@ Master Architecture 中的 Existing Core Capabilities 是所有 Phase 的强制�
 
 ## 验证与完成标准
 
-- 验证强度与风险相称：执行相关静态检查、测试、构建、目标平台验证或人工验收。
+- 选择能覆盖实际改动及受影响调用链的最小充分验证。纯文档、提示词或非执行性配置修改通常只检查内容、引用、格式和 diff，不运行产品构建或测试。
+- 行为修改优先运行受影响的现有测试；缺少关键覆盖时补充能检出真实回归的用例。数据、索引、迁移、P0 和平台变化仍须覆盖受影响的不变量、失败恢复与目标环境行为。
+- smoke test 只在启动、跨进程集成、运行时资源或安装/发布链路受影响，或当前验收门槛明确要求时运行；不把启动成功当作功能或视觉验收。
+- 全量测试仅在影响广泛、定向检查暴露跨模块风险，或当前 Phase/发布验收明确要求时运行；先说明它补足的覆盖。同一源码、配置和环境已有有效结果时复用；只有后续改动、失败或新证据使结果失效才重跑相关检查。必要验证通过、证据足以支持本次验收后停止，不为收尾重复测试或构建。
+- 当前适用的 spec、Phase 和发布门槛仍须满足；历史计划里的测试矩阵不自动成为每次修改的必跑清单。验证不得自行产生付费请求或修改用户活动数据。
 - Windows 或 Android 专属行为，只有在对应目标环境实际验证后才能宣称通过；不为范围外平台建立验证承诺。
-- Codex CLI 运行在 WSL2，但工作区位于 Windows C 盘挂载路径。必须同时考虑 Linux 工具语义与 Windows 文件系统的路径、大小写、换行、文件锁和性能差异。
+- 涉及文件操作时考虑 WSL 与 Windows 的路径、大小写、换行及文件锁差异。
 - 无法执行的验证必须写明原因和影响，不能用“理论上可行”替代结果。
 - 完成前检查实际文件差异、生成物、临时文件、计划状态、产品仓库状态，以及任务涉及的上游来源/资产快照证据。
 - 不得未经证据宣称“已完成”“已修复”“构建通过”或“平台可用”。最终汇报列出实际变更、实际验证和仍未验证事项。

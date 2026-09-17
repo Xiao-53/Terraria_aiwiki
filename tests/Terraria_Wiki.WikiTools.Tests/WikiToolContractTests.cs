@@ -62,7 +62,7 @@ public sealed class WikiToolContractTests
         Assert.Equal(["continuation_token", "cursor", "focus", "mode", "title"], PropertyNames(read.InputSchema));
         Assert.Equal(["title"], RequiredNames(read.InputSchema));
         Assert.Contains("results", search.OutputSchema!.Value.GetRawText(), StringComparison.Ordinal);
-        foreach (var property in new[] { "title", "redirect_target", "summary", "match_type", "highlights", "start", "length" })
+        foreach (var property in new[] { "title", "redirect_target", "summary", "match_type", "highlights", "start", "length", "canonical_title", "match_scope", "matched_sections", "matched_sections_truncated" })
             Assert.Contains($"\"{property}\"", search.OutputSchema.Value.GetRawText(), StringComparison.Ordinal);
         foreach (var property in new[]
                  {
@@ -102,6 +102,7 @@ public sealed class WikiToolContractTests
             Assert.Equal(expected.Title, actual.GetProperty("title").GetString());
             Assert.Equal(expected.RedirectTo, actual.GetProperty("redirect_target").GetString());
             Assert.Equal(expected.Snippet, actual.GetProperty("summary").GetString());
+            Assert.Equal(expected.CanonicalTitle, actual.GetProperty("canonical_title").GetString());
             Assert.Equal(MatchType(expected.MatchKind), actual.GetProperty("match_type").GetString());
             var highlights = actual.GetProperty("highlights").EnumerateArray().ToArray();
             Assert.Equal(expected.Highlights.Count, highlights.Length);
@@ -116,7 +117,7 @@ public sealed class WikiToolContractTests
     [Fact]
     public async Task SearchUsesApplicationDefaultAllowsExplicitLimitAndPreservesEmptyQuery()
     {
-        await using var fixture = await WikiToolFixture.CreateAsync(new ApplicationPreferences { SearchLimit = 3 });
+        await using var fixture = await WikiToolFixture.CreateAsync(new ApplicationPreferences { SearchLimit = 3, AiSearchLimit = 2 });
         var modified = new DateTime(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
         await fixture.SavePagesAndIndexesAsync(
             Enumerable.Range(0, 6)
@@ -134,7 +135,7 @@ public sealed class WikiToolContractTests
             "search_wiki",
             new Dictionary<string, object?> { ["query"] = "  " });
 
-        Assert.Equal(3, ResultCount(configured));
+        Assert.Equal(2, ResultCount(configured));
         Assert.Equal(5, ResultCount(explicitLimit));
         Assert.Equal(0, ResultCount(empty));
     }

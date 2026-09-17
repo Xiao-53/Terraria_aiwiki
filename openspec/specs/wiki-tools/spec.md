@@ -27,7 +27,7 @@
 输入：
 
 - `query`：必填字符串；空或仅空白输入沿用 Application/Core 空结果语义。
-- `max_results`：可选整数；省略时使用 Application 当前设置，显式值固定为 `1..100`。
+- `max_results`：可选整数；省略时使用 Application 当前独立 `AiSearchLimit`（默认 5），显式值固定为 `1..100`，按页面计数；不继承手动 SearchLimit。
 
 输出对象包含 `results` 数组；每项固定包含：
 
@@ -36,8 +36,10 @@
 - `summary`：现有纯文本摘要，不包含 HTML 标记；
 - `match_type`：固定为 `exact_title`、`exact_redirect`、`title_prefix`、`redirect_prefix`、`title_contains`、`redirect_contains`、`body_fts` 之一；
 - `highlights`：`start` / `length` 数组，使用 `summary` 的零基 .NET UTF-16 索引。
+- `canonical_title`：规范页面标题；`match_scope`：`same_region` / `same_section` / `same_page` / `partial`，表示搜索匹配范围而非回答证据完整性。
+- `matched_sections`：`{section_path, anchor}` 导航数组，代表命中区域在前，再沿 EvidenceRegions 顺序补充，按路径与 Anchor 去重。最多 5 项，路径及 Anchor 合计最多 2048 Unicode scalar；超限省略整项且 `matched_sections_truncated=true`，不截断 Anchor。空 Anchor 要通过 page/catalog 读取。导航不包含 RegionId 或区域正文，不保证完整列出所有章节。
 
-结果顺序、去重、limit、Redirect、摘要和高亮必须与对同一 `WikiQueryUseCases.SearchAsync` 的直接调用一致。Adapter 不重排、不补查、不转换、不截断；Search 不写 history。
+相同显式数量下，结果顺序、去重、limit、Redirect、摘要和高亮必须与对同一 `WikiQueryUseCases.SearchAsync` 的直接调用一致。Adapter 不重排、不补查或截断原候选/摘要；只对新增导航执行上述有界投影。Search 不写 history。Python 接受导航全部缺失的旧响应；新增字段部分缺失或非法时失败关闭。新 C# 与 Python 成套交付/回退，不承诺旧严格解析器接受新响应。
 
 ### `read_wiki`
 

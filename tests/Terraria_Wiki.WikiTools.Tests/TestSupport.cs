@@ -113,7 +113,7 @@ internal sealed class WikiToolFixture : IAsyncDisposable
         });
     }
 
-    private async Task WithContentDatabaseAsync(Func<ContentDbService, Task> operation)
+    internal async Task WithContentDatabaseAsync(Func<ContentDbService, Task> operation)
     {
         var active = await Application.ActiveWiki.GetActiveAsync();
         var database = new ContentDbService(Path.Combine(Root, active.DataFolder, "data.db"));

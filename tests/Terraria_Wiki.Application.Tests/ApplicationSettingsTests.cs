@@ -26,6 +26,7 @@ public sealed class ApplicationSettingsTests
             ContentTheme = "original",
             IsSideButtonBackEnabled = false,
             SearchLimit = 100,
+            AiSearchLimit = 17,
             PageConcurrency = 3,
             ResourceConcurrency = 20,
             RetryAttempts = 0,
@@ -49,6 +50,7 @@ public sealed class ApplicationSettingsTests
             ContentTheme = "dark",
             IsSideButtonBackEnabled = false,
             SearchLimit = 101,
+            AiSearchLimit = 0,
             PageConcurrency = 0,
             ResourceConcurrency = 21,
             RetryAttempts = -1,
@@ -63,6 +65,7 @@ public sealed class ApplicationSettingsTests
         Assert.Equal(ApplicationPreferences.DefaultContentTheme, repaired.ContentTheme);
         Assert.False(repaired.IsSideButtonBackEnabled);
         Assert.Equal(50, repaired.SearchLimit);
+        Assert.Equal(5, repaired.AiSearchLimit);
         Assert.Equal(2, repaired.PageConcurrency);
         Assert.Equal(10, repaired.ResourceConcurrency);
         Assert.Equal(5, repaired.RetryAttempts);
@@ -93,6 +96,8 @@ public sealed class ApplicationSettingsTests
         new ApplicationPreferences { ContentTheme = "dark" },
         new ApplicationPreferences { SearchLimit = 0 },
         new ApplicationPreferences { SearchLimit = 101 },
+        new ApplicationPreferences { AiSearchLimit = 0 },
+        new ApplicationPreferences { AiSearchLimit = 101 },
         new ApplicationPreferences { PageConcurrency = 4 },
         new ApplicationPreferences { ResourceConcurrency = 0 },
         new ApplicationPreferences { RetryAttempts = 21 },

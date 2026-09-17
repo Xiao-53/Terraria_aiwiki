@@ -9,6 +9,25 @@ public sealed class WikiQueryUseCaseTests
     private static readonly DateTime FixtureTime = new(2026, 8, 24, 0, 0, 0, DateTimeKind.Utc);
 
     [Fact]
+    public async Task AiSearchUsesIndependentLiveSettingAndExplicitOverride()
+    {
+        await using var fixture = await ApplicationFixture.CreateAsync();
+        await SavePagesAndIndexesAsync(fixture, Enumerable.Range(0, 12)
+            .Select(index => ($"ore {index:D2}", "description")).ToArray());
+        Assert.Equal(5, (await fixture.Application.Query.SearchForAiAsync("ore")).Count);
+        Assert.Equal(12, (await fixture.Application.Query.SearchAsync("ore")).Count);
+        var settings = await fixture.Application.Settings.GetAsync();
+        await fixture.Application.Settings.SaveAsync(settings with { AiSearchLimit = 2 });
+        Assert.Equal(2, (await fixture.Application.Query.SearchForAiAsync("ore")).Count);
+        Assert.Equal(9, (await fixture.Application.Query.SearchForAiAsync("ore", 9)).Count);
+        Assert.Equal(12, (await fixture.Application.Query.SearchAsync("ore")).Count);
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => fixture.Application.Query.SearchForAiAsync("ore", 0));
+        using var cancellation = new CancellationTokenSource();
+        cancellation.Cancel();
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => fixture.Application.Query.SearchForAiAsync("ore", cancellationToken: cancellation.Token));
+    }
+
+    [Fact]
     public async Task SearchUsesConfiguredLimitAndAllowsExplicitOverride()
     {
         await using var fixture = await ApplicationFixture.CreateAsync(

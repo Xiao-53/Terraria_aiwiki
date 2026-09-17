@@ -30,13 +30,13 @@ internal sealed class WikiMcpTools
         OpenWorld = false,
         UseStructuredContent = true,
         OutputSchemaType = typeof(WikiSearchToolResponse))]
-    [Description("Searches the active local Terraria Wiki using its existing deterministic title, redirect, and body search.")]
+    [Description("Search the active local Wiki using entity and topic keywords. Results include bounded matched_sections navigation; use canonical_title#anchor with read_wiki mode=section when relevant. Summaries and navigation are not factual evidence or complete coverage.")]
     public Task<CallToolResult> SearchWikiAsync(
         [Required]
         [Description("The local Wiki query. Empty or whitespace-only queries return no results.")]
         string? query = null,
         [Range(1, 100)]
-        [Description("Optional maximum result count from 1 through 100. Omit it to use the Application setting.")]
+        [Description("Optional maximum page count from 1 through 100. Normally omit to use the independent AI search setting (default 5); explicitly increase only when more candidates are needed.")]
         int? max_results = null,
         CancellationToken cancellationToken = default) =>
         InvokeAsync(
@@ -44,7 +44,7 @@ internal sealed class WikiMcpTools
             {
                 if (query is null)
                     throw new ArgumentNullException(nameof(query));
-                var results = await _query.SearchAsync(query, max_results, token).ConfigureAwait(false);
+                var results = await _query.SearchForAiAsync(query, max_results, token).ConfigureAwait(false);
                 return new WikiSearchToolResponse(results.Select(MapSearchResult).ToArray());
             },
             cancellationToken);
@@ -181,22 +181,55 @@ internal sealed class WikiMcpTools
         IsError = true,
     };
 
-    private static WikiSearchToolResult MapSearchResult(SearchResultItem item) => new(
-        item.Title,
-        item.RedirectTo,
-        item.Snippet,
-        item.MatchKind switch
+    internal static WikiSearchToolResult MapSearchResult(SearchResultItem item)
+    {
+        var sections = new List<WikiSearchToolSection>();
+        var seen = new HashSet<WikiSearchToolSection>();
+        var characters = 0;
+        var truncated = false;
+        var candidates = new[] { new WikiSearchToolSection(item.SectionPath, item.Anchor) }
+            .Concat(item.EvidenceRegions.Select(region => new WikiSearchToolSection(region.SectionPath, region.Anchor)));
+        foreach (var section in candidates)
         {
-            WikiSearchMatchKind.ExactTitle => "exact_title",
-            WikiSearchMatchKind.ExactRedirect => "exact_redirect",
-            WikiSearchMatchKind.TitlePrefix => "title_prefix",
-            WikiSearchMatchKind.RedirectPrefix => "redirect_prefix",
-            WikiSearchMatchKind.TitleContains => "title_contains",
-            WikiSearchMatchKind.RedirectContains => "redirect_contains",
-            WikiSearchMatchKind.BodyFts => "body_fts",
-            _ => throw new InvalidOperationException("Unknown Wiki search match kind."),
-        },
-        item.Highlights.Select(range => new WikiSearchToolHighlight(range.Start, range.Length)).ToArray());
+            if (!seen.Add(section))
+                continue;
+            var size = section.SectionPath.EnumerateRunes().Count() + section.Anchor.EnumerateRunes().Count();
+            if (sections.Count >= 5 || characters + size > 2048)
+            {
+                truncated = true;
+                continue;
+            }
+            sections.Add(section);
+            characters += size;
+        }
+        return new(
+            item.Title,
+            item.RedirectTo,
+            item.Snippet,
+            item.MatchKind switch
+            {
+                WikiSearchMatchKind.ExactTitle => "exact_title",
+                WikiSearchMatchKind.ExactRedirect => "exact_redirect",
+                WikiSearchMatchKind.TitlePrefix => "title_prefix",
+                WikiSearchMatchKind.RedirectPrefix => "redirect_prefix",
+                WikiSearchMatchKind.TitleContains => "title_contains",
+                WikiSearchMatchKind.RedirectContains => "redirect_contains",
+                WikiSearchMatchKind.BodyFts => "body_fts",
+                _ => throw new InvalidOperationException("Unknown Wiki search match kind."),
+            },
+            item.Highlights.Select(range => new WikiSearchToolHighlight(range.Start, range.Length)).ToArray(),
+            item.CanonicalTitle,
+            item.Scope switch
+            {
+                WikiSearchScope.SameRegion => "same_region",
+                WikiSearchScope.SameSection => "same_section",
+                WikiSearchScope.SamePage => "same_page",
+                WikiSearchScope.Partial => "partial",
+                _ => throw new InvalidOperationException("Unknown Wiki search scope."),
+            },
+            sections,
+            truncated);
+    }
 
     private static string MapApplicationError(string code) => code switch
     {

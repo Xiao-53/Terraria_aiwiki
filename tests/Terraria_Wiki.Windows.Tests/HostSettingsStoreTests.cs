@@ -6,12 +6,24 @@ namespace Terraria_Wiki.Windows.Tests;
 public sealed class HostSettingsStoreTests
 {
     [Fact]
+    public async Task LegacyPreferencesWithoutAiLimitUseFive()
+    {
+        using var temp = new TestDirectory();
+        var path = System.IO.Path.Combine(temp.Path, "host-settings.json");
+        await File.WriteAllTextAsync(path, """{"version":1,"preferences":{"searchLimit":23}}""");
+        var preferences = await new HostSettingsStore(path).LoadPreferencesAsync();
+        Assert.NotNull(preferences);
+        Assert.Equal(23, preferences.SearchLimit);
+        Assert.Equal(5, preferences.AiSearchLimit);
+    }
+
+    [Fact]
     public async Task SavesAllHostValuesWithoutLosingOtherFields()
     {
         using var temp = new TestDirectory();
         var path = System.IO.Path.Combine(temp.Path, "settings", "host-settings.json");
         var store = new HostSettingsStore(path);
-        var preferences = new ApplicationPreferences { SearchLimit = 17, Language = "en-us" };
+        var preferences = new ApplicationPreferences { SearchLimit = 17, AiSearchLimit = 8, Language = "en-us" };
         var dataRoot = temp.CreateDataRoot();
 
         await store.SavePreferencesAsync(preferences);

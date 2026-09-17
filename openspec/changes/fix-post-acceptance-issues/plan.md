@@ -4,13 +4,13 @@
 - Phase：无；真实验收完成后的独立小问题修复
 - 执行环境：后续按 WSL Codex CLI 开发、Windows 实机验证；本次仅维护文档
 - 创建日期：2026-09-14
-- 最后更新：2026-09-15
-- 范围：Windows 导航、首页入口、收藏视觉、数据管理页布局、下载选项、设置页 AI 模型配置与 Wiki 完整核对周期设置
-- 关联：`openspec/changes/rebuild-local-wiki-search/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
+- 最后更新：2026-09-16
+- 范围：Windows 导航、首页入口、收藏视觉、数据管理页布局、下载选项、设置页 AI 模型配置、AI 搜索候选数与 Wiki 完整核对周期设置
+- 关联：`openspec/changes/archive/rebuild-local-wiki-search/plan.md`、`openspec/changes/optimize-ai-search-evidence/plan.md`、`openspec/specs/windows-presentation/spec.md`、`openspec/specs/windows-ai-runtime/spec.md`、`docs/adr/0005-use-pydantic-ai-openai-backend.md`
 
 ## 背景与当前证据
 
-用户要求先记录下一阶段待修复的小问题，等真实验收完成后再推进。目前 `rebuild-local-wiki-search` 仍记录为等待用户下载后真实验收；本计划不代表该验收已经通过。
+用户要求先记录下一阶段待修复的小问题，等真实验收完成后再推进。搜索重建及增量同步已有独立归档验收证据；本计划的界面调整尚未实施，不继承它们的界面验收结论。
 
 以下现象来自用户反馈，本次未检查产品源码或复现实机行为。
 
@@ -24,6 +24,12 @@
 | 4 | 左侧导航中 Wiki 与收藏按钮的位置需要互换；首页打开内容需要可选择。 | 互换左侧“Wiki”和“收藏”按钮位置；在设置页增加首页打开显示选项，可选 Wiki 页面或 AI 对话页面，并在下次启动时按设置进入。 | 待修复 |
 | 5 | 收藏状态的五角星使用浅绿色，辨识度不足。 | 收藏激活状态使用黄色五角星；未收藏状态保留现有未激活样式，并确保列表、页面标题栏等入口一致。 | 待修复 |
 | 6 | 数据管理页“下载与更新”区域的“检查并更新”按钮位置不正确。 | 按页面布局规范调整按钮位置、对齐和间距，确保标题、状态说明与操作按钮层级清晰，并在窗口尺寸变化时保持可用。 | 待修复 |
+| 7 | AI 搜索候选数需要独立设置。 | 提供 AI 搜索候选数量控件，默认 5，整数范围 1～100；与手动搜索数量分开。 | 后端由 optimize-ai-search-evidence 实施；UI 延后 |
+
+### AI 搜索候选数 UI（2026-09-16）
+
+- 复用 ApplicationPreferences.AiSearchLimit 与现有设置保存用例；省略工具 max_results 时生效，AI 显式参数仍可覆盖，不将默认值解释为硬上限。
+- 当前仅记录控件与说明，既有设置保存必须保留该未展示字段。后续按 terraria-ui Skill 实施及验收；不新增 AI 配置文件或重置手动 SearchLimit。
 
 ### 完整核对周期 UI 范围（2026-09-15）
 
@@ -42,11 +48,11 @@
 ## 前置条件与完成定义
 
 - 当前真实验收完成并记录结果后，再补充本计划的必要实现细节；本次只授权记录问题。
-- 六项期望行为在 Windows 实机验证通过后，才能标记修复完成；具体检查项在实施前补齐。
+- 七项期望行为在 Windows 实机验证通过后，才能标记修复完成；具体检查项在实施前补齐。
 
 ## 范围与 P0 / 兼容性
 
-仅处理上述六项。下载继续复用现有 Application/Core，保护完整页面、搜索索引、资源和离线阅读；AI 配置继续保护已保存凭据，不影响离线功能。不涉及新 Roadmap Phase、搜索重构、依赖升级或其他平台。
+仅处理上述七项。下载继续复用现有 Application/Core，保护完整页面、搜索索引、资源和离线阅读；AI 配置继续保护已保存凭据，不影响离线功能。不涉及新 Roadmap Phase、搜索重构、依赖升级或其他平台。
 
 ## 方案与待决问题
 
@@ -67,7 +73,7 @@
 - [x] 记录用户反馈的六项问题和期望行为。
 - [x] 关联用户确认的增量同步副本窗口验收：`openspec/changes/archive/add-incremental-wiki-sync/real-acceptance.md`。
 - [ ] 获得实施指令后，核对源码并补充必要方案、规范变更与验证步骤；涉及 Windows UI 时使用项目 terraria-ui Skill。
-- [ ] 实施六项界面调整并完成相应验证。
+- [ ] 实施七项界面调整并完成相应验证。
 
 ## 验证与回归计划
 
@@ -79,8 +85,10 @@
 
 ## 进度记录与决策
 
+- 2026-09-16：按用户要求追加独立 AI 搜索数量设置 UI，默认 5、范围 1～100；本计划仍只记录，后端实现与验证属于 optimize-ai-search-evidence。
+
 - 2026-09-14：按用户要求建立简短问题记录，不完整规划、不实施修复。WSL 访问返回 `E_ACCESSDENIED`，本次改用 Windows PowerShell 读取文档。
 
 ## 验证结果与完成摘要
 
-已记录六项问题，界面调整仍待实施。2026-09-15 用户确认增量同步副本窗口运行完美；周期后端已在增量同步计划实现，本计划仅延期记录其 UI。本次未修改产品界面，也没有触发下载或模型请求。
+已记录七项问题，界面调整仍待实施。2026-09-15 用户确认增量同步副本窗口运行完美；周期后端已在增量同步计划实现，AI搜索候选数后端由 optimize-ai-search-evidence 实现，本计划仅延期记录对应 UI。本次未修改产品界面，也没有触发下载或模型请求。

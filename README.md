@@ -50,6 +50,8 @@ codex
 - Windows GitHub Releases 分发决策：[`docs/adr/0008-use-github-releases-windows-distribution.md`](./docs/adr/0008-use-github-releases-windows-distribution.md)
 - 已关闭并归档的 Phase 11 记录：[`openspec/changes/archive/phase-11-windows-productization/plan.md`](./openspec/changes/archive/phase-11-windows-productization/plan.md)
 - Phase 11 后续产品路线图：[`openspec/changes/post-phase-11-roadmap/plan.md`](./openspec/changes/post-phase-11-roadmap/plan.md)
+- AI 搜索与证据读取协同优化（5题真实对照完成，多Anchor兼容待修复）：[`openspec/changes/optimize-ai-search-evidence/plan.md`](./openspec/changes/optimize-ai-search-evidence/plan.md)
+- AI Search / Read 多 Anchor 兼容问题（draft；下个会话讨论方案）：[`openspec/changes/fix-ai-search-read-anchor-compatibility/plan.md`](./openspec/changes/fix-ai-search-read-anchor-compatibility/plan.md)
 - Windows 产品化能力契约：[`openspec/specs/windows-productization/spec.md`](./openspec/specs/windows-productization/spec.md)
 - Windows 发布与本地验收手册：[`docs/release/windows.md`](./docs/release/windows.md)
 - 已完成产品源码分离记录：[`openspec/changes/archive/separate-product-from-reference/plan.md`](./openspec/changes/archive/separate-product-from-reference/plan.md)

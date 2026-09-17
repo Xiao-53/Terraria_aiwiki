@@ -10,6 +10,15 @@ public sealed class WikiQueryUseCases
 
     internal WikiQueryUseCases(ApplicationState state) => _state = state;
 
+    public Task<IReadOnlyList<SearchResultItem>> SearchForAiAsync(
+        string keyword,
+        int? maxResults = null,
+        CancellationToken cancellationToken = default)
+    {
+        _state.RequireActiveBook();
+        return SearchAsync(keyword, maxResults ?? _state.RequirePreferences().AiSearchLimit, cancellationToken);
+    }
+
     public async Task<IReadOnlyList<SearchResultItem>> SearchAsync(
         string keyword,
         int? maxResults = null,

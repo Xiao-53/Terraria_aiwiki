@@ -200,7 +200,7 @@ public sealed class Phase09TakeoverTests
     [InlineData(90)]
     public async Task SettingsSaveAllValidatedFieldsAndApplyThemToCurrentSession(int? fullScanDays)
     {
-        var original = new ApplicationPreferences { WikiFullScanIntervalDays = fullScanDays };
+        var original = new ApplicationPreferences { WikiFullScanIntervalDays = fullScanDays, AiSearchLimit = 11 };
         ApplicationPreferences? saved = null;
         ApplicationPreferences? applied = null;
         using var viewModel = new SettingsViewModel(value =>
@@ -239,6 +239,7 @@ public sealed class Phase09TakeoverTests
         Assert.Equal(15, saved.ResourceConcurrency);
         Assert.Equal(10, saved.RetryAttempts);
         Assert.Equal(fullScanDays, saved.WikiFullScanIntervalDays);
+        Assert.Equal(11, saved.AiSearchLimit);
         Assert.Equal(saved, applied);
         Assert.False(viewModel.IsDirty);
     }
