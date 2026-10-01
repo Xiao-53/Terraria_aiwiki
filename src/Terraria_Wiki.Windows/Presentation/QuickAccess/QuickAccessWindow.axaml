@@ -1,0 +1,190 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:quick="clr-namespace:Terraria_Wiki.Windows.Presentation.QuickAccess"
+        xmlns:chat="clr-namespace:Terraria_Wiki.Windows.Presentation.Chat"
+        xmlns:wiki="clr-namespace:Terraria_Wiki.Windows.Presentation.Wiki"
+        xmlns:md="clr-namespace:Terraria_Wiki.Windows.Presentation.Markdown"
+        x:Class="Terraria_Wiki.Windows.Presentation.QuickAccess.QuickAccessWindow"
+        x:DataType="quick:QuickAccessViewModel"
+        Title="Quick Ask · Terraria AI Wiki"
+        Icon="avares://Terraria_Wiki.Windows/Assets/appicon.ico"
+        Width="520" Height="600" MinWidth="420" MinHeight="360"
+        WindowDecorations="BorderOnly" ShowInTaskbar="False">
+  <Grid RowDefinitions="Auto,Auto,*,Auto"
+        Background="{DynamicResource TerrariaSurfaceBrush}">
+    <!-- One shared header: switching modes never creates a second set of controls. -->
+    <Grid ColumnDefinitions="Auto,*,Auto" Margin="12,8,8,8"
+          Background="Transparent" PointerPressed="OnHeaderPointerPressed">
+      <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,0,12,0">
+        <Button Content="AI" Classes="segment-button"
+                Classes.selected="{Binding IsChat}" Command="{Binding ShowChatCommand}"
+                MinWidth="48" Height="44" AutomationProperties.Name="切换到 AI" />
+        <Button Content="Wiki" Classes="segment-button"
+                Classes.selected="{Binding IsWiki}" Command="{Binding ShowWikiCommand}"
+                MinWidth="56" Height="44" AutomationProperties.Name="切换到 Wiki" />
+      </StackPanel>
+      <TextBox x:Name="SearchBox" Grid.Column="1" Margin="8,0,8,0"
+               Text="{Binding Wiki.Query, Mode=TwoWay}" IsVisible="{Binding IsSearchBoxVisible}"
+               PlaceholderText="搜索 Wiki" MinHeight="32" Padding="10,4"
+               VerticalAlignment="Center" VerticalContentAlignment="Center"
+               CornerRadius="{DynamicResource RadiusControl}"
+               AutomationProperties.Name="Wiki 搜索" />
+      <Button Grid.Column="1" Classes="icon-button" Command="{Binding Chat.NewConversationCommand}"
+              HorizontalAlignment="Right" Margin="0,0,4,0" Click="OnNewConversationClick"
+              IsVisible="{Binding IsNewConversationVisible}" ToolTip.Tip="新会话"
+              AutomationProperties.Name="新会话">
+        <Grid Width="16" Height="16">
+          <Path Data="{StaticResource IconAdd}" Stroke="{Binding $parent[Button].Foreground}"
+                StrokeThickness="1.8" StrokeLineCap="Round" />
+        </Grid>
+      </Button>
+      <Button Grid.Column="2" Classes="icon-button" Click="OnHideClick"
+              ToolTip.Tip="隐藏 Quick Ask" AutomationProperties.Name="隐藏 Quick Ask">
+        <Grid Width="20" Height="20">
+          <Path Data="{StaticResource IconClose}" Stroke="{Binding $parent[Button].Foreground}"
+                StrokeThickness="1.8" StrokeLineCap="Round" />
+        </Grid>
+      </Button>
+    </Grid>
+
+    <Button Grid.Row="1" Classes="icon-button" Command="{Binding BackCommand}"
+            Margin="12,0,0,4" HorizontalAlignment="Left"
+            IsVisible="{Binding IsBackVisible}" ToolTip.Tip="返回"
+            AutomationProperties.Name="返回对话或搜索">
+      <PathIcon Width="18" Height="18" Data="{StaticResource IconBack}" />
+    </Button>
+
+    <Grid Grid.Row="2" ClipToBounds="True">
+      <NativeWebView x:Name="ViewerWebView" IsHitTestVisible="{Binding IsReaderVisible}"
+                     Width="1" Height="1" HorizontalAlignment="Right" VerticalAlignment="Bottom"
+                     AutomationProperties.Name="Quick Ask 本地 Wiki 正文" />
+
+      <Border IsVisible="{Binding IsChatVisible}"
+              Background="{DynamicResource TerrariaSurfaceBrush}">
+        <Grid RowDefinitions="Auto,*">
+          <StackPanel Margin="20,12,20,0" Spacing="10"
+                      IsVisible="{Binding Chat.IsAvailabilityStatusVisible}">
+            <TextBlock Text="{Binding Chat.StatusMessage}" Classes="muted" TextWrapping="Wrap"
+                       IsVisible="{Binding Chat.IsAvailabilityStatusVisible}" />
+            <Button Content="重试 AI" Classes="secondary-action" Command="{Binding Chat.RetryCommand}"
+                    HorizontalAlignment="Left" IsVisible="{Binding Chat.IsAiUnavailable}"
+                    AutomationProperties.Name="重试 AI" />
+          </StackPanel>
+          <Grid Grid.Row="1">
+            <StackPanel IsVisible="{Binding Chat.IsEmpty}" MaxWidth="360" Margin="24"
+                        HorizontalAlignment="Center" VerticalAlignment="Center" Spacing="8">
+              <TextBlock Text="探索你的 Terraria 世界" Classes="section-title"
+                         TextAlignment="Center" TextWrapping="Wrap" />
+              <TextBlock Text="可以问物品获取、Boss 攻略或合成配方。" Classes="page-subtitle"
+                         TextAlignment="Center" TextWrapping="Wrap" />
+            </StackPanel>
+            <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                          IsVisible="{Binding !Chat.IsEmpty}">
+              <StackPanel Margin="20,12,20,16" Spacing="10">
+                <ItemsControl ItemsSource="{Binding Chat.Turns}">
+                  <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="chat:ChatTurnViewModel">
+                      <StackPanel Spacing="8" Margin="0,0,0,16">
+                        <Border Background="{DynamicResource TerrariaSurfaceAltBrush}"
+                                CornerRadius="{DynamicResource RadiusControl}" Padding="12">
+                          <SelectableTextBlock Text="{Binding Question}" TextWrapping="Wrap" />
+                        </Border>
+                        <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsThinking}" />
+                        <md:SafeMarkdownView Document="{Binding AnswerDocument}"
+                                             IsVisible="{Binding HasAnswer}" />
+                        <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap"
+                                   IsVisible="{Binding IsAttentionStatusVisible}" />
+                        <ItemsControl ItemsSource="{Binding Sources}" IsVisible="{Binding HasSources}">
+                          <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="chat:ChatSourceViewModel">
+                              <Button Classes="source-row" Command="{Binding OpenCommand}"
+                                      HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                                      AutomationProperties.Name="在 Quick Ask 打开来源">
+                                <StackPanel Spacing="2">
+                                  <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                  <TextBlock Text="{Binding Detail}" Classes="muted" TextWrapping="Wrap" />
+                                </StackPanel>
+                              </Button>
+                            </DataTemplate>
+                          </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                      </StackPanel>
+                    </DataTemplate>
+                  </ItemsControl.ItemTemplate>
+                </ItemsControl>
+              </StackPanel>
+            </ScrollViewer>
+          </Grid>
+        </Grid>
+      </Border>
+
+      <Border IsVisible="{Binding IsSearchVisible}"
+              Background="{DynamicResource TerrariaSurfaceBrush}">
+        <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
+          <StackPanel Margin="12,8,12,12">
+            <TextBlock Text="{Binding Wiki.StatusMessage}" Classes="muted" TextWrapping="Wrap"
+                       Margin="8" IsVisible="{Binding ShowSearchStatus}" />
+            <ItemsControl ItemsSource="{Binding Wiki.Results}">
+              <ItemsControl.ItemTemplate>
+                <DataTemplate x:DataType="wiki:WikiSearchResultViewModel">
+                  <Button Command="{Binding OpenCommand}" Classes="list-row"
+                          HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
+                          AutomationProperties.Name="打开 Wiki 搜索结果">
+                    <StackPanel Spacing="3">
+                      <Grid ColumnDefinitions="*,Auto">
+                        <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                        <TextBlock Grid.Column="1" Text="{Binding MatchText}" Classes="tag" Margin="8,0,0,0" />
+                      </Grid>
+                      <TextBlock Text="{Binding RedirectText}" Classes="muted" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding SectionText}" Classes="muted" TextWrapping="Wrap" />
+                      <TextBlock Text="{Binding Snippet}" Classes="muted" TextWrapping="Wrap" MaxLines="3" />
+                    </StackPanel>
+                  </Button>
+                </DataTemplate>
+              </ItemsControl.ItemTemplate>
+            </ItemsControl>
+          </StackPanel>
+        </ScrollViewer>
+      </Border>
+
+      <Border IsVisible="{Binding ShowViewerOverlay}"
+              Background="{DynamicResource TerrariaSurfaceBrush}">
+        <StackPanel HorizontalAlignment="Center" VerticalAlignment="Center"
+                    Margin="24" Spacing="12" MaxWidth="360">
+          <TextBlock Text="{Binding ViewerStatus}" TextAlignment="Center" TextWrapping="Wrap" />
+          <Button Content="重试正文" Classes="secondary-action" Command="{Binding RetryViewerCommand}"
+                  HorizontalAlignment="Center" IsVisible="{Binding ViewerFailed}"
+                  AutomationProperties.Name="重试 Quick Ask 正文" />
+        </StackPanel>
+      </Border>
+    </Grid>
+
+    <Border Grid.Row="3" Classes="composer" Margin="16,12,16,16" Padding="7,6"
+            IsVisible="{Binding IsChatVisible}">
+      <Grid ColumnDefinitions="*,Auto">
+        <TextBox x:Name="QuestionBox" Classes="composer-input" Text="{Binding Chat.Question, Mode=TwoWay}"
+                 IsReadOnly="{Binding Chat.IsQuestionReadOnly}" AcceptsReturn="True"
+                 Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
+                 FocusAdorner="{x:Null}" VerticalContentAlignment="Center"
+                 TextWrapping="Wrap" MinHeight="44" MaxHeight="120"
+                 PlaceholderText="{Binding Chat.ComposerPlaceholder}" AutomationProperties.Name="Quick Ask 问题输入" />
+        <Button Grid.Column="1" Classes="send-button" Command="{Binding Chat.SendCommand}"
+                VerticalAlignment="Center" ToolTip.Tip="发送（Enter）"
+                IsVisible="{Binding Chat.IsSendVisible}" AutomationProperties.Name="发送问题">
+          <Grid Width="24" Height="24">
+            <Path Data="{StaticResource IconSend}" Stretch="None"
+                  Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="2.2"
+                  StrokeLineCap="Round" StrokeJoin="Round" />
+          </Grid>
+        </Button>
+        <Button Grid.Column="1" Classes="stop-button" Command="{Binding Chat.StopCommand}"
+                VerticalAlignment="Center" ToolTip.Tip="停止"
+                IsVisible="{Binding Chat.IsStopVisible}" AutomationProperties.Name="停止回答">
+          <Border Width="12" Height="12" CornerRadius="2"
+                  Background="{Binding $parent[Button].Foreground}" />
+        </Button>
+      </Grid>
+    </Border>
+  </Grid>
+</Window>

@@ -1,12 +1,18 @@
 using System.ComponentModel;
 using Avalonia;
 using Avalonia.Controls;
+using Terraria_Wiki.Windows.Hosting;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
 using Avalonia.VisualTree;
+using Terraria_Wiki.Windows.Presentation.Favorites;
+using Terraria_Wiki.Windows.Presentation.Library;
+using Terraria_Wiki.Windows.Presentation.Management;
 using Terraria_Wiki.Windows.Presentation.Reader;
+using Terraria_Wiki.Windows.Presentation.Settings;
+using Terraria_Wiki.Windows.Presentation.Wiki;
 
 namespace Terraria_Wiki.Windows.Presentation.Shell;
 
@@ -16,15 +22,31 @@ internal sealed partial class ShellView : UserControl
     internal const double ReaderPaneMinWidth = 420;
 
     private Grid _workspace = null!;
+    private Grid _wikiHost = null!;
+    private Grid _favoritesHost = null!;
+    private Grid _libraryHost = null!;
+    private Grid _managementHost = null!;
+    private Grid _settingsHost = null!;
     private ReaderView _readerHost = null!;
+    private Control? _wikiView;
+    private Control? _favoritesView;
+    private Control? _libraryView;
+    private Control? _managementView;
+    private Control? _settingsView;
     private bool _inlineLayoutApplied;
     private TopLevel? _topLevel;
     private ShellViewModel? _subscribedViewModel;
 
     public ShellView()
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ShellViewConstructor);
         AvaloniaXamlLoader.Load(this);
         _workspace = this.FindControl<Grid>("WorkspaceGrid")!;
+        _wikiHost = this.FindControl<Grid>("WikiHost")!;
+        _favoritesHost = this.FindControl<Grid>("FavoritesHost")!;
+        _libraryHost = this.FindControl<Grid>("LibraryHost")!;
+        _managementHost = this.FindControl<Grid>("ManagementHost")!;
+        _settingsHost = this.FindControl<Grid>("SettingsHost")!;
         _readerHost = this.FindControl<ReaderView>("ReaderHost")!;
         var wikiSearchInput = this.FindControl<TextBox>("WikiSearchInput")!;
         wikiSearchInput.AddHandler(
@@ -46,6 +68,8 @@ internal sealed partial class ShellView : UserControl
         _subscribedViewModel = DataContext as ShellViewModel;
         if (_subscribedViewModel is not null)
             _subscribedViewModel.PropertyChanged += OnViewModelPropertyChanged;
+        UpdateLazyViewDataContexts();
+        EnsureCurrentSectionView();
         UpdateResponsiveLayout();
     }
 
@@ -78,6 +102,9 @@ internal sealed partial class ShellView : UserControl
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
     {
+        if (args.PropertyName == nameof(ShellViewModel.CurrentSection))
+            EnsureCurrentSectionView();
+
         if (args.PropertyName is nameof(ShellViewModel.IsWideLayout)
             or nameof(ShellViewModel.IsReaderVisible)
             or nameof(ShellViewModel.CurrentSection)
@@ -87,6 +114,59 @@ internal sealed partial class ShellView : UserControl
         {
             UpdateResponsiveLayout();
         }
+    }
+
+    private void EnsureCurrentSectionView()
+    {
+        if (_subscribedViewModel is not { } viewModel)
+            return;
+
+        switch (viewModel.CurrentSection)
+        {
+            case ShellSection.Wiki:
+                AttachLazyView(_wikiHost, ref _wikiView, static () => new WikiView(), viewModel.Wiki);
+                break;
+            case ShellSection.Favorites:
+                AttachLazyView(_favoritesHost, ref _favoritesView, static () => new FavoritesView(), viewModel.Favorites);
+                break;
+            case ShellSection.Library:
+                AttachLazyView(_libraryHost, ref _libraryView, static () => new WikiLibraryView(), viewModel.Library);
+                break;
+            case ShellSection.Management:
+                AttachLazyView(_managementHost, ref _managementView, static () => new WikiManagementView(), viewModel.Management);
+                break;
+            case ShellSection.Settings:
+                AttachLazyView(_settingsHost, ref _settingsView, static () => new SettingsView(), viewModel.Settings);
+                break;
+        }
+    }
+
+    private void UpdateLazyViewDataContexts()
+    {
+        if (_subscribedViewModel is not { } viewModel)
+            return;
+        if (_wikiView is not null)
+            _wikiView.DataContext = viewModel.Wiki;
+        if (_favoritesView is not null)
+            _favoritesView.DataContext = viewModel.Favorites;
+        if (_libraryView is not null)
+            _libraryView.DataContext = viewModel.Library;
+        if (_managementView is not null)
+            _managementView.DataContext = viewModel.Management;
+        if (_settingsView is not null)
+            _settingsView.DataContext = viewModel.Settings;
+    }
+
+    private static void AttachLazyView(
+        Grid host,
+        ref Control? view,
+        Func<Control> create,
+        object dataContext)
+    {
+        view ??= create();
+        view.DataContext = dataContext;
+        if (!host.Children.Contains(view))
+            host.Children.Add(view);
     }
 
     private void UpdateResponsiveLayout()

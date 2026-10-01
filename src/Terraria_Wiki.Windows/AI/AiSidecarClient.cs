@@ -1,4 +1,5 @@
 using System.Text;
+using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.AI;
 
@@ -65,6 +66,7 @@ internal sealed class AiSidecarClient : IAsyncDisposable
         CancellationToken cancellationToken = default,
         AiSidecarShutdownOptions? shutdownOptions = null)
     {
+        using var startupTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.SidecarStart);
         ArgumentNullException.ThrowIfNull(configuration);
         ArgumentNullException.ThrowIfNull(wikiToolEndpoint);
         ArgumentException.ThrowIfNullOrWhiteSpace(wikiToolBearerToken);
@@ -73,30 +75,37 @@ internal sealed class AiSidecarClient : IAsyncDisposable
 
         var launcher = Path.Combine(AppContext.BaseDirectory, "AgentRuntime", "sidecar_launcher.py");
         factory ??= new ProcessAiSidecarConnectionFactory();
-        var connection = await factory.StartAsync(configuration, launcher, cancellationToken)
-            .ConfigureAwait(false);
+        IAiSidecarConnection connection;
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.SidecarProcessStart))
+            connection = await factory.StartAsync(configuration, launcher, cancellationToken)
+                .ConfigureAwait(false);
         var requestId = NewRequestId();
         try
         {
-            await connection.WriteAsync(
-                AiSidecarProtocol.CreateInitialize(
-                    requestId,
-                    configuration,
-                    wikiToolEndpoint,
-                    wikiToolBearerToken),
-                cancellationToken).ConfigureAwait(false);
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.InitializeWrite))
+                await connection.WriteAsync(
+                    AiSidecarProtocol.CreateInitialize(
+                        requestId,
+                        configuration,
+                        wikiToolEndpoint,
+                        wikiToolBearerToken),
+                    cancellationToken).ConfigureAwait(false);
             using var handshake = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken);
             handshake.CancelAfter(HandshakeTimeout);
-            var line = await connection.ReadLineAsync(handshake.Token).ConfigureAwait(false)
-                ?? throw new AiRuntimeException("runtime_crashed");
+            string line;
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ReadyRead))
+                line = await connection.ReadLineAsync(handshake.Token).ConfigureAwait(false)
+                    ?? throw new AiRuntimeException("runtime_crashed");
             var ready = AiSidecarProtocol.Parse(line);
             if (ready.Kind == AiSidecarEventKind.Fatal && ready.RequestId == requestId)
                 throw new AiRuntimeException(ready.Error?.Code ?? "unknown");
             ValidateReady(ready, requestId);
+            WindowsStartupInvestigation.Checkpoint(StartupInvestigationPhase.ReadyValidated);
             return new AiSidecarClient(connection, shutdownOptions ?? AiSidecarShutdownOptions.Default);
         }
         catch (OperationCanceledException) when (!cancellationToken.IsCancellationRequested)
         {
+            WindowsStartupInvestigation.Checkpoint(StartupInvestigationPhase.HandshakeTimeout);
             connection.KillProcessTree();
             await DisposeFailedConnectionAsync(connection).ConfigureAwait(false);
             throw new AiRuntimeException("timeout");
@@ -375,11 +384,10 @@ internal sealed class AiSidecarClient : IAsyncDisposable
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
         await ShutdownAsync().ConfigureAwait(false);
-        try
+        if (_exitMonitor.IsCompleted)
         {
-            await _exitMonitor.WaitAsync(_shutdownOptions.ForcedExitTimeout).ConfigureAwait(false);
+            try { await _exitMonitor.ConfigureAwait(false); } catch { }
         }
-        catch { }
         try
         {
             await _connection.DisposeAsync()

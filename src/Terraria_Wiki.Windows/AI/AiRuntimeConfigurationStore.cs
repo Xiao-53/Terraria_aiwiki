@@ -1,5 +1,6 @@
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.AI;
 
@@ -20,8 +21,6 @@ internal sealed record AiRuntimeConfigurationDraft(
 internal sealed class AiRuntimeConfigurationStore
 {
     internal const string DeepSeekBaseUrl = "https://api.deepseek.com";
-    internal const string DeepSeekFlashModel = "deepseek-v4-flash";
-    internal const string DeepSeekProModel = "deepseek-v4-pro";
     internal const int CurrentVersion = 3;
     private const int MaximumConfigurationBytes = 64 * 1024;
 
@@ -134,6 +133,20 @@ internal sealed class AiRuntimeConfigurationStore
 
     public void DeleteCredential() => _credentialStore.Delete();
 
+    public string ResolveCredential(string candidate)
+    {
+        var credential = string.IsNullOrWhiteSpace(candidate)
+            ? _credentialStore.Read()
+            : candidate;
+        if (string.IsNullOrWhiteSpace(credential))
+        {
+            throw new AiConfigurationException(
+                "model_authentication",
+                "请先输入 AI API Key；已有密钥不会显示在界面中。");
+        }
+        return AiRuntimeConfiguration.ValidateApiKey(credential);
+    }
+
     private async Task<LoadedConfiguration> MigrateVersionTwoAsync(
         LoadedConfiguration document,
         CancellationToken cancellationToken)
@@ -156,12 +169,14 @@ internal sealed class AiRuntimeConfigurationStore
 
     private bool HasStoredCredential()
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiCredentialProbe);
         var value = _credentialStore.Read();
         return !string.IsNullOrWhiteSpace(value);
     }
 
     private string ReadRequiredCredential()
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiCredentialRead);
         var value = _credentialStore.Read();
         return AiRuntimeConfiguration.ValidateApiKey(value);
     }
@@ -185,6 +200,7 @@ internal sealed class AiRuntimeConfigurationStore
 
     private async Task<LoadedConfiguration> ReadDocumentAsync(CancellationToken cancellationToken)
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiConfigurationDocument);
         try
         {
             var information = new FileInfo(ConfigurationPath);
@@ -295,7 +311,7 @@ internal sealed class AiRuntimeConfigurationStore
     }
 
     private static AiProviderConfiguration DefaultProvider() =>
-        new(DeepSeekBaseUrl, DeepSeekFlashModel, "responses", null);
+        new(DeepSeekBaseUrl, string.Empty, "responses", null);
 
     private static AiProviderConfiguration FromFile(AiProviderConfigurationFile document) =>
         new(

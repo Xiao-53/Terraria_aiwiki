@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Terraria_Wiki.Windows.Hosting;
 using Avalonia.Markup.Xaml;
 using Avalonia.Platform;
 
@@ -8,6 +9,7 @@ internal sealed partial class ReaderView : UserControl
 {
     public ReaderView()
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ReaderViewConstructor);
         AvaloniaXamlLoader.Load(this);
         WebView = this.FindControl<NativeWebView>("ViewerWebView")!;
         WebView.EnvironmentRequested += OnWebViewEnvironmentRequested;

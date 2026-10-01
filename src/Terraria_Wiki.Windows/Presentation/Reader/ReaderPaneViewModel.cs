@@ -97,8 +97,14 @@ internal sealed class ReaderPaneViewModel : ObservableObject
     public bool IsWikiFavorite
     {
         get => _isWikiFavorite;
-        private set => SetProperty(ref _isWikiFavorite, value);
+        private set
+        {
+            if (SetProperty(ref _isWikiFavorite, value))
+                OnPropertyChanged(nameof(FavoriteActionText));
+        }
     }
+
+    public string FavoriteActionText => IsWikiFavorite ? "取消收藏当前 Wiki 页面" : "收藏当前 Wiki 页面";
 
     public void Attach(
         Func<string, CancellationToken, Task> openPage,

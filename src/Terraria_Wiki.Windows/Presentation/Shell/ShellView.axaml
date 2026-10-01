@@ -1,11 +1,6 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:chat="clr-namespace:Terraria_Wiki.Windows.Presentation.Chat"
-             xmlns:favorites="clr-namespace:Terraria_Wiki.Windows.Presentation.Favorites"
-             xmlns:library="clr-namespace:Terraria_Wiki.Windows.Presentation.Library"
-             xmlns:management="clr-namespace:Terraria_Wiki.Windows.Presentation.Management"
-             xmlns:settings="clr-namespace:Terraria_Wiki.Windows.Presentation.Settings"
-             xmlns:wiki="clr-namespace:Terraria_Wiki.Windows.Presentation.Wiki"
              xmlns:reader="clr-namespace:Terraria_Wiki.Windows.Presentation.Reader"
              xmlns:shell="clr-namespace:Terraria_Wiki.Windows.Presentation.Shell"
              x:Class="Terraria_Wiki.Windows.Presentation.Shell.ShellView"
@@ -28,26 +23,10 @@
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsChatSelected}" />
-              <PathIcon Width="21" Height="21" HorizontalAlignment="Center"
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M 2,2 L 10,2 L 10,10 L 2,10 Z M 14,2 L 22,2 L 22,10 L 14,10 Z M 2,14 L 10,14 L 10,22 L 2,22 Z M 14,14 L 22,14 L 22,22 L 14,22 Z" />
+                        Data="{StaticResource IconChat}" />
               <TextBlock Grid.Row="1" Text="问答" FontSize="11" LineHeight="14"
-                         HorizontalAlignment="Center" />
-            </Grid>
-          </Button>
-          <Button Command="{Binding NavigateFavoritesCommand}"
-                  Classes="rail-nav"
-                  Classes.selected="{Binding IsFavoritesSelected}"
-                  ToolTip.Tip="收藏"
-                  AutomationProperties.AutomationId="FavoritesNavigation"
-                  AutomationProperties.Name="收藏导航">
-            <Grid RowDefinitions="34,Auto">
-              <Border Classes="rail-indicator" HorizontalAlignment="Left"
-                      Grid.RowSpan="2" IsVisible="{Binding IsFavoritesSelected}" />
-              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
-                        VerticalAlignment="Center"
-                        Data="M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z" />
-              <TextBlock Grid.Row="1" Text="收藏" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
@@ -60,10 +39,26 @@
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsWikiSelected}" />
-              <PathIcon Width="21" Height="21" HorizontalAlignment="Center"
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
+                        Data="{StaticResource IconSearch}" />
               <TextBlock Grid.Row="1" Text="Wiki" FontSize="11" LineHeight="14"
+                         HorizontalAlignment="Center" />
+            </Grid>
+          </Button>
+          <Button Command="{Binding NavigateFavoritesCommand}"
+                  Classes="rail-nav"
+                  Classes.selected="{Binding IsFavoritesSelected}"
+                  ToolTip.Tip="收藏"
+                  AutomationProperties.AutomationId="FavoritesNavigation"
+                  AutomationProperties.Name="收藏导航">
+            <Grid RowDefinitions="34,Auto">
+              <Border Classes="rail-indicator" HorizontalAlignment="Left"
+                      Grid.RowSpan="2" IsVisible="{Binding IsFavoritesSelected}" />
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
+                        VerticalAlignment="Center"
+                        Data="{StaticResource IconFavorite}" />
+              <TextBlock Grid.Row="1" Text="收藏" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
@@ -76,9 +71,9 @@
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsLibrarySelected}" />
-              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M 4,3 L 11,3 C 13,3 14,4 14,6 L 14,21 C 14,19 13,18 11,18 L 4,18 Z M 20,3 L 13,3 C 11,3 10,4 10,6 L 10,21 C 10,19 11,18 13,18 L 20,18 Z" />
+                        Data="{StaticResource IconLibrary}" />
               <TextBlock Grid.Row="1" Text="资料" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
@@ -92,9 +87,9 @@
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsManagementSelected}" />
-              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M 4,4 L 20,4 L 20,9 L 4,9 Z M 4,10 L 20,10 L 20,15 L 4,15 Z M 4,16 L 20,16 L 20,21 L 4,21 Z" />
+                        Data="{StaticResource IconData}" />
               <TextBlock Grid.Row="1" Text="数据" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
@@ -112,9 +107,9 @@
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsSettingsSelected}" />
-              <PathIcon Width="22" Height="22" HorizontalAlignment="Center"
+              <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
-                        Data="M 9,2 L 15,2 L 16,6 L 20,4 L 23,9 L 20,12 L 23,15 L 20,20 L 16,18 L 15,22 L 9,22 L 8,18 L 4,20 L 1,15 L 4,12 L 1,9 L 4,4 L 8,6 Z M 12,8 C 9.8,8 8,9.8 8,12 C 8,14.2 9.8,16 12,16 C 14.2,16 16,14.2 16,12 C 16,9.8 14.2,8 12,8 Z" />
+                        Data="{StaticResource IconSettings}" />
               <TextBlock Grid.Row="1" Text="设置" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
@@ -143,8 +138,8 @@
                   ToolTip.Tip="打开 Wiki 首页"
                   AutomationProperties.AutomationId="WikiHomeNavigation"
                   AutomationProperties.Name="Wiki 主页">
-            <PathIcon Width="18" Height="18"
-                      Data="M 12,3 L 21.5,11.4 L 20,13.1 L 18.5,11.8 L 18.5,21 L 13.5,21 L 13.5,14.5 L 10.5,14.5 L 10.5,21 L 5.5,21 L 5.5,11.8 L 4,13.1 L 2.5,11.4 Z" />
+            <PathIcon Width="20" Height="20"
+                      Data="{StaticResource IconHome}" />
           </Button>
           <Button Grid.Column="1" Classes="icon-button"
                   Command="{Binding ReturnToWikiSearchCommand}"
@@ -152,31 +147,31 @@
                   ToolTip.Tip="返回 Wiki 搜索结果"
                   AutomationProperties.AutomationId="WikiReturnToSearch"
                   AutomationProperties.Name="返回 Wiki 搜索结果">
-            <PathIcon Width="18" Height="18"
-                      Data="M 11,3 L 2,12 L 11,21 L 13,19 L 7,13 L 22,13 L 22,11 L 7,11 L 13,5 Z" />
+            <PathIcon Width="20" Height="20"
+                      Data="{StaticResource IconBack}" />
           </Button>
           <Button Grid.Column="2" Classes="icon-button" Command="{Binding Reader.BackCommand}"
                   IsVisible="{Binding IsWikiReadingActive}"
                   ToolTip.Tip="返回上一 Wiki 页面"
                   AutomationProperties.AutomationId="WikiPageBack"
                   AutomationProperties.Name="返回上一 Wiki 页面">
-            <PathIcon Width="18" Height="18"
-                      Data="M 6,4 L 4,4 L 4,20 L 6,20 Z M 10,12 L 20,4 L 20,20 Z" />
+            <PathIcon Width="20" Height="20"
+                      Data="{StaticResource IconPreviousPage}" />
           </Button>
           <Button Grid.Column="3" Classes="icon-button"
                   Command="{Binding Reader.ToggleFavoriteCommand}"
                   IsVisible="{Binding IsWikiSurfaceVisible}"
-                  ToolTip.Tip="收藏当前 Wiki 页面"
+                  ToolTip.Tip="{Binding Reader.FavoriteActionText}"
                   AutomationProperties.AutomationId="WikiHeaderFavorite"
-                  AutomationProperties.Name="收藏当前 Wiki 页面">
-            <Grid Width="21" Height="21">
-              <Path Data="M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z"
-                    Stroke="{DynamicResource SystemControlForegroundBaseMediumHighBrush}"
-                    StrokeThickness="1.5" Fill="Transparent"
+                  AutomationProperties.Name="{Binding Reader.FavoriteActionText}">
+            <Grid Width="24" Height="24">
+              <Path Data="{StaticResource IconFavorite}"
+                    Stroke="{Binding $parent[Button].Foreground}"
+                    StrokeThickness="1.5" StrokeJoin="Round" Fill="Transparent"
                     IsVisible="{Binding !Reader.IsWikiFavorite}" />
-              <Path Data="M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z"
-                    Stroke="{DynamicResource TerrariaBrandBrush}"
-                    StrokeThickness="1.3" Fill="{DynamicResource TerrariaBrandSoftBrush}"
+              <Path Data="{StaticResource IconFavorite}"
+                    Stroke="{DynamicResource TerrariaFavoriteBrush}"
+                    StrokeThickness="1.5" StrokeJoin="Round" Fill="{DynamicResource TerrariaFavoriteBrush}"
                     IsVisible="{Binding Reader.IsWikiFavorite}" />
             </Grid>
           </Button>
@@ -195,8 +190,8 @@
                     ToolTip.Tip="搜索本地 Wiki"
                     AutomationProperties.AutomationId="WikiSearchButton"
                     AutomationProperties.Name="搜索本地 Wiki">
-              <PathIcon Width="18" Height="18"
-                        Data="M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z" />
+              <PathIcon Width="20" Height="20"
+                        Data="{StaticResource IconSearch}" />
             </Button>
           </StackPanel>
         </Grid>
@@ -237,22 +232,11 @@
           <Grid IsVisible="{Binding IsChatVisible}">
             <chat:ChatView DataContext="{Binding Chat}" />
           </Grid>
-          <Grid IsVisible="{Binding IsWikiVisible}">
-            <wiki:WikiView DataContext="{Binding Wiki}"
-                           HorizontalAlignment="Stretch" />
-          </Grid>
-          <Grid IsVisible="{Binding IsFavoritesVisible}">
-            <favorites:FavoritesView DataContext="{Binding Favorites}" />
-          </Grid>
-          <Grid IsVisible="{Binding IsLibraryVisible}">
-            <library:WikiLibraryView DataContext="{Binding Library}" />
-          </Grid>
-          <Grid IsVisible="{Binding IsManagementVisible}">
-            <management:WikiManagementView DataContext="{Binding Management}" />
-          </Grid>
-          <Grid IsVisible="{Binding IsSettingsVisible}">
-            <settings:SettingsView DataContext="{Binding Settings}" />
-          </Grid>
+          <Grid x:Name="WikiHost" IsVisible="{Binding IsWikiVisible}" />
+          <Grid x:Name="FavoritesHost" IsVisible="{Binding IsFavoritesVisible}" />
+          <Grid x:Name="LibraryHost" IsVisible="{Binding IsLibraryVisible}" />
+          <Grid x:Name="ManagementHost" IsVisible="{Binding IsManagementVisible}" />
+          <Grid x:Name="SettingsHost" IsVisible="{Binding IsSettingsVisible}" />
         </Grid>
       </Border>
 

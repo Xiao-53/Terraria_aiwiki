@@ -5,6 +5,7 @@ public sealed record ApplicationPreferences
     public const string DefaultLanguage = "zh-cn";
     public const string DefaultAppTheme = "auto";
     public const string DefaultContentTheme = "auto";
+    public const string DefaultStartupPage = "chat";
     public const int DefaultSearchLimit = 50;
     public const int DefaultAiSearchLimit = 5;
     public const int DefaultPageConcurrency = 2;
@@ -16,6 +17,8 @@ public sealed record ApplicationPreferences
     public string Language { get; init; } = DefaultLanguage;
     public string AppTheme { get; init; } = DefaultAppTheme;
     public string ContentTheme { get; init; } = DefaultContentTheme;
+    public string StartupPage { get; init; } = DefaultStartupPage;
+    public bool IsInteractionFeedbackEnabled { get; init; } = true;
     public bool IsSideButtonBackEnabled { get; init; } = true;
     public int SearchLimit { get; init; } = DefaultSearchLimit;
     public int AiSearchLimit { get; init; } = DefaultAiSearchLimit;

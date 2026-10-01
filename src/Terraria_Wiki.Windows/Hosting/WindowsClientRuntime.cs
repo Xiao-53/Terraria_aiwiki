@@ -20,12 +20,14 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
     private bool _aiConfigurationLoaded;
     private WindowsAiRuntime? _ai;
     private int _disposed;
+    private int _answerReserved;
 
     private WindowsClientRuntime(
         string dataRoot,
         HttpClient httpClient,
         WindowsMountGuard mountGuard,
         WikiApplication application,
+        HostSettingsStore hostSettings,
         ViewerConsumerCoordinator viewer,
         ViewerBridge bridge,
         ApplicationPreferences preferences,
@@ -39,6 +41,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         _httpClient = httpClient;
         _mountGuard = mountGuard;
         Application = application;
+        HostSettings = hostSettings;
         Viewer = viewer;
         Bridge = bridge;
         Preferences = preferences;
@@ -51,6 +54,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
 
     public string DataRoot { get; }
     public WikiApplication Application { get; }
+    public HostSettingsStore HostSettings { get; }
     public ViewerConsumerCoordinator Viewer { get; }
     public ViewerBridge Bridge { get; }
     public ApplicationPreferences Preferences { get; private set; }
@@ -64,7 +68,8 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         IReadOnlyList<string> arguments,
         Func<bool> isDarkTheme,
         Action<WindowsStartupStageMeasurement>? startupObserver = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        HostSettingsStore? hostSettings = null)
     {
         var stageTimer = Stopwatch.StartNew();
         WebView2RuntimeStatus webView2;
@@ -79,7 +84,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         if (!webView2.Available)
             throw new WindowsClientStartupException("webview2-missing", webView2.Error ?? "WebView2 Runtime is unavailable.");
 
-        var guard = new WindowsMountGuard(new LegacyProcessProbe());
+        var guard = new WindowsMountGuard();
         HttpClient? httpClient = null;
         ViewerConsumerCoordinator? viewer = null;
         var wikiToolCoordinator = new WikiToolConsumerCoordinator();
@@ -94,7 +99,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             {
                 guard.AcquireSingleInstance();
                 var settingsPath = ParseHostSettingsPath(arguments);
-                settings = settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath);
+                settings = hostSettings ?? (settingsPath is null ? HostSettingsStore.CreateDefault() : new HostSettingsStore(settingsPath));
                 resolution = await new DataRootResolver(settings)
                     .ResolveAsync(arguments, cancellationToken)
                     .ConfigureAwait(false);
@@ -155,6 +160,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
                 httpClient,
                 guard,
                 application,
+                settings,
                 viewer,
                 bridge,
                 preferences,
@@ -188,10 +194,34 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         Bridge.SetSideButtonBackEnabled(preferences.IsSideButtonBackEnabled);
     }
 
+    internal bool TryReserveAiAnswer()
+    {
+        if (_ai is null || AiStatus.State != WindowsAiRuntimeState.Ready
+            || Interlocked.CompareExchange(ref _answerReserved, 1, 0) != 0)
+            return false;
+        if (_ai.Status.State != WindowsAiRuntimeState.Ready)
+        {
+            Interlocked.Exchange(ref _answerReserved, 0);
+            return false;
+        }
+        PublishAiStatus(new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Answering,
+            "AI 正在另一个窗口回答…"));
+        return true;
+    }
+
+    internal void ReleaseAiAnswer()
+    {
+        if (Interlocked.Exchange(ref _answerReserved, 0) != 0 && _ai is { } ai)
+            PublishAiStatus(ai.Status);
+    }
+
     public async Task EnableAiAsync(CancellationToken cancellationToken = default)
     {
+        using var attempt = WindowsStartupInvestigation.BeginAiAttempt();
+        using var attemptTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiAttempt);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
-        await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiGateWait))
+            await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
             linked.Token.ThrowIfCancellationRequested();
@@ -215,8 +245,9 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             _aiConfigurationLoaded = true;
             try
             {
-                _aiConfiguration = await AiRuntimeConfiguration.LoadAsync(_arguments, cancellationToken)
-                    .ConfigureAwait(false);
+                using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiConfiguration))
+                    _aiConfiguration = await AiRuntimeConfiguration.LoadAsync(_arguments, cancellationToken)
+                        .ConfigureAwait(false);
                 if (string.IsNullOrWhiteSpace(_aiConfiguration.ApiKey))
                 {
                     PublishAiStatus(new WindowsAiRuntimeStatus(
@@ -281,8 +312,11 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
 
     public async Task RetryAiAsync(CancellationToken cancellationToken = default)
     {
+        using var attempt = WindowsStartupInvestigation.BeginAiAttempt();
+        using var attemptTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiAttempt);
         using var linked = CancellationTokenSource.CreateLinkedTokenSource(cancellationToken, _lifetime.Token);
-        await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiGateWait))
+            await _aiGate.WaitAsync(linked.Token).ConfigureAwait(false);
         try
         {
             linked.Token.ThrowIfCancellationRequested();
@@ -291,6 +325,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
             if (old is not null)
             {
                 old.StatusChanged -= OnAiStatusChanged;
+                using var disposeTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiPreviousRuntimeDispose);
                 try { await old.DisposeAsync().ConfigureAwait(false); } catch { }
             }
             _aiConfiguration = null;
@@ -304,8 +339,11 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         }
     }
 
-    public async ValueTask DisposeAsync()
+    public ValueTask DisposeAsync() => DisposeAsync(Task.CompletedTask);
+
+    internal async ValueTask DisposeAsync(Task viewerSessionStop)
     {
+        ArgumentNullException.ThrowIfNull(viewerSessionStop);
         if (Interlocked.Exchange(ref _disposed, 1) != 0)
             return;
         var total = Stopwatch.StartNew();
@@ -313,7 +351,7 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         try
         {
             var aiStop = StopAiAsync();
-            var viewerStop = StopViewerAsync();
+            var viewerStop = StopViewerAfterAsync(viewerSessionStop);
             await Task.WhenAll(aiStop, viewerStop).ConfigureAwait(false);
         }
         finally
@@ -335,6 +373,12 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
                 DisposeTimings.TotalMilliseconds = total.ElapsedMilliseconds;
             }
         }
+    }
+
+    private async Task StopViewerAfterAsync(Task viewerSessionStop)
+    {
+        try { await viewerSessionStop.ConfigureAwait(false); } catch { }
+        await StopViewerAsync().ConfigureAwait(false);
     }
 
     private async Task StopAiAsync()
@@ -375,6 +419,16 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
     private void PublishAiStatus(WindowsAiRuntimeStatus status)
     {
         AiStatus = status;
+        var phase = status.State switch
+        {
+            WindowsAiRuntimeState.Starting => StartupInvestigationPhase.AiStarting,
+            WindowsAiRuntimeState.Ready => StartupInvestigationPhase.AiReady,
+            WindowsAiRuntimeState.Disabled => StartupInvestigationPhase.AiDisabled,
+            WindowsAiRuntimeState.Failed => StartupInvestigationPhase.AiFailed,
+            _ => StartupInvestigationPhase.AiStopped,
+        };
+        if (status.State != WindowsAiRuntimeState.Answering)
+            WindowsStartupInvestigation.Checkpoint(phase);
         try { AiStatusChanged?.Invoke(this, status); } catch { }
     }
 

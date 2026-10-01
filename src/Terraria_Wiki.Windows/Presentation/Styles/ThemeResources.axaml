@@ -3,6 +3,8 @@
   <ResourceDictionary.ThemeDictionaries>
     <ResourceDictionary x:Key="Light">
       <SolidColorBrush x:Key="TerrariaBrandBrush" Color="#5F7F39" />
+      <SolidColorBrush x:Key="TerrariaPrimaryHoverBrush" Color="#3D571F" />
+      <SolidColorBrush x:Key="TerrariaPrimaryPressedBrush" Color="#2D4314" />
       <SolidColorBrush x:Key="TerrariaBrandSoftBrush" Color="#185F7F39" />
       <SolidColorBrush x:Key="TerrariaBrandHoverBrush" Color="#285F7F39" />
       <SolidColorBrush x:Key="TerrariaBrandPressedBrush" Color="#385F7F39" />
@@ -14,24 +16,48 @@
       <SolidColorBrush x:Key="TerrariaStrokeBrush" Color="#2424331A" />
       <SolidColorBrush x:Key="TerrariaTextSecondaryBrush" Color="#FF657060" />
       <SolidColorBrush x:Key="TerrariaDangerBrush" Color="#FFB44943" />
+      <SolidColorBrush x:Key="TerrariaDangerHoverBrush" Color="#28B44943" />
+      <SolidColorBrush x:Key="TerrariaDangerPressedBrush" Color="#38B44943" />
       <SolidColorBrush x:Key="TerrariaDangerSoftBrush" Color="#18B44943" />
+      <SolidColorBrush x:Key="TerrariaFavoriteBrush" Color="#FFD39B00" />
       <SolidColorBrush x:Key="TerrariaOverlayScrimBrush" Color="#66000000" />
+      <SolidColorBrush x:Key="TerrariaSendBrush" Color="#5F7F39" />
+      <SolidColorBrush x:Key="TerrariaSendHoverBrush" Color="#FF103F2A" />
+      <SolidColorBrush x:Key="TerrariaSendPressedBrush" Color="#FF0A3020" />
+      <SolidColorBrush x:Key="TerrariaOnSendBrush" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="TerrariaButtonOutlineBrush" Color="#FFA5B69A" />
+      <SolidColorBrush x:Key="TerrariaActionSurfaceBrush" Color="#FFE6EEDF" />
+      <SolidColorBrush x:Key="TerrariaActionHoverBrush" Color="#FFCCDDBD" />
+      <SolidColorBrush x:Key="TerrariaActionPressedBrush" Color="#FFB2CAA0" />
     </ResourceDictionary>
     <ResourceDictionary x:Key="Dark">
       <SolidColorBrush x:Key="TerrariaBrandBrush" Color="#FF9BC76A" />
+      <SolidColorBrush x:Key="TerrariaPrimaryHoverBrush" Color="#FFC6EFA0" />
+      <SolidColorBrush x:Key="TerrariaPrimaryPressedBrush" Color="#FF8BB65C" />
       <SolidColorBrush x:Key="TerrariaBrandSoftBrush" Color="#249BC76A" />
       <SolidColorBrush x:Key="TerrariaBrandHoverBrush" Color="#349BC76A" />
       <SolidColorBrush x:Key="TerrariaBrandPressedBrush" Color="#469BC76A" />
       <SolidColorBrush x:Key="TerrariaOnBrandBrush" Color="#FF17200E" />
-      <SolidColorBrush x:Key="TerrariaAppBackgroundBrush" Color="#FF171A16" />
-      <SolidColorBrush x:Key="TerrariaNavigationBrush" Color="#FF20241E" />
-      <SolidColorBrush x:Key="TerrariaSurfaceBrush" Color="#FF22261F" />
-      <SolidColorBrush x:Key="TerrariaSurfaceAltBrush" Color="#FF292E26" />
-      <SolidColorBrush x:Key="TerrariaStrokeBrush" Color="#3A9AAA91" />
-      <SolidColorBrush x:Key="TerrariaTextSecondaryBrush" Color="#FFAEB8A8" />
+      <SolidColorBrush x:Key="TerrariaAppBackgroundBrush" Color="#FF192B24" />
+      <SolidColorBrush x:Key="TerrariaNavigationBrush" Color="#FF1E3229" />
+      <SolidColorBrush x:Key="TerrariaSurfaceBrush" Color="#FF253C31" />
+      <SolidColorBrush x:Key="TerrariaSurfaceAltBrush" Color="#FF304A3B" />
+      <SolidColorBrush x:Key="TerrariaStrokeBrush" Color="#FF486251" />
+      <SolidColorBrush x:Key="TerrariaTextSecondaryBrush" Color="#FFC0D4C7" />
       <SolidColorBrush x:Key="TerrariaDangerBrush" Color="#FFF1707A" />
+      <SolidColorBrush x:Key="TerrariaDangerHoverBrush" Color="#34F1707A" />
+      <SolidColorBrush x:Key="TerrariaDangerPressedBrush" Color="#46F1707A" />
       <SolidColorBrush x:Key="TerrariaDangerSoftBrush" Color="#24F1707A" />
+      <SolidColorBrush x:Key="TerrariaFavoriteBrush" Color="#FFFFC857" />
       <SolidColorBrush x:Key="TerrariaOverlayScrimBrush" Color="#88000000" />
+      <SolidColorBrush x:Key="TerrariaSendBrush" Color="#FF9BC76A" />
+      <SolidColorBrush x:Key="TerrariaSendHoverBrush" Color="#FF205D3D" />
+      <SolidColorBrush x:Key="TerrariaSendPressedBrush" Color="#FF16492E" />
+      <SolidColorBrush x:Key="TerrariaOnSendBrush" Color="#FFFFFFFF" />
+      <SolidColorBrush x:Key="TerrariaButtonOutlineBrush" Color="#FF739B84" />
+      <SolidColorBrush x:Key="TerrariaActionSurfaceBrush" Color="#FF334B3C" />
+      <SolidColorBrush x:Key="TerrariaActionHoverBrush" Color="#FF48644A" />
+      <SolidColorBrush x:Key="TerrariaActionPressedBrush" Color="#FF5E7F50" />
     </ResourceDictionary>
   </ResourceDictionary.ThemeDictionaries>
 
@@ -40,22 +66,31 @@
   <CornerRadius x:Key="RadiusSmall">4</CornerRadius>
   <CornerRadius x:Key="RadiusControl">8</CornerRadius>
   <CornerRadius x:Key="RadiusSurface">12</CornerRadius>
+  <CornerRadius x:Key="RadiusPill">18</CornerRadius>
   <BoxShadows x:Key="ComposerShadow">0 6 20 0 #22000000</BoxShadows>
   <BoxShadows x:Key="OverlayShadow">0 12 32 0 #38000000</BoxShadows>
 
   <ControlTheme x:Key="ChromeLessButtonTheme" TargetType="Button">
     <Setter Property="Template">
       <ControlTemplate>
+        <Grid>
         <Border Background="{TemplateBinding Background}"
                 BorderBrush="{TemplateBinding BorderBrush}"
                 BorderThickness="{TemplateBinding BorderThickness}"
                 CornerRadius="{TemplateBinding CornerRadius}"
                 Padding="{TemplateBinding Padding}">
-          <ContentPresenter Content="{TemplateBinding Content}"
+          <ContentPresenter Name="PART_ContentPresenter" RecognizesAccessKey="True"
+                            Foreground="{TemplateBinding Foreground}" Content="{TemplateBinding Content}"
                             ContentTemplate="{TemplateBinding ContentTemplate}"
                             HorizontalContentAlignment="{TemplateBinding HorizontalContentAlignment}"
                             VerticalContentAlignment="{TemplateBinding VerticalContentAlignment}" />
         </Border>
+        <Border Name="PART_ButtonUnderline" IsVisible="False" IsHitTestVisible="False"
+                Height="2" VerticalAlignment="Bottom" Background="{TemplateBinding BorderBrush}" />
+        <Border Name="PART_ButtonFocusRing" IsVisible="False" IsHitTestVisible="False"
+                Margin="1" BorderThickness="2" CornerRadius="{TemplateBinding CornerRadius}"
+                BorderBrush="{DynamicResource TerrariaBrandBrush}" />
+        </Grid>
       </ControlTemplate>
     </Setter>
   </ControlTheme>

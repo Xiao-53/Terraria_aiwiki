@@ -39,10 +39,15 @@ public sealed class ActiveWikiUseCases
             {
                 await _state.ManagerDatabase.Init(cancellationToken: cancellationToken);
                 books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
-                foreach (var book in books.OrderBy(book => book.Id))
+                var pendingImports = books
+                    .Where(book => WikiDatabaseTransferService.HasPendingImportJournal(_state.DataRoot, book.Id))
+                    .OrderBy(book => book.Id)
+                    .ToArray();
+                foreach (var book in pendingImports)
                     await _state.DatabaseTransfer.RecoverPendingImportAsync(_state.DataRoot, book, cancellationToken);
 
-                books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
+                if (pendingImports.Length > 0)
+                    books = await _state.ManagerDatabase.GetItemsAsync<WikiBook>(cancellationToken);
                 if (books.Count == 0)
                     throw new ApplicationUseCaseException("no-wikis", "No WikiBook is registered in Manager.db.");
             }

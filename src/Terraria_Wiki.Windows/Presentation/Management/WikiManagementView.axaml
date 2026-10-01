@@ -13,8 +13,8 @@
               AutomationProperties.Name="刷新 Wiki 数据状态">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Path Width="16" Height="16" Stretch="Uniform"
-                Data="M 20,11 C 20,16 16,20 11,20 C 6,20 2,16 2,11 C 2,6 6,2 11,2 C 14.2,2 17.1,3.7 18.7,6.4 M 18.7,2 L 18.7,6.4 L 14.3,6.4"
-                Stroke="{DynamicResource TerrariaBrandBrush}" StrokeThickness="1.8"
+                Data="{StaticResource IconRefresh}"
+                Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                 StrokeLineCap="Round" StrokeJoin="Round" />
           <TextBlock Text="刷新" FontSize="13" FontWeight="SemiBold" />
         </StackPanel>
@@ -28,10 +28,6 @@
                    VerticalAlignment="Center" AutomationProperties.Name="数据管理状态" />
         <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                     VerticalAlignment="Center">
-          <Button Content="下载页面与资源" Classes="primary-action"
-                  Command="{Binding DownloadAllCommand}"
-                  IsVisible="{Binding NeedsPageData}"
-                  AutomationProperties.Name="下载 Wiki 页面与资源" />
           <Button Content="取消" Classes="secondary-action"
                   Command="{Binding CancelOperationCommand}" IsVisible="{Binding IsBusy}"
                   AutomationProperties.Name="取消当前数据操作" />
@@ -154,27 +150,35 @@
 
         <Border Classes="section-surface" IsVisible="{Binding IsAvailable}">
           <StackPanel Margin="0,20,0,0" Spacing="12">
-            <StackPanel Spacing="4">
-              <TextBlock Text="下载与更新" Classes="section-title" />
-            </StackPanel>
-            <Border Classes="management-status" IsVisible="{Binding NeedsPageData}">
-              <TextBlock Text="首次使用：当前 Wiki 尚无页面内容。应用不会自动联网；点击“下载页面与资源”，或导入 data.db。"
-                         TextWrapping="Wrap" AutomationProperties.Name="首次使用数据引导" />
-            </Border>
-            <WrapPanel ItemWidth="190" ItemHeight="44">
-              <Button Content="仅下载页面" Classes="secondary-action"
-                      Margin="0,0,8,8" Command="{Binding DownloadPagesCommand}"
-                      IsVisible="{Binding NeedsPageData}"
-                      AutomationProperties.Name="仅下载 Wiki 页面" />
-              <Button Content="检查并更新" Classes="primary-action"
-                      Margin="0,0,8,8" Command="{Binding UpdateCommand}"
-                      IsVisible="{Binding HasPageData}"
+            <TextBlock Text="下载与更新" Classes="section-title" />
+            <Grid ColumnDefinitions="150,*" ColumnSpacing="16" IsVisible="{Binding HasPageData}">
+              <Button Content="检查更新" Classes="primary-action"
+                      HorizontalAlignment="Left"
+                      Command="{Binding UpdateCommand}"
                       AutomationProperties.Name="检查并更新 Wiki 数据" />
-              <Button Content="下载缺失资源" Classes="secondary-action"
-                      Margin="0,0,8,8" Command="{Binding DownloadResourcesCommand}"
-                      IsVisible="{Binding NeedsResources}"
-                      AutomationProperties.Name="下载 Wiki 资源" />
-            </WrapPanel>
+              <TextBlock Grid.Column="1" Text="自动检查 Wiki 并更新"
+                         VerticalAlignment="Center" TextWrapping="Wrap" />
+            </Grid>
+            <Grid ColumnDefinitions="150,*" ColumnSpacing="16" IsVisible="{Binding ShowFullDownloadAction}">
+              <Button Content="全量下载" Classes.primary-action="{Binding !HasPageData}"
+                      Classes.secondary-action="{Binding HasPageData}"
+                      HorizontalAlignment="Left"
+                      Command="{Binding DownloadAllCommand}"
+                      AutomationProperties.Name="全量下载 Wiki 页面、图片和音频" />
+              <TextBlock Grid.Column="1"
+                         Text="约 4 GB，下载速度较慢，包含页面、图片、音频等全部资源"
+                         VerticalAlignment="Center" TextWrapping="Wrap" />
+            </Grid>
+            <Grid ColumnDefinitions="150,*" ColumnSpacing="16" IsVisible="{Binding ShowLightDownloadAction}">
+              <Button Content="轻量下载" Classes.primary-action="{Binding !HasPageData}"
+                      Classes.secondary-action="{Binding HasPageData}"
+                      HorizontalAlignment="Left"
+                      Command="{Binding DownloadPagesCommand}"
+                      AutomationProperties.Name="轻量下载，仅下载基础 Wiki 页面" />
+              <TextBlock Grid.Column="1"
+                         Text="约 800 MB，只包含基础页面，没有图片和音频"
+                         VerticalAlignment="Center" TextWrapping="Wrap" />
+            </Grid>
           </StackPanel>
         </Border>
 

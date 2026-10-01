@@ -23,6 +23,12 @@ public sealed class ApplicationSettingsUseCases
         "original",
     };
 
+    private static readonly HashSet<string> StartupPages = new(StringComparer.Ordinal)
+    {
+        "chat",
+        "wiki",
+    };
+
     private readonly ApplicationState _state;
     private readonly SemaphoreSlim _settingsGate = new(1, 1);
 
@@ -94,6 +100,9 @@ public sealed class ApplicationSettingsUseCases
             ContentTheme = ContentThemes.Contains(stored.ContentTheme)
                 ? stored.ContentTheme
                 : ApplicationPreferences.DefaultContentTheme,
+            StartupPage = StartupPages.Contains(stored.StartupPage)
+                ? stored.StartupPage
+                : ApplicationPreferences.DefaultStartupPage,
             SearchLimit = stored.SearchLimit is >= 1 and <= 100
                 ? stored.SearchLimit
                 : ApplicationPreferences.DefaultSearchLimit,
@@ -123,6 +132,8 @@ public sealed class ApplicationSettingsUseCases
             throw Invalid(nameof(preferences.AppTheme));
         if (!ContentThemes.Contains(preferences.ContentTheme))
             throw Invalid(nameof(preferences.ContentTheme));
+        if (!StartupPages.Contains(preferences.StartupPage))
+            throw Invalid(nameof(preferences.StartupPage));
         if (preferences.SearchLimit is < 1 or > 100)
             throw Invalid(nameof(preferences.SearchLimit));
         if (preferences.AiSearchLimit is < 1 or > 100)

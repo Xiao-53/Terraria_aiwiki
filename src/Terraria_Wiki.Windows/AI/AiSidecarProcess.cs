@@ -1,5 +1,6 @@
 using System.Diagnostics;
 using System.Text;
+using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.AI;
 
@@ -83,6 +84,7 @@ internal sealed class ProcessAiSidecarConnectionFactory : IAiSidecarConnectionFa
         startInfo.ArgumentList.Add("utf8");
         startInfo.ArgumentList.Add(launcherPath);
         startInfo.Environment["TERRARIA_AI_API_KEY"] = configuration.ApiKey;
+        startInfo.Environment["TERRARIA_STARTUP_DIAGNOSTICS"] = WindowsStartupInvestigation.Enabled ? "1" : "0";
         return startInfo;
     }
 }
@@ -215,6 +217,9 @@ internal sealed class ProcessAiSidecarConnection : IAiSidecarConnection
     private async Task DrainStderrAsync(StreamReader reader)
     {
         var buffer = new char[4096];
+        var attempt = WindowsStartupInvestigation.CurrentAiAttempt;
+        var diagnosticLine = WindowsStartupInvestigation.Enabled ? new StringBuilder(128) : null;
+        var oversizedDiagnosticLine = false;
         try
         {
             while (true)
@@ -225,6 +230,22 @@ internal sealed class ProcessAiSidecarConnection : IAiSidecarConnection
                 var remaining = MaxCapturedStderrChars - _capturedStderr.Length;
                 if (remaining > 0)
                     _capturedStderr.Append(buffer, 0, Math.Min(read, remaining));
+                if (diagnosticLine is null) continue;
+                for (var index = 0; index < read; index++)
+                {
+                    var character = buffer[index];
+                    if (character == '\n')
+                    {
+                        if (!oversizedDiagnosticLine)
+                            WindowsStartupInvestigation.PythonMarker(diagnosticLine.ToString().TrimEnd('\r'), attempt);
+                        diagnosticLine.Clear();
+                        oversizedDiagnosticLine = false;
+                    }
+                    else if (diagnosticLine.Length < 128 && !oversizedDiagnosticLine)
+                        diagnosticLine.Append(character);
+                    else
+                        oversizedDiagnosticLine = true;
+                }
             }
         }
         catch

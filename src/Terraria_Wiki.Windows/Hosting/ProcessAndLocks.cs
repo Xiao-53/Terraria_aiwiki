@@ -1,4 +1,3 @@
-using System.Diagnostics;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -56,49 +55,10 @@ internal static class WindowsMutexNames
     }
 }
 
-internal interface ILegacyProcessProbe
-{
-    bool IsRunning();
-}
-
-internal sealed class LegacyProcessProbe : ILegacyProcessProbe
-{
-    public bool IsRunning()
-    {
-        var currentId = Environment.ProcessId;
-        var processes = Process.GetProcessesByName("Terraria_Wiki");
-        try
-        {
-            return processes.Any(process => process.Id != currentId && !HasExited(process));
-        }
-        finally
-        {
-            foreach (var process in processes)
-                process.Dispose();
-        }
-    }
-
-    private static bool HasExited(Process process)
-    {
-        try
-        {
-            return process.HasExited;
-        }
-        catch
-        {
-            return false;
-        }
-    }
-}
-
 internal sealed class WindowsMountGuard : IDisposable
 {
-    private readonly ILegacyProcessProbe _legacyProcesses;
     private NamedMutexLease? _singleInstance;
     private NamedMutexLease? _dataRoot;
-
-    public WindowsMountGuard(ILegacyProcessProbe legacyProcesses) =>
-        _legacyProcesses = legacyProcesses ?? throw new ArgumentNullException(nameof(legacyProcesses));
 
     public void AcquireSingleInstance()
     {
@@ -114,13 +74,6 @@ internal sealed class WindowsMountGuard : IDisposable
     {
         if (_dataRoot is not null)
             return;
-        if (_legacyProcesses.IsRunning())
-        {
-            throw new HostMountException(
-                "legacy-client-running",
-                "The legacy Terraria_Wiki client is running. Close it before opening this data folder, then retry.");
-        }
-
         _dataRoot = NamedMutexLease.TryAcquire(WindowsMutexNames.ForDataRoot(dataRoot))
             ?? throw new HostMountException(
                 "data-root-in-use",

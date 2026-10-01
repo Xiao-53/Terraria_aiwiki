@@ -117,6 +117,18 @@ internal sealed class ViewerBridge
     {
         if (!ViewerProtocol.TryParseOuter(body, expectedBaseUri, out var envelope) || envelope!.Type != "req")
             return null;
+        return await HandleOuterMessageAsync(envelope, cancellationToken).ConfigureAwait(false);
+    }
+
+    internal async Task<ViewerDispatchResult> HandleOuterMessageAsync(
+        ViewerEnvelope envelope,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(envelope);
+        if (envelope.Type != "req" || string.IsNullOrWhiteSpace(envelope.Id) || string.IsNullOrWhiteSpace(envelope.Method))
+            throw new ArgumentException("A validated Viewer request envelope is required.", nameof(envelope));
+        var requestStarted = Stopwatch.GetTimestamp();
+        ViewerNavigationTrace.Write(envelope.Id, null, "bridge-received", requestStarted);
         if (!_activeRequestIds.TryAdd(envelope.Id, 0))
             return Error(envelope.Id, "duplicate-request-id", "The Viewer request ID is already active.");
 
@@ -125,6 +137,7 @@ internal sealed class ViewerBridge
         {
             cancellationToken.ThrowIfCancellationRequested();
             var result = await DispatchAsync(envelope, cancellationToken).ConfigureAwait(false);
+            ViewerNavigationTrace.Write(envelope.Id, null, "response-serialized", requestStarted);
             RequestCompleted?.Invoke(this, new ViewerBridgeRequestCompleted(envelope.Method!, result, requestGeneration));
             return result;
         }
@@ -186,7 +199,9 @@ internal sealed class ViewerBridge
                 }
                 if (generation <= 0 || wikiId <= 0)
                     return Error(envelope.Id, "viewer-session-unbound", "The Viewer session is not bound to a Wiki.");
+                var readStarted = Stopwatch.GetTimestamp();
                 var read = await _application.Query.ReadAsync(data!, cancellationToken).ConfigureAwait(false);
+                ViewerNavigationTrace.Write(envelope.Id, null, "read-completed reads=1", readStarted);
                 if (!read.IsFound || string.IsNullOrWhiteSpace(read.Title) || read.Content is null)
                     return Error(envelope.Id, "page-not-found", $"Wiki page '{data}' was not found.");
                 var readToken = Guid.NewGuid().ToString("N");
@@ -200,10 +215,12 @@ internal sealed class ViewerBridge
                 }
                 var page = new ViewerPage(
                     read.Title,
+                    read.Anchor,
                     read.Content,
                     read.LastModified?.ToString("yyyy-MM-dd HH:mm:ss", CultureInfo.InvariantCulture) ?? string.Empty,
                     readToken);
-                return Success(envelope.Id, JsonSerializer.Serialize(page, JsonOptions));
+                ViewerNavigationTrace.Write(envelope.Id, readToken, "page-constructed", readStarted);
+                return Success(envelope.Id, page);
             }
             case "ViewerPageCommitted":
             {
@@ -240,6 +257,7 @@ internal sealed class ViewerBridge
                         commit.NavigationVersion);
                 }
                 PageCommitted?.Invoke(this, identity);
+                ViewerNavigationTrace.Arrival(envelope.Id, commit.ReadToken, "page-committed");
                 return Success(envelope.Id, "true");
             }
             case "SaveToTabHistory":
@@ -511,18 +529,18 @@ internal sealed class ViewerBridge
             entries.RemoveAt(entries.Count - 1);
     }
 
-    private static ViewerDispatchResult Success(string id, string data, ViewerOutboundCommand? command = null) =>
+    private static ViewerDispatchResult Success(string id, object? data, ViewerOutboundCommand? command = null) =>
         new(JsonSerializer.Serialize(new ViewerResponseEnvelope("res", id, data, null), JsonOptions), command, null);
 
     internal static string CreateErrorResponse(string id, ViewerProtocolError error) =>
         JsonSerializer.Serialize(
-            new ViewerResponseEnvelope("res", id, "null", error),
+            new ViewerResponseEnvelope("res", id, null, error),
             JsonOptions);
 
     private static ViewerDispatchResult Error(string id, string code, string message) =>
         new(
             JsonSerializer.Serialize(
-                new ViewerResponseEnvelope("res", id, "null", new ViewerProtocolError(code, message)),
+                new ViewerResponseEnvelope("res", id, null, new ViewerProtocolError(code, message)),
                 JsonOptions),
             null,
             new ViewerProtocolError(code, message));
@@ -565,9 +583,25 @@ internal static class ViewerProtocol
     }
 }
 
+internal static class ViewerNavigationTrace
+{
+    [Conditional("DEBUG")]
+    public static void Write(string requestId, string? readToken, string stage, long started)
+    {
+        var elapsed = Stopwatch.GetElapsedTime(started).TotalMilliseconds;
+        Debug.WriteLine(
+            $"[ViewerNavigation] request={requestId} readToken={readToken ?? "-"} stage={stage} elapsedMs={elapsed:F2}");
+    }
+
+    [Conditional("DEBUG")]
+    public static void Arrival(string requestId, string? readToken, string stage) =>
+        Debug.WriteLine(
+            $"[ViewerNavigation] request={requestId} readToken={readToken ?? "-"} stage={stage} timestamp={Stopwatch.GetTimestamp()}");
+}
+
 internal sealed record OuterViewerMessage(string? Source, string? Origin, JsonElement Envelope);
 internal sealed record ViewerEnvelope(string Type, string Id, string? Method, JsonElement Data, ViewerProtocolError? Error = null);
-internal sealed record ViewerResponseEnvelope(string Type, string Id, string Data, ViewerProtocolError? Error);
+internal sealed record ViewerResponseEnvelope(string Type, string Id, object? Data, ViewerProtocolError? Error);
 internal sealed record ViewerProtocolError(string Code, string Message);
 internal sealed record ViewerDispatchResult(string ResponseJson, ViewerOutboundCommand? Command, ViewerProtocolError? Error);
 internal sealed record ViewerBridgeRequestCompleted(string Method, ViewerDispatchResult Result, long Generation);
@@ -580,7 +614,7 @@ internal sealed record ViewerNavigationTransition(
     ViewerHistoryEntry Current,
     ViewerHistoryEntry Target,
     long Generation);
-internal sealed record ViewerPage(string Title, string Content, string LastModified, string ReadToken);
+internal sealed record ViewerPage(string Title, string? Anchor, string Content, string LastModified, string ReadToken);
 internal sealed record ViewerTitleAnchor(string Title, string? Anchor);
 internal sealed record ViewerHistoryEntry(
     string? Title,

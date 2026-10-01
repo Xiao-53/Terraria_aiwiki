@@ -1,4 +1,5 @@
 using Avalonia.Controls;
+using Terraria_Wiki.Windows.Hosting;
 using Avalonia.Controls.Presenters;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -12,6 +13,7 @@ internal sealed partial class ChatView : UserControl
 {
     public ChatView()
     {
+        using var timing = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ChatViewConstructor);
         AvaloniaXamlLoader.Load(this);
         var questionBox = this.FindControl<TextBox>("QuestionBox")!;
         questionBox.AddHandler(

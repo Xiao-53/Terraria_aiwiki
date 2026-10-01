@@ -98,16 +98,7 @@ internal sealed record AiRuntimeConfiguration(
 
     internal static AiProviderConfiguration ValidateProvider(AiProviderConfiguration provider)
     {
-        if (string.IsNullOrWhiteSpace(provider.BaseUrl)
-            || provider.BaseUrl != provider.BaseUrl.Trim()
-            || !Uri.TryCreate(provider.BaseUrl, UriKind.Absolute, out var uri)
-            || !string.IsNullOrEmpty(uri.UserInfo)
-            || !string.IsNullOrEmpty(uri.Query)
-            || !string.IsNullOrEmpty(uri.Fragment)
-            || !IsSafeProviderUri(uri))
-        {
-            throw new AiConfigurationException("provider-invalid", "模型服务地址无效。");
-        }
+        ValidateProviderBaseUrl(provider.BaseUrl);
         if (string.IsNullOrWhiteSpace(provider.Model)
             || provider.Model != provider.Model.Trim()
             || provider.Model.Length > 256
@@ -128,6 +119,21 @@ internal sealed record AiRuntimeConfiguration(
             provider.Model,
             provider.Api,
             provider.ReasoningEffort);
+    }
+
+    internal static Uri ValidateProviderBaseUrl(string value)
+    {
+        if (string.IsNullOrWhiteSpace(value)
+            || value != value.Trim()
+            || !Uri.TryCreate(value, UriKind.Absolute, out var uri)
+            || !string.IsNullOrEmpty(uri.UserInfo)
+            || !string.IsNullOrEmpty(uri.Query)
+            || !string.IsNullOrEmpty(uri.Fragment)
+            || !IsSafeProviderUri(uri))
+        {
+            throw new AiConfigurationException("provider-invalid", "模型服务地址无效。");
+        }
+        return uri;
     }
 
     internal static string ValidateApiKey(string? value)

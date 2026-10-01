@@ -14,6 +14,8 @@ internal enum ManagementConfirmation
     ClearFailures,
     DeleteResources,
     DeleteWikiData,
+    ReplaceWithFullDownload,
+    ReplaceWithLightDownload,
     ImportDatabase,
 }
 
@@ -144,9 +146,12 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         _pickImportDatabase = pickImportDatabase ?? (_ => Task.FromResult<string?>(null));
         _exportDatabase = exportDatabase ?? ((_, _) => Task.FromResult<WikiDatabaseExportResponse?>(null));
         RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => CanOperate);
-        DownloadAllCommand = new AsyncCommand(_ => DownloadAsync(includeResources: true), _ => CanOperate && !HasPageData);
-        DownloadPagesCommand = new AsyncCommand(_ => DownloadAsync(includeResources: false), _ => CanOperate && !HasPageData);
-        DownloadResourcesCommand = new AsyncCommand(_ => DownloadResourcesAsync(), _ => CanOperate && HasPageData && !HasResources);
+        DownloadAllCommand = new AsyncCommand(
+            _ => RequestOrStartDownloadAsync(includeResources: true),
+            _ => CanOperate && (!HasPageData || !HasResources));
+        DownloadPagesCommand = new AsyncCommand(
+            _ => RequestOrStartDownloadAsync(includeResources: false),
+            _ => CanOperate && (!HasPageData || HasResources));
         UpdateCommand = new AsyncCommand(_ => UpdateAsync(), _ => CanOperate && HasPageData);
         RetryFailuresCommand = new AsyncCommand(_ => RetryFailuresAsync(), _ => CanOperate && HasFailures);
         RequestClearFailuresCommand = new RelayCommand(
@@ -188,6 +193,10 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(HasResources));
             OnPropertyChanged(nameof(NeedsPageData));
             OnPropertyChanged(nameof(NeedsResources));
+            OnPropertyChanged(nameof(HasFullDownload));
+            OnPropertyChanged(nameof(HasLightDownload));
+            OnPropertyChanged(nameof(ShowFullDownloadAction));
+            OnPropertyChanged(nameof(ShowLightDownloadAction));
             OnPropertyChanged(nameof(PageCountText));
             OnPropertyChanged(nameof(RedirectCountText));
             OnPropertyChanged(nameof(ResourceCountText));
@@ -263,6 +272,10 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public bool HasResources => ActiveWiki?.IsResourceDownloaded == true;
     public bool NeedsPageData => HasActiveWiki && !HasPageData;
     public bool NeedsResources => HasPageData && !HasResources;
+    public bool HasFullDownload => HasPageData && HasResources;
+    public bool HasLightDownload => HasPageData && !HasResources;
+    public bool ShowFullDownloadAction => NeedsPageData || HasLightDownload;
+    public bool ShowLightDownloadAction => NeedsPageData || HasFullDownload;
     public bool CanOperate => IsAvailable && !IsBusy && HasActiveWiki;
     public bool IsIdle => !IsBusy;
     public string ActiveWikiTitle => ActiveWiki?.Title ?? "未选择 Wiki";
@@ -282,6 +295,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "清理失败记录？",
         ManagementConfirmation.DeleteResources => "删除全部资源？",
         ManagementConfirmation.DeleteWikiData => "删除当前 Wiki 数据？",
+        ManagementConfirmation.ReplaceWithFullDownload => "切换到全量数据？",
+        ManagementConfirmation.ReplaceWithLightDownload => "切换到轻量数据？",
         ManagementConfirmation.ImportDatabase => "导入此数据库？",
         _ => string.Empty,
     };
@@ -291,6 +306,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "仅清理页面与资源下载失败列表；不会删除已经下载的 Wiki 内容。",
         ManagementConfirmation.DeleteResources => $"将删除“{ActiveWikiTitle}”的全部本地图片和音频资源，页面文字仍保留。",
         ManagementConfirmation.DeleteWikiData => $"将删除“{ActiveWikiTitle}”的页面、资源、历史与收藏数据。此操作不可撤销，可稍后重新下载或导入。",
+        ManagementConfirmation.ReplaceWithFullDownload => $"将删除“{ActiveWikiTitle}”的旧数据库，再重新下载页面、图片和音频等全部资源。",
+        ManagementConfirmation.ReplaceWithLightDownload => $"将删除“{ActiveWikiTitle}”的旧数据库，再重新下载基础页面；图片和音频不会保留。",
         ManagementConfirmation.ImportDatabase => BuildImportConfirmation(),
         _ => string.Empty,
     };
@@ -300,6 +317,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures => "确认清理",
         ManagementConfirmation.DeleteResources => "删除资源",
         ManagementConfirmation.DeleteWikiData => "删除全部数据",
+        ManagementConfirmation.ReplaceWithFullDownload => "删除并全量下载",
+        ManagementConfirmation.ReplaceWithLightDownload => "删除并轻量下载",
         ManagementConfirmation.ImportDatabase => "确认导入",
         _ => "确认",
     };
@@ -307,13 +326,14 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ManagementConfirmation.ClearFailures or
         ManagementConfirmation.DeleteResources or
         ManagementConfirmation.DeleteWikiData or
+        ManagementConfirmation.ReplaceWithFullDownload or
+        ManagementConfirmation.ReplaceWithLightDownload or
         ManagementConfirmation.ImportDatabase;
     public bool IsStandardConfirmation => IsConfirmationVisible && !IsDangerousConfirmation;
 
     public AsyncCommand RefreshCommand { get; }
     public AsyncCommand DownloadAllCommand { get; }
     public AsyncCommand DownloadPagesCommand { get; }
-    public AsyncCommand DownloadResourcesCommand { get; }
     public AsyncCommand UpdateCommand { get; }
     public AsyncCommand RetryFailuresCommand { get; }
     public RelayCommand RequestClearFailuresCommand { get; }
@@ -326,7 +346,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public RelayCommand CancelConfirmationCommand { get; }
     public AsyncCommand ConfirmCommand { get; }
     internal void ShowEmptyWikiOnboarding() =>
-        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入 data.db。";
+        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“全量下载”“轻量下载”或导入 data.db。";
 
     public void Attach(
         WikiApplication application,
@@ -366,7 +386,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         {
             await ReloadAsync(current.Token);
             StatusMessage = NeedsPageData
-                ? "首次使用：当前 Wiki 尚无页面内容。请选择“下载页面与资源”或导入 data.db。"
+                ? "首次使用：当前 Wiki 尚无页面内容。请选择“全量下载”“轻量下载”或导入 data.db。"
                 : "Wiki 数据状态已刷新。";
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
@@ -435,6 +455,12 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             case ManagementConfirmation.DeleteWikiData:
                 await DeleteWikiDataAsync();
                 break;
+            case ManagementConfirmation.ReplaceWithFullDownload:
+                await ReplaceDownloadModeAsync(includeResources: true);
+                break;
+            case ManagementConfirmation.ReplaceWithLightDownload:
+                await ReplaceDownloadModeAsync(includeResources: false);
+                break;
             case ManagementConfirmation.ImportDatabase:
                 await ImportDatabaseAsync();
                 break;
@@ -457,12 +483,19 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             requiresViewerRebind: true);
     }
 
-    internal async Task DownloadResourcesAsync() =>
-        await RunSummaryOperationAsync(
-            "资源下载",
-            (progress, token) => _actions!.DownloadResources(progress, token),
-            dataChanged: true,
-            requiresViewerRebind: true);
+    internal async Task RequestOrStartDownloadAsync(bool includeResources)
+    {
+        if (!CanOperate)
+            return;
+        if (!HasPageData)
+        {
+            await DownloadAsync(includeResources);
+            return;
+        }
+        SetConfirmation(includeResources
+            ? ManagementConfirmation.ReplaceWithFullDownload
+            : ManagementConfirmation.ReplaceWithLightDownload);
+    }
 
     internal async Task UpdateAsync() =>
         await RunSummaryOperationAsync(
@@ -595,6 +628,53 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             (_, token) => _actions!.DeleteWikiData(token),
             dataChanged: true,
             requiresViewerRebind: true);
+
+    private async Task ReplaceDownloadModeAsync(bool includeResources)
+    {
+        if (!CanOperate || _actions is null)
+            return;
+        var label = includeResources ? "全量数据切换" : "轻量数据切换";
+        var current = BeginOperation($"正在删除旧数据库并准备{(includeResources ? "全量" : "轻量")}下载…");
+        if (current is null)
+            return;
+        var progress = new Progress<WikiProgress>(value => ApplyProgress(label, value));
+        var dataMayHaveChanged = false;
+        try
+        {
+            dataMayHaveChanged = true;
+            await _actions.DeleteWikiData(current.Token);
+            current.Token.ThrowIfCancellationRequested();
+            StatusMessage = includeResources ? "旧数据库已删除，正在全量下载…" : "旧数据库已删除，正在轻量下载…";
+            var summary = await _actions.Download(includeResources, progress, current.Token);
+            current.Token.ThrowIfCancellationRequested();
+            await ReloadAsync(current.Token);
+            DataChanged?.Invoke(this, new WikiDataChangedEventArgs(requiresViewerRebind: true));
+            StatusMessage = FormatSummary(label, summary);
+        }
+        catch (OperationCanceledException) when (current.IsCancellationRequested)
+        {
+            await RefreshAfterReplacementFailureAsync(dataMayHaveChanged);
+            StatusMessage = $"{label}已取消；旧数据库可能已删除，可重新开始下载或导入 data.db。";
+        }
+        catch
+        {
+            await RefreshAfterReplacementFailureAsync(dataMayHaveChanged);
+            StatusMessage = $"{label}失败；旧数据库可能已删除，请确认网络和磁盘空间后重试。";
+        }
+        finally
+        {
+            EndOperation(current);
+        }
+    }
+
+    private async Task RefreshAfterReplacementFailureAsync(bool dataMayHaveChanged)
+    {
+        if (!dataMayHaveChanged)
+            return;
+        try { await ReloadAsync(CancellationToken.None); }
+        catch { }
+        DataChanged?.Invoke(this, new WikiDataChangedEventArgs(requiresViewerRebind: true));
+    }
 
     private async Task ImportDatabaseAsync()
     {
@@ -805,7 +885,6 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         RefreshCommand.NotifyCanExecuteChanged();
         DownloadAllCommand.NotifyCanExecuteChanged();
         DownloadPagesCommand.NotifyCanExecuteChanged();
-        DownloadResourcesCommand.NotifyCanExecuteChanged();
         UpdateCommand.NotifyCanExecuteChanged();
         RetryFailuresCommand.NotifyCanExecuteChanged();
         RequestClearFailuresCommand.NotifyCanExecuteChanged();

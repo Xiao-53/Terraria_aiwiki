@@ -67,15 +67,25 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         Func<AiRuntimeConfigurationDraft, CancellationToken, Task<AiRuntimeConfiguration>>? saveAiConfiguration = null,
         Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? restartAi = null,
         Func<CancellationToken, Task<WindowsAiRuntimeStatus>>? clearAiCredential = null,
+        Func<AiRuntimeConfigurationDraft, CancellationToken, Task<IReadOnlyList<string>>>? discoverAiModels = null,
+        Func<AiRuntimeConfigurationDraft, CancellationToken, Task>? testAiConfiguration = null,
         IProductUpdateService? productUpdateService = null,
         Func<Task>? applyUpdateAndRestart = null,
         Func<Uri, Task>? openExternalUri = null,
-        ProductDiagnostics? productDiagnostics = null)
+        ProductDiagnostics? productDiagnostics = null,
+        Func<CancellationToken, Task<IReadOnlyDictionary<string, IReadOnlyList<string>>>>? loadAiModelCatalog = null,
+        Func<AiProviderConfiguration, IReadOnlyList<string>, CancellationToken, Task>? saveAiModelCatalog = null,
+        Func<CancellationToken, Task<QuickAccessPreferences>>? loadQuickAccess = null,
+        Func<QuickAccessPreferences, CancellationToken, Task<bool>>? saveQuickAccess = null,
+        Func<bool, Task<bool>>? suspendQuickHotkeys = null)
     {
         Reader = new ReaderPaneViewModel();
         var conversationStore = chatConversationStore ?? new MemoryChatConversationStore();
+        SafeMarkdownParser parser;
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.MarkdownPipeline))
+            parser = new SafeMarkdownParser();
         Chat = new ChatViewModel(
-            new SafeMarkdownParser(),
+            parser,
             OpenSourceAsync,
             OpenWikiReader,
             conversationStore);
@@ -98,10 +108,17 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             saveAiConfiguration,
             restartAi,
             clearAiCredential,
+            discoverAiModels,
+            testAiConfiguration,
             productUpdateService,
             applyUpdateAndRestart,
             openExternalUri,
-            productDiagnostics);
+            productDiagnostics,
+            loadAiModelCatalog,
+            saveAiModelCatalog,
+            loadQuickAccess,
+            saveQuickAccess,
+            suspendQuickHotkeys);
         Chat.ConversationChanged += OnConversationChanged;
         Favorites.ConversationFavoriteChanged += OnConversationFavoriteChanged;
         Wiki.PropertyChanged += OnWikiPropertyChanged;
@@ -413,6 +430,16 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
         {
             WikiMode = WikiDisplayMode.Search;
         }
+    }
+
+    public void ApplyStartupPage(string startupPage)
+    {
+        if (!string.Equals(startupPage, "wiki", StringComparison.Ordinal))
+            return;
+
+        _readerStateBeforeWiki = ReaderState;
+        WikiMode = WikiDisplayMode.Home;
+        CurrentSection = ShellSection.Wiki;
     }
 
     public void RefreshAfterWikiDataChange(bool clearHomePage)

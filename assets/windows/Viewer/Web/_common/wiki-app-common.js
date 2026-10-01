@@ -260,19 +260,19 @@
 
         try {
             // 向 C# 查询：标题可能被重定向（如别名 -> 正式名），还可能带 #锚点
-            const titleWithAnchor = JSON.parse(await callCSharpAsync("GetRedirectedTitleAndAnchorAsync", title));
+            const page = await redirect(title, config, navigationId);
             if (!isCurrentNavigation(navigationId)) return;
 
             // 渲染重定向后的页面；若返回 null 说明导航已失效则中止
-            if (await redirect(titleWithAnchor.title, config, navigationId) == null || !isCurrentNavigation(navigationId)) return;
+            if (page == null || !isCurrentNavigation(navigationId)) return;
             // 等待页面内所有图片加载完成，确保滚动定位基于最终布局高度
             await waitForImages(document.getElementById("mw-content-text"));
             if (!isCurrentNavigation(navigationId)) return;
             // 跳到页面顶部
             window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
             // 若带锚点，则平滑滚动到对应元素
-            if (titleWithAnchor.anchor) {
-                const element = document.getElementById(titleWithAnchor.anchor);
+            if (page.anchor) {
+                const element = document.getElementById(page.anchor);
                 if (element) {
                     element.scrollIntoView({ behavior: "smooth" });
                 }
@@ -374,7 +374,7 @@
      */
     async function redirect(title, config, navigationId = beginNavigation(), onRendered = null) {
         // 请求 C# 渲染词条 HTML，返回 { title, content, lastModified }
-        const result = JSON.parse(await callCSharpAsync("PageRedirectAsync", title));
+        const result = await callCSharpAsync("PageRedirectAsync", title);
         if (result == null || !isCurrentNavigation(navigationId)) return null;
 
         // 更新页面标题、正文内容与最后修改时间
@@ -411,7 +411,7 @@
 
         // 调用配置中的刷新回调（例如重新运行页面脚本、刷新锚点等）
         config.refresh();
-        return true;
+        return result;
     }
 
     /**
@@ -522,25 +522,47 @@
 
             /* 1. 基础宽度 - 稍微收窄一点，显得更精致 */
             ::-webkit-scrollbar {
-                width: 6px;
-                height: 6px;
+                width: 12px;
+                height: 12px;
+                background: transparent !important;
             }
 
-            /* 2. 轨道 - 保持完全透明 */
-            ::-webkit-scrollbar-track {
-                background: transparent;
+            /* 2. 整个槽位保持透明；覆盖 WebView 默认的根盒、轨道片段、按钮和角落底色。 */
+            ::-webkit-scrollbar-track,
+            ::-webkit-scrollbar-track-piece,
+            ::-webkit-scrollbar-corner,
+            ::-webkit-resizer {
+                background: transparent !important;
+                box-shadow: none !important;
+            }
+
+            ::-webkit-scrollbar-button {
+                display: none;
+                width: 0;
+                height: 0;
+                background: transparent !important;
             }
 
             /* 3. 滑块 - 使用半透明色，确保在深色/浅色背景下都能"透"出来 */
             ::-webkit-scrollbar-thumb {
-                background-color: rgba(128, 128, 128, 0.3);
+                background-color: rgba(70, 76, 82, 0.55);
                 border-radius: 999px;
+                border: 3px solid transparent;
+                background-clip: padding-box;
                 transition: background-color 0.2s;
             }
 
             /* 4. 悬停状态 - 宽度不变，但颜色加深，增加互动反馈 */
             ::-webkit-scrollbar-thumb:hover {
-                background-color: rgba(128, 128, 128, 0.5);
+                background-color: rgba(54, 60, 66, 0.78);
+            }
+
+            html.dark ::-webkit-scrollbar-thumb {
+                background-color: rgba(210, 214, 218, 0.58);
+            }
+
+            html.dark ::-webkit-scrollbar-thumb:hover {
+                background-color: rgba(232, 235, 238, 0.82);
             }
 
             /* 自定义右键菜单基础样式 */

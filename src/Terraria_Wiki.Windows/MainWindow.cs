@@ -2,8 +2,11 @@ using System.Diagnostics;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
+using Avalonia.Platform;
 using Avalonia.Platform.Storage;
 using Avalonia.Styling;
 using Avalonia.Threading;
@@ -13,6 +16,8 @@ using Terraria_Wiki.Windows.Hosting;
 using Terraria_Wiki.Windows.Presentation.Conversations;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 using Terraria_Wiki.Windows.Presentation.Management;
+using Terraria_Wiki.Windows.Presentation.QuickAccess;
+using Terraria_Wiki.Windows.Presentation.Reader;
 using Terraria_Wiki.Windows.Presentation.Shell;
 using Terraria_Wiki.Windows.Updates;
 using Terraria_Wiki.Windows.Viewer;
@@ -42,6 +47,8 @@ internal sealed partial class MainWindow : Window
     private string[] _runtimeArguments;
     private readonly CancellationTokenSource _lifetime = new();
     private readonly string? _smokeLogPath;
+    private readonly string? _hiddenWebViewPocLogPath;
+    private readonly string? _hiddenWebViewPocMode;
     private readonly string? _chatFavoritesPath;
     private readonly string? _diagnosticsDirectory;
     private readonly string? _aiSmokeQuestion;
@@ -52,10 +59,18 @@ internal sealed partial class MainWindow : Window
     private readonly long _windowConstructedMilliseconds;
     private readonly ShellViewModel _shellViewModel;
     private readonly ShellView _shellView;
+    private readonly IChatConversationStore _conversationStore;
+    private readonly HostSettingsStore _hostSettingsStore;
     private readonly IProductUpdateService _productUpdateService;
     private readonly ProductDiagnostics _diagnostics;
     private WindowsClientRuntime? _runtime;
     private ViewerWebViewSession? _viewerSession;
+    private QuickAccessWindow? _quickWindow;
+    private GlobalHotkeys? _globalHotkeys;
+    private TrayIcon? _trayIcon;
+    private QuickAccessPreferences _quickPreferences = new();
+    private bool _quickRuntimeReady;
+    private bool _forceExit;
     private bool _cleanupComplete;
     private bool _closing;
     private bool _isRestarting;
@@ -69,37 +84,69 @@ internal sealed partial class MainWindow : Window
         _arguments = arguments ?? [];
         _runtimeArguments = _arguments.ToArray();
         _smokeLogPath = ParseOption(_arguments, "--smoke-log");
+        _hiddenWebViewPocLogPath = ParseOption(_arguments, "--hidden-webview-poc-log");
+        _hiddenWebViewPocMode = _arguments.Contains("--hidden-webview-poc-early", StringComparer.Ordinal)
+            ? "early"
+            : _arguments.Contains("--hidden-webview-poc-cancel", StringComparer.Ordinal) ? "cancel" : null;
         _chatFavoritesPath = ParseOption(_arguments, "--chat-favorites");
         _diagnosticsDirectory = ParseOption(_arguments, "--diagnostics-directory");
         _aiSmokeQuestion = ParseTextOption(_arguments, "--ai-smoke-question");
         _aiSmokeCancelFirst = HasFlag(_arguments, "--ai-smoke-cancel-first");
         _processStartOffsetMilliseconds = GetProcessStartOffsetMilliseconds();
 
-        AvaloniaXamlLoader.Load(this);
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.MainWindowXaml))
+            AvaloniaXamlLoader.Load(this);
         _shellView = this.FindControl<ShellView>("ShellHost")!;
         _productUpdateService = new VelopackProductUpdateService();
-        _diagnostics = _diagnosticsDirectory is null
-            ? ProductDiagnostics.CreateDefault()
-            : new ProductDiagnostics(_diagnosticsDirectory);
-        _diagnostics.Write(ProductDiagnosticEvent.ApplicationStarted);
-        _shellViewModel = new ShellViewModel(
-            CreateChatConversationStore(_chatFavoritesPath),
-            PickImportDatabaseAsync,
-            ExportDatabaseAsync,
-            ApplyPreferencesAsync,
-            LoadAiConfigurationDraftAsync,
-            SaveAiConfigurationAsync,
-            RestartAiAsync,
-            ClearAiCredentialAsync,
-            _productUpdateService,
-            ApplyUpdateAndRestartAsync,
-            OpenExternalUriAsync,
-            _diagnostics);
-        _shellView.DataContext = _shellViewModel;
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ProductDiagnosticsInitialization))
+        {
+            _diagnostics = _diagnosticsDirectory is null
+                ? ProductDiagnostics.CreateDefault()
+                : new ProductDiagnostics(_diagnosticsDirectory);
+            _diagnostics.Write(ProductDiagnosticEvent.ApplicationStarted);
+        }
+        WindowsStartupInvestigation.Attach(_diagnostics);
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ConversationStore))
+            _conversationStore = CreateChatConversationStore(_chatFavoritesPath);
+        string? hostSettingsPath;
+        try { hostSettingsPath = ParseOption(_arguments, "--host-settings"); }
+        catch (ArgumentException) { hostSettingsPath = null; } // Runtime reports malformed CLI options through startup recovery.
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.HostSettingsStore))
+        {
+            _hostSettingsStore = hostSettingsPath is null
+                ? HostSettingsStore.CreateDefault()
+                : new HostSettingsStore(hostSettingsPath);
+        }
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ShellViewModel))
+        {
+            _shellViewModel = new ShellViewModel(
+                _conversationStore,
+                PickImportDatabaseAsync,
+                ExportDatabaseAsync,
+                ApplyPreferencesAsync,
+                LoadAiConfigurationDraftAsync,
+                SaveAiConfigurationAsync,
+                RestartAiAsync,
+                ClearAiCredentialAsync,
+                DiscoverAiModelsAsync,
+                TestAiConfigurationAsync,
+                _productUpdateService,
+                ApplyUpdateAndRestartAsync,
+                OpenExternalUriAsync,
+                _diagnostics,
+                LoadAiModelCatalogAsync,
+                SaveAiModelCatalogAsync,
+                _hostSettingsStore.LoadQuickAccessAsync,
+                SaveQuickAccessAsync,
+                suspended => _globalHotkeys?.SetSuspendedAsync(suspended) ?? Task.FromResult(true));
+        }
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ShellDataContext))
+            _shellView.DataContext = _shellViewModel;
         _shellViewModel.RetryStartupRequested += OnRetryStartupRequested;
         _shellViewModel.GetWebView2Requested += OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged += OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted += OnViewerNavigationCompleted;
+        SingleInstanceActivation.SetHandler(ShowMain);
 
         Opened += OnOpened;
         Closing += OnClosing;
@@ -132,14 +179,207 @@ internal sealed partial class MainWindow : Window
         }
     }
 
+    private async Task InitializeQuickHostAsync()
+    {
+        using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.QuickPreferences))
+        {
+            try { _quickPreferences = await _hostSettingsStore.LoadQuickAccessAsync(_lifetime.Token); }
+            catch { _quickPreferences = new QuickAccessPreferences(); }
+        }
+        try
+        {
+            using var trayTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.TrayInitialization);
+            using var iconStream = AssetLoader.Open(new Uri("avares://Terraria_Wiki.Windows/Assets/appicon.ico"));
+            var menu = new NativeMenu();
+            var mainItem = new NativeMenuItem("打开主窗口");
+            mainItem.Click += (_, _) => ShowMain();
+            var quickItem = new NativeMenuItem("Quick Ask");
+            quickItem.Click += (_, _) => ShowQuick();
+            var settingsItem = new NativeMenuItem("设置");
+            settingsItem.Click += (_, _) => { ShowMain(); _shellViewModel.NavigateSettings(); };
+            var exitItem = new NativeMenuItem("退出");
+            exitItem.Click += async (_, _) => await ExitAsync();
+            menu.Items.Add(mainItem);
+            menu.Items.Add(quickItem);
+            menu.Items.Add(settingsItem);
+            menu.Items.Add(new NativeMenuItemSeparator());
+            menu.Items.Add(exitItem);
+            _trayIcon = new TrayIcon
+            {
+                Icon = new WindowIcon(iconStream),
+                ToolTipText = "Terraria AI Wiki",
+                Menu = menu,
+                IsVisible = true,
+            };
+            _trayIcon.Clicked += (_, _) => ShowQuick();
+            TrayIcon.SetIcons(Avalonia.Application.Current!, new TrayIcons { _trayIcon });
+        }
+        catch
+        {
+            _trayIcon?.Dispose();
+            _trayIcon = null;
+            _diagnostics.Write(ProductDiagnosticEvent.TrayInitializationFailed);
+        }
+        if (!OperatingSystem.IsWindows()) return;
+        try
+        {
+            using var hotkeyTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.HotkeyInitialization);
+            _globalHotkeys = new GlobalHotkeys(() => ShowQuick(QuickAccessShowIntent.GlobalHotkey), HideQuick);
+            if (!await _globalHotkeys.TrySetAsync(_quickPreferences.ShowHotkey, _quickPreferences.HideHotkey))
+                _shellViewModel.SetStartupStatus("Quick Ask 快捷键不可用；可通过托盘打开。");
+        }
+        catch
+        {
+            _globalHotkeys?.Dispose();
+            _globalHotkeys = null;
+        }
+    }
+
+    private async Task<bool> SaveQuickAccessAsync(
+        QuickAccessPreferences preferences, CancellationToken cancellationToken)
+    {
+        preferences.Validate();
+        if (!GlobalHotkey.TryParse(preferences.ShowHotkey, out var show)
+            || !GlobalHotkey.TryParse(preferences.HideHotkey, out var hide)
+            || (show.Key != 0 && show == hide))
+            return false;
+        var previous = _quickPreferences;
+        if (_globalHotkeys is not null
+            && !await _globalHotkeys.TrySetAsync(preferences.ShowHotkey, preferences.HideHotkey))
+            return false;
+        try
+        {
+            await _hostSettingsStore.SaveQuickAccessAsync(preferences, cancellationToken);
+            _quickPreferences = preferences;
+            if (_quickWindow is { } window) window.ApplyTopmostPreference(preferences.Topmost);
+            return true;
+        }
+        catch
+        {
+            if (_globalHotkeys is not null)
+                await _globalHotkeys.TrySetAsync(previous.ShowHotkey, previous.HideHotkey);
+            throw;
+        }
+    }
+
+    private void ShowMain()
+    {
+        if (_closing || _cleanupComplete) return;
+        if (!IsVisible) Show();
+        WindowState = WindowState.Normal;
+        Activate();
+    }
+
+    private void ShowQuick(QuickAccessShowIntent intent = QuickAccessShowIntent.Tray)
+    {
+        if (_closing || _cleanupComplete) return;
+        var clock = Stopwatch.StartNew();
+        try
+        {
+            var created = _quickWindow is null;
+            if (_quickWindow is null)
+            {
+                var quick = new QuickAccessWindow(_conversationStore,
+                    _diagnostics, clock);
+                quick.HiddenByUser += OnQuickHidden;
+                PlaceQuickWindow(quick, restoreSavedBounds: true);
+                quick.RequestedThemeVariant = RequestedThemeVariant;
+                _quickWindow = quick;
+            }
+            var window = _quickWindow;
+            var wasVisible = window.IsVisible;
+            if (!created && !wasVisible)
+                PlaceQuickWindow(window, restoreSavedBounds: false);
+            window.ShowQuick(_quickPreferences, intent);
+            if (!created && !wasVisible)
+                _diagnostics.WriteQuickAccessStage(QuickAccessStage.Reopened, clock.ElapsedMilliseconds);
+            if (_quickRuntimeReady && _runtime is { } runtime)
+                _ = window.AttachRuntimeAsync(runtime);
+        }
+        catch
+        {
+            _shellViewModel.SetStartupStatus("Quick Ask 无法打开；主窗口仍可使用。", isError: true);
+        }
+    }
+
+    private void HideQuick() => _quickWindow?.HideQuick();
+
+    private void PlaceQuickWindow(QuickAccessWindow quick, bool restoreSavedBounds)
+    {
+        var targetX = restoreSavedBounds ? _quickPreferences.X : quick.Position.X;
+        var targetY = restoreSavedBounds ? _quickPreferences.Y : quick.Position.Y;
+        var savedScreen = targetX is { } x && targetY is { } y
+            ? Screens.ScreenFromPoint(new PixelPoint(x, y)) : null;
+        var screen = savedScreen ?? Screens.ScreenFromWindow(this) ?? Screens.Primary;
+        var area = screen?.WorkingArea;
+        var scale = screen?.Scaling ?? 1;
+        if (restoreSavedBounds)
+        {
+            quick.Width = _quickPreferences.Width;
+            quick.Height = _quickPreferences.Height;
+        }
+        else
+        {
+            quick.Width = Math.Max(quick.Bounds.Width, 420);
+            quick.Height = Math.Max(quick.Bounds.Height, 360);
+        }
+        if (area is null) return;
+        var bounds = area.Value;
+        var pixelWidth = (int)Math.Round(quick.Width * scale);
+        var pixelHeight = (int)Math.Round(quick.Height * scale);
+        var preferredX = targetX ?? bounds.X + (bounds.Width - pixelWidth) / 2;
+        var preferredY = targetY ?? bounds.Bottom - pixelHeight - 24;
+        quick.Position = new PixelPoint(
+            Math.Clamp(preferredX, bounds.X, Math.Max(bounds.X, bounds.Right - pixelWidth)),
+            Math.Clamp(preferredY, bounds.Y, Math.Max(bounds.Y, bounds.Bottom - pixelHeight)));
+    }
+
+    private async void OnQuickHidden(object? sender, EventArgs args)
+    {
+        if (sender is not QuickAccessWindow window || _closing) return;
+        try { await SaveQuickBoundsAsync(window, _lifetime.Token); }
+        catch { }
+    }
+
+    private async Task SaveQuickBoundsAsync(QuickAccessWindow window, CancellationToken cancellationToken)
+    {
+        var updated = _quickPreferences with
+        {
+            X = window.Position.X,
+            Y = window.Position.Y,
+            Width = Math.Max(window.Bounds.Width, 420),
+            Height = Math.Max(window.Bounds.Height, 360),
+        };
+        await _hostSettingsStore.SaveQuickAccessAsync(updated, cancellationToken);
+        _quickPreferences = updated;
+    }
+
+    private async Task ExitAsync()
+    {
+        if (_closing) return;
+        _forceExit = true;
+        Close();
+        await Task.CompletedTask;
+    }
+
     private async void OnOpened(object? sender, EventArgs args)
     {
+        // Avalonia raises Opened again after Hide/Show. Restoring from the tray must
+        // reuse the current runtime, not reacquire our own single-instance lock.
+        Opened -= OnOpened;
         ApplyNativeWindowTheme();
         var opened = ElapsedFromProcessStart();
         RecordStartupStage(
             WindowsStartupStage.WindowOpened,
             opened,
             Math.Max(0, opened - _windowConstructedMilliseconds));
+        WindowsStartupInvestigation.Checkpoint(StartupInvestigationPhase.WindowOpened);
+        WindowsStartupInvestigation.StartPersistence();
+        if (_smokeLogPath is null && _hiddenWebViewPocLogPath is null)
+        {
+            using var quickTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.QuickHostInitialization);
+            await InitializeQuickHostAsync();
+        }
         await StartAsync();
     }
 
@@ -162,6 +402,7 @@ internal sealed partial class MainWindow : Window
         try
         {
             await RebindViewerAsync(_runtime, _lifetime.Token);
+            if (_quickWindow is { } quick) await quick.RebindAsync(resetContent: true);
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
@@ -179,11 +420,14 @@ internal sealed partial class MainWindow : Window
         _shellViewModel.SetStartupStatus("正在确认 WebView2、Wiki 数据目录和本地数据库…");
         try
         {
-            var runtime = await WindowsClientRuntime.CreateAsync(
-                _runtimeArguments,
-                IsDarkTheme,
-                timing => RecordStartupStage(timing.Stage, timing.DurationMilliseconds),
-                _lifetime.Token);
+            WindowsClientRuntime runtime;
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.RuntimeCreation))
+                runtime = await WindowsClientRuntime.CreateAsync(
+                    _runtimeArguments,
+                    IsDarkTheme,
+                    timing => RecordStartupStage(timing.Stage, timing.DurationMilliseconds),
+                    _lifetime.Token,
+                    _hostSettingsStore);
             _runtime = runtime;
             _shellViewModel.SetWebView2Status(runtime.WebView2);
             _diagnostics.Write(ProductDiagnosticEvent.RuntimeReady, runtime.WebView2.Version);
@@ -193,13 +437,19 @@ internal sealed partial class MainWindow : Window
                 _timings.RuntimeReadyMilliseconds,
                 0);
             runtime.Viewer.StatusChanged += OnViewerStatusChanged;
-            RequestedThemeVariant = runtime.Preferences.AppTheme switch
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ThemeApplication))
             {
-                "dark" => ThemeVariant.Dark,
-                "light" => ThemeVariant.Light,
-                _ => ThemeVariant.Default,
-            };
-            ApplyNativeWindowTheme();
+                Classes.Set("interaction-feedback", runtime.Preferences.IsInteractionFeedbackEnabled);
+                RequestedThemeVariant = runtime.Preferences.AppTheme switch
+                {
+                    "dark" => ThemeVariant.Dark,
+                    "light" => ThemeVariant.Light,
+                    _ => ThemeVariant.Default,
+                };
+                ApplyNativeWindowTheme();
+                if (_quickWindow is { } themedQuick)
+                    themedQuick.RequestedThemeVariant = RequestedThemeVariant;
+            }
 
             var viewerTimer = Stopwatch.StartNew();
             try
@@ -230,13 +480,21 @@ internal sealed partial class MainWindow : Window
                     "viewer-not-ready",
                     runtime.Viewer.Status.Message ?? "Viewer is not ready.");
 
-            _shellViewModel.AttachRuntime(runtime, SwitchWikiAndRebindAsync);
-            var activeWiki = await runtime.Application.ActiveWiki.GetActiveAsync(_lifetime.Token);
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.RuntimeAttachment))
+                _shellViewModel.AttachRuntime(runtime, SwitchWikiAndRebindAsync);
+            WikiBookSnapshot activeWiki;
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ActiveWiki))
+                activeWiki = await runtime.Application.ActiveWiki.GetActiveAsync(_lifetime.Token);
             _shellViewModel.SetWikiHomePage(activeWiki.DefaultPageTitle);
-            _aiStartupTask = EnableAiInBackgroundAsync(runtime);
+            _quickRuntimeReady = true;
+            if (_quickWindow is { } quickWindow)
+                _ = quickWindow.AttachRuntimeAsync(runtime);
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiDispatch))
+                _aiStartupTask = EnableAiInBackgroundAsync(runtime);
             if (!activeWiki.IsPageDownloaded)
             {
                 _shellViewModel.ShowEmptyWikiOnboarding();
+                StartHiddenWebViewPoc(runtime);
                 return;
             }
 
@@ -280,8 +538,10 @@ internal sealed partial class MainWindow : Window
             _shellViewModel.AttachReader(session.OpenPageAsync, session.BackAsync, session.HasHistory);
             if (session.CurrentPage is { } currentPage)
                 await _shellViewModel.Reader.ApplyPageIdentityAsync(currentPage);
+            _shellViewModel.ApplyStartupPage(runtime.Preferences.StartupPage);
             _shellViewModel.SetStartupStatus(
                 $"本地 Wiki 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
+            StartHiddenWebViewPoc(runtime);
 
             if (_smokeLogPath is not null)
             {
@@ -294,7 +554,16 @@ internal sealed partial class MainWindow : Window
         }
         catch (Exception exception)
         {
+            if (exception is HostMountException { Code: "client-already-running" }
+                && SingleInstanceActivation.TryNotifyExisting())
+            {
+                await ExitAsync();
+                return;
+            }
+            if (_hiddenWebViewPocLogPath is { } logPath)
+                File.AppendAllText(logPath, JsonSerializer.Serialize(new { stage = "startup-failed", type = exception.GetType().FullName, exception.Message }) + Environment.NewLine);
             await DisposeRuntimeAsync();
+            _quickWindow?.MarkHostUnavailable();
             ShowStartupError(exception);
             if (_smokeLogPath is not null)
             {
@@ -302,6 +571,12 @@ internal sealed partial class MainWindow : Window
                 Close();
             }
         }
+    }
+
+    private void StartHiddenWebViewPoc(WindowsClientRuntime runtime)
+    {
+        if (_hiddenWebViewPocLogPath is { } logPath)
+            _ = HiddenWebViewPoc.RunAsync(this, runtime, logPath, _hiddenWebViewPocMode, _lifetime.Token);
     }
 
     private async Task RetryStartupAsync()
@@ -508,6 +783,7 @@ internal sealed partial class MainWindow : Window
         long elapsedMilliseconds,
         long durationMilliseconds)
     {
+        WindowsStartupInvestigation.ExistingStage(stage, elapsedMilliseconds, durationMilliseconds);
         _timings.RecordStartupStage(stage, elapsedMilliseconds, durationMilliseconds);
         _diagnostics.WriteStartupStage(stage, elapsedMilliseconds, durationMilliseconds);
     }
@@ -677,19 +953,32 @@ internal sealed partial class MainWindow : Window
         args.Cancel = true;
         if (_closing)
             return;
+        if (!_forceExit && _quickPreferences.CloseToTray && args.CloseReason == WindowCloseReason.WindowClosing)
+        {
+            if (_trayIcon is { IsVisible: true }) Hide();
+            else
+                _shellViewModel.SetStartupStatus("托盘不可用，窗口已保留；请在设置中关闭“关闭到托盘”后退出。",
+                    isError: true, recovery: StartupRecoveryKind.None);
+            return;
+        }
         _closing = true;
         await CleanupAsync();
         Close();
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
     }
 
     private async Task ApplyUpdateAndRestartAsync()
     {
         if (_closing)
             return;
+        _forceExit = true;
         _closing = true;
         await CleanupAsync();
         _productUpdateService.ApplyAndRestart();
         Close();
+        if (Avalonia.Application.Current?.ApplicationLifetime is IClassicDesktopStyleApplicationLifetime desktop)
+            desktop.Shutdown();
     }
 
     private static Task OpenExternalUriAsync(Uri uri) =>
@@ -701,26 +990,48 @@ internal sealed partial class MainWindow : Window
         _timings.CloseRequestedMilliseconds = ElapsedFromProcessStart();
         _lifetime.Cancel();
         _shellViewModel.SetStartupStatus("正在关闭 AI、Viewer 和本地数据库…");
+        _globalHotkeys?.Dispose();
+        _globalHotkeys = null;
+        _trayIcon?.Dispose();
+        _trayIcon = null;
+        if (_quickWindow is { } quickWindow)
+        {
+            _quickWindow = null;
+            quickWindow.HiddenByUser -= OnQuickHidden;
+            try { await SaveQuickBoundsAsync(quickWindow, CancellationToken.None); } catch { }
+            await quickWindow.DisposeAsync();
+        }
         await DisposeRuntimeAsync();
         _shellViewModel.Dispose();
         _shellViewModel.RetryStartupRequested -= OnRetryStartupRequested;
         _shellViewModel.GetWebView2Requested -= OnGetWebView2Requested;
         _shellViewModel.Management.DataChanged -= OnWikiDataChanged;
         _shellView.WebView.NavigationCompleted -= OnViewerNavigationCompleted;
+        SingleInstanceActivation.SetHandler(null);
         _lifetime.Dispose();
-        _diagnostics.Write(ProductDiagnosticEvent.ApplicationStopped);
-        _cleanupComplete = true;
         closeTimer.Stop();
         _timings.CloseTotalMilliseconds = closeTimer.ElapsedMilliseconds;
+        _diagnostics.WriteShutdown(
+            _timings.WebViewStopMilliseconds,
+            _timings.AiStopMilliseconds,
+            _timings.ViewerStopMilliseconds,
+            _timings.DatabaseCloseMilliseconds,
+            _timings.RuntimeDisposeMilliseconds,
+            _timings.CloseTotalMilliseconds);
+        _cleanupComplete = true;
         await WriteSmokeLogAsync();
     }
 
     private async Task DisposeRuntimeAsync()
     {
+        _quickRuntimeReady = false;
+        if (_quickWindow is { } quickWindow)
+            await quickWindow.DetachRuntimeAsync();
         _shellViewModel.DetachRuntime();
 
         var session = _viewerSession;
         _viewerSession = null;
+        var sessionStop = Task.CompletedTask;
         if (session is not null)
         {
             _timings.ViewerWebMessageCount = session.ReceivedMessageCount;
@@ -733,11 +1044,7 @@ internal sealed partial class MainWindow : Window
             session.ReadyChanged -= OnViewerReadyChanged;
             session.PageCommitted -= OnViewerPageCommitted;
             session.HistoryChanged -= OnViewerHistoryChanged;
-            var sessionTimer = Stopwatch.StartNew();
-            try { await session.DisposeAsync(); } catch { }
-            sessionTimer.Stop();
-            if (_closing)
-                _timings.WebViewStopMilliseconds = sessionTimer.ElapsedMilliseconds;
+            sessionStop = DisposeViewerSessionAsync(session);
         }
 
         var runtime = _runtime;
@@ -749,7 +1056,7 @@ internal sealed partial class MainWindow : Window
             _timings.ViewerCommonScriptRequestCount = runtime.Viewer.GetRequestCount("/_common/wiki-app-common.js");
             _timings.ViewerAppScriptRequestCount = runtime.Viewer.GetRequestCount("/wiki/Terraria_Wiki_zh/app.js");
             runtime.Viewer.StatusChanged -= OnViewerStatusChanged;
-            try { await runtime.DisposeAsync(); } catch { }
+            try { await runtime.DisposeAsync(sessionStop); } catch { }
             if (_closing)
             {
                 _timings.AiStopMilliseconds = runtime.DisposeTimings.AiStopMilliseconds;
@@ -758,6 +1065,16 @@ internal sealed partial class MainWindow : Window
                 _timings.RuntimeDisposeMilliseconds = runtime.DisposeTimings.TotalMilliseconds;
             }
         }
+        await sessionStop;
+    }
+
+    private async Task DisposeViewerSessionAsync(ViewerWebViewSession session)
+    {
+        var timer = Stopwatch.StartNew();
+        try { await session.DisposeAsync(); } catch { }
+        timer.Stop();
+        if (_closing)
+            _timings.WebViewStopMilliseconds = timer.ElapsedMilliseconds;
     }
 
     private async Task EnableAiInBackgroundAsync(WindowsClientRuntime runtime)
@@ -824,6 +1141,42 @@ internal sealed partial class MainWindow : Window
         return await RestartAiAsync(cancellationToken);
     }
 
+    private async Task<IReadOnlyList<string>> DiscoverAiModelsAsync(
+        AiRuntimeConfigurationDraft draft,
+        CancellationToken cancellationToken)
+    {
+        var store = CreateAiConfigurationStore();
+        var apiKey = store.ResolveCredential(draft.ApiKey);
+        using var client = new AiProviderConnectivityClient();
+        return await client.DiscoverModelsAsync(draft.Provider, apiKey, cancellationToken);
+    }
+
+    private async Task TestAiConfigurationAsync(
+        AiRuntimeConfigurationDraft draft,
+        CancellationToken cancellationToken)
+    {
+        var store = CreateAiConfigurationStore();
+        var apiKey = store.ResolveCredential(draft.ApiKey);
+        using var client = new AiProviderConnectivityClient();
+        await client.TestConfigurationAsync(draft.Provider, apiKey, cancellationToken);
+    }
+
+    private Task<IReadOnlyDictionary<string, IReadOnlyList<string>>> LoadAiModelCatalogAsync(
+        CancellationToken cancellationToken)
+    {
+        var store = new AiModelCatalogStore(CreateAiConfigurationStore().ConfigurationPath);
+        return store.LoadAsync(cancellationToken);
+    }
+
+    private Task SaveAiModelCatalogAsync(
+        AiProviderConfiguration provider,
+        IReadOnlyList<string> models,
+        CancellationToken cancellationToken)
+    {
+        var store = new AiModelCatalogStore(CreateAiConfigurationStore().ConfigurationPath);
+        return store.SaveAsync(provider, models, cancellationToken);
+    }
+
     private AiRuntimeConfigurationStore CreateAiConfigurationStore()
     {
         var path = AiRuntimeConfiguration.ParseConfigurationPath(_runtimeArguments)
@@ -878,6 +1231,7 @@ internal sealed partial class MainWindow : Window
             return;
         var previous = runtime.Preferences;
         runtime.ApplyPreferences(preferences);
+        Classes.Set("interaction-feedback", preferences.IsInteractionFeedbackEnabled);
         RequestedThemeVariant = preferences.AppTheme switch
         {
             "dark" => ThemeVariant.Dark,
@@ -890,12 +1244,20 @@ internal sealed partial class MainWindow : Window
         {
             await runtime.Viewer.RetryAsync(_lifetime.Token);
             await RebindViewerAsync(runtime, _lifetime.Token);
+            if (_quickWindow is { } quick) await quick.RebindAsync();
         }
         else if (!string.Equals(previous.AppTheme, preferences.AppTheme, StringComparison.Ordinal)
                  && preferences.ContentTheme == "auto"
                  && _viewerSession is { IsReady: true } session)
         {
             await session.ChangeThemeAsync(IsDarkTheme(), _lifetime.Token);
+        }
+        if (_quickWindow is { } widget)
+        {
+            widget.ApplySideButtonPreference(preferences.IsSideButtonBackEnabled);
+            if (previous.AppTheme != preferences.AppTheme && preferences.ContentTheme == "auto")
+                await widget.ApplyThemeAsync(RequestedThemeVariant, IsDarkTheme(), contentChanged: false);
+            else widget.RequestedThemeVariant = RequestedThemeVariant;
         }
     }
 
@@ -940,6 +1302,7 @@ internal sealed partial class MainWindow : Window
         active = await runtime.Application.ActiveWiki.SwitchAsync(wikiId, cancellationToken);
         _shellViewModel.RefreshAfterWikiDataChange(clearHomePage: true);
         await RebindViewerAsync(runtime, cancellationToken);
+        if (_quickWindow is { } quick) await quick.RebindAsync(resetContent: true);
         return active;
     }
 

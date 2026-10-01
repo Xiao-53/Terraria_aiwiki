@@ -138,6 +138,7 @@ internal sealed class ChatTurnViewModel : ObservableObject
             OnPropertyChanged(nameof(IsStreamingAnswer));
             OnPropertyChanged(nameof(IsToolTraceVisible));
             OnPropertyChanged(nameof(IsTerminalStatusVisible));
+            OnPropertyChanged(nameof(IsAttentionStatusVisible));
         }
     }
     public bool IsAnswering => RunState == ChatRunState.Answering;
@@ -149,6 +150,7 @@ internal sealed class ChatTurnViewModel : ObservableObject
     public bool IsStreamingAnswer => IsAnswering && HasAnswer;
     public bool IsToolTraceVisible => HasTools && !IsAnswering;
     public bool IsTerminalStatusVisible => !IsAnswering;
+    public bool IsAttentionStatusVisible => !IsAnswering && Model.Status != ChatConversationTurnStatus.Completed;
     public string ActivityTitle => HasAnswer
         ? "正在生成回答"
         : HasTools ? "正在查阅本地 Wiki" : "正在分析问题";
@@ -370,7 +372,9 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     public bool CanRetry => !IsAnswering
                             && _availability is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed;
     public bool IsAiUnavailable => _availability is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed;
+    public bool IsAvailabilityStatusVisible => _availability != ChatAvailabilityState.Ready && !IsAnswering;
     public bool IsFavorite => _conversation?.IsFavorite == true;
+    public string FavoriteActionText => IsFavorite ? "取消收藏整段对话" : "收藏整段对话";
     public bool CanFavorite => _conversation is not null && !IsAnswering;
     public bool CanStartNewConversation => !IsAnswering;
     public Guid? CurrentConversationId => _conversation?.Id;
@@ -455,6 +459,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             return;
         _conversation = _conversation with { IsFavorite = isFavorite };
         OnPropertyChanged(nameof(IsFavorite));
+        OnPropertyChanged(nameof(FavoriteActionText));
     }
 
     public async Task SendAsync()
@@ -463,6 +468,11 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         var question = Question.Trim();
         if (runtime is null || !CanSend || question.Length == 0)
             return;
+        if (!runtime.TryReserveAnswer())
+        {
+            StatusMessage = "AI 正在另一个窗口回答；草稿已保留。";
+            return;
+        }
 
         var now = DateTimeOffset.Now;
         var conversation = _conversation ?? new ChatConversation
@@ -537,6 +547,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             }
             SyncConversationFromTurns();
             await TrySaveAsync();
+            runtime.ReleaseAnswer();
             RaiseConversationProperties();
             ConversationChanged?.Invoke(_conversation?.Id);
         }
@@ -677,14 +688,25 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
 
     private void OnRuntimeStatusChanged(object? sender, ChatAvailability availability)
     {
+        var startupAttempt = WindowsStartupInvestigation.CurrentAiAttempt;
         if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
-            ApplyAvailability(availability);
+            ApplyAvailability(availability, startupAttempt);
         else
-            Dispatcher.UIThread.Post(() => ApplyAvailability(availability));
+            Dispatcher.UIThread.Post(() => ApplyAvailability(availability, startupAttempt));
     }
 
-    private void ApplyAvailability(ChatAvailability availability)
+    private void ApplyAvailability(ChatAvailability availability, int startupAttempt = 0)
     {
+        var phase = availability.State switch
+        {
+            ChatAvailabilityState.Starting => StartupInvestigationPhase.AiUiStarting,
+            ChatAvailabilityState.Ready => StartupInvestigationPhase.AiUiReady,
+            ChatAvailabilityState.Disabled => StartupInvestigationPhase.AiUiDisabled,
+            ChatAvailabilityState.Failed => StartupInvestigationPhase.AiUiFailed,
+            _ => StartupInvestigationPhase.AiUiStopped,
+        };
+        if (availability.State != ChatAvailabilityState.Answering)
+            WindowsStartupInvestigation.Checkpoint(phase, startupAttempt);
         _availability = availability.State;
         if (!IsAnswering || availability.State is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed)
             StatusMessage = availability.Message;
@@ -695,6 +717,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     {
         OnPropertyChanged(nameof(IsEmpty));
         OnPropertyChanged(nameof(IsFavorite));
+        OnPropertyChanged(nameof(FavoriteActionText));
         OnPropertyChanged(nameof(CanFavorite));
         OnPropertyChanged(nameof(CurrentConversationId));
         OnPropertyChanged(nameof(SubmittedQuestion));
@@ -718,6 +741,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         OnPropertyChanged(nameof(CanSend));
         OnPropertyChanged(nameof(CanRetry));
         OnPropertyChanged(nameof(IsAiUnavailable));
+        OnPropertyChanged(nameof(IsAvailabilityStatusVisible));
         OnPropertyChanged(nameof(CanStartNewConversation));
         RefreshCommands();
     }

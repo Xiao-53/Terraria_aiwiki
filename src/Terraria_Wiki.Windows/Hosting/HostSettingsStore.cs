@@ -43,6 +43,21 @@ internal sealed class HostSettingsStore : IApplicationSettingsStore
     public Task<string?> LoadDataRootAsync(CancellationToken cancellationToken = default) =>
         ReadValueAsync(static document => document.DataRoot, cancellationToken);
 
+    public async Task<QuickAccessPreferences> LoadQuickAccessAsync(CancellationToken cancellationToken = default)
+    {
+        var value = await ReadValueAsync(static document => document.QuickAccess, cancellationToken)
+            .ConfigureAwait(false) ?? new QuickAccessPreferences();
+        value.Validate();
+        return value;
+    }
+
+    public Task SaveQuickAccessAsync(QuickAccessPreferences preferences, CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(preferences);
+        preferences.Validate();
+        return UpdateAsync(document => document with { QuickAccess = preferences }, cancellationToken);
+    }
+
     public Task SavePreferencesAsync(ApplicationPreferences preferences, CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(preferences);
@@ -231,6 +246,29 @@ internal sealed record HostSettingsDocument
     public ApplicationPreferences? Preferences { get; init; }
     public int? ActiveWikiId { get; init; }
     public string? DataRoot { get; init; }
+    public QuickAccessPreferences? QuickAccess { get; init; }
+}
+
+internal sealed record QuickAccessPreferences
+{
+    public string DefaultPage { get; init; } = "chat";
+    public string ShowHotkey { get; init; } = "F7";
+    public string HideHotkey { get; init; } = "F8";
+    public bool CloseToTray { get; init; } = true;
+    public bool Topmost { get; init; }
+    public int? X { get; init; }
+    public int? Y { get; init; }
+    public double Width { get; init; } = 520;
+    public double Height { get; init; } = 600;
+
+    public void Validate()
+    {
+        if (DefaultPage is not ("chat" or "wiki"))
+            throw new ArgumentException("Quick Ask page must be chat or wiki.");
+        if (Width is < 420 or > 3000 || Height is < 360 or > 3000 ||
+            double.IsNaN(Width) || double.IsNaN(Height))
+            throw new ArgumentException("Quick Ask window size is invalid.");
+    }
 }
 
 internal sealed class HostSettingsException : IOException

@@ -97,6 +97,16 @@ class _InputPump:
                 if line == b"":
                     return
                 self._loop.call_soon_threadsafe(self.queue.put_nowait, line)
+                # The host keeps stdin open while waiting for shutdown. Stop the
+                # reader here so interpreter teardown does not wait on readline.
+                if b'"shutdown"' not in line:
+                    continue
+                try:
+                    command = parse_command(line)
+                except SidecarProtocolError:
+                    continue
+                if isinstance(command, ShutdownCommand):
+                    return
         finally:
             self._loop.call_soon_threadsafe(self.queue.put_nowait, None)
 

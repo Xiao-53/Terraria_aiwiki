@@ -1,0 +1,24 @@
+<Window xmlns="https://github.com/avaloniaui" xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        x:Class="Terraria_Wiki.Windows.Presentation.Review.ButtonReviewWindow"
+        Title="按钮审核 · Terraria AI Wiki" Width="1280" Height="820" MinWidth="900" MinHeight="600">
+  <Grid Margin="24" RowDefinitions="Auto,Auto,*,Auto" RowSpacing="16">
+    <TextBlock Text="按钮与交互审核" Classes="page-title" />
+    <WrapPanel Grid.Row="1">
+      <Button Content="Light" Classes="secondary-action" Click="OnLight" Margin="0,0,8,8" />
+      <Button Content="Dark" Classes="secondary-action" Click="OnDark" Margin="0,0,8,8" />
+      <Button Content="900 × 600" Classes="secondary-action" Click="OnMinimum" Margin="0,0,8,8" />
+      <Button Content="1280 × 820" Classes="secondary-action" Click="OnDefault" Margin="0,0,8,8" />
+      <Button Content="重置模拟" Classes="secondary-action" Click="OnReset" Margin="0,0,16,8" />
+      <CheckBox x:Name="EnableFeedback" Content="启用交互动效" IsChecked="True" IsCheckedChanged="OnFeedbackChanged" Margin="0,0,16,8" />
+      <CheckBox x:Name="DisableSamples" Content="禁用全部样例" IsCheckedChanged="OnDisabledChanged" Margin="0,0,16,8" />
+      <CheckBox x:Name="AllowSend" Content="允许发送（命令可用性）" IsChecked="True" IsCheckedChanged="OnSendAllowedChanged" Margin="0,0,0,8" />
+    </WrapPanel>
+    <ScrollViewer Grid.Row="2" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+      <StackPanel x:Name="Samples" Spacing="20" />
+    </ScrollViewer>
+    <StackPanel Grid.Row="3" Spacing="4">
+      <TextBlock x:Name="Feedback" Text="就绪。用鼠标悬停／按住，或 Tab、Enter、Space 检查原生状态。" TextWrapping="Wrap" />
+      <TextBlock Text="所有操作仅模拟；不访问数据库、凭据、下载或 AI。真实页面业务需另行验收。" Classes="muted" TextWrapping="Wrap" />
+    </StackPanel>
+  </Grid>
+</Window>

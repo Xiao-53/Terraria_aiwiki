@@ -1,5 +1,6 @@
 using Terraria_Wiki.Application;
 using Terraria_Wiki.WikiTools;
+using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.AI;
 
@@ -45,8 +46,9 @@ internal sealed class WindowsAiRuntime : IAsyncDisposable
         WikiToolServer? server = null;
         try
         {
-            server = await WikiToolServer.StartAsync(query, coordinator, cancellationToken)
-                .ConfigureAwait(false);
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.WikiTools))
+                server = await WikiToolServer.StartAsync(query, coordinator, cancellationToken)
+                    .ConfigureAwait(false);
             var sidecar = await AiSidecarClient.StartAsync(
                 configuration,
                 server.Connection.Endpoint,

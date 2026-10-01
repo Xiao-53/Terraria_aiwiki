@@ -6,6 +6,7 @@
     <ResourceDictionary>
       <ResourceDictionary.MergedDictionaries>
         <ResourceInclude Source="avares://Terraria_Wiki.Windows/Presentation/Styles/ThemeResources.axaml" />
+        <ResourceInclude Source="avares://Terraria_Wiki.Windows/Presentation/Styles/IconResources.axaml" />
       </ResourceDictionary.MergedDictionaries>
     </ResourceDictionary>
   </Application.Resources>

@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Text.Json;
 using Avalonia.Controls;
 using Avalonia.Threading;
@@ -234,6 +235,7 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             return;
         lock (_identityGate)
             _currentPage = identity;
+        ViewerNavigationTrace.Arrival(identity.NavigationVersion.ToString(), null, "session-page-committed");
         PageCommitted?.Invoke(this, identity);
     }
 
@@ -243,6 +245,7 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
     private void OnWebMessageReceived(object? sender, WebMessageReceivedEventArgs args)
     {
         Interlocked.Increment(ref _receivedMessageCount);
+        ViewerNavigationTrace.Arrival("-", null, $"web-message-received count={ReceivedMessageCount}");
         _ = HandleWebMessageAsync(args.Body);
     }
 
@@ -257,7 +260,8 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             return;
         }
         Interlocked.Increment(ref _validMessageCount);
-        if (envelope!.Type == "req")
+        ViewerNavigationTrace.Arrival(envelope!.Id, null, "validated-message-received");
+        if (envelope.Type == "req")
             Volatile.Write(ref _lastRequestMethod, envelope.Method);
 
         if (envelope.Type == "res")
@@ -272,9 +276,8 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             await _historyNavigationGate.WaitAsync(_lifetime.Token).ConfigureAwait(false);
         try
         {
-            var result = await _bridge.HandleOuterMessageAsync(body, baseUri, _lifetime.Token).ConfigureAwait(false);
-            if (result is null)
-                return;
+            var dispatchStarted = Stopwatch.GetTimestamp();
+            var result = await _bridge.HandleOuterMessageAsync(envelope, _lifetime.Token).ConfigureAwait(false);
 
             var responseJson = result.ResponseJson;
             var error = result.Error;
@@ -300,7 +303,10 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
                 }
             }
 
+            var invokeStarted = Stopwatch.GetTimestamp();
             await InvokeScriptOnUiThreadAsync($"window.terrariaWikiHost?.receive({responseJson})").ConfigureAwait(false);
+            ViewerNavigationTrace.Write(envelope.Id, null, "invoke-script-completed", invokeStarted);
+            ViewerNavigationTrace.Write(envelope.Id, null, "request-dispatched", dispatchStarted);
             if (error is not null)
                 ProtocolError?.Invoke(this, error);
         }

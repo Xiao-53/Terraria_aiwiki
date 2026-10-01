@@ -1,0 +1,18 @@
+<ResourceDictionary xmlns="https://github.com/avaloniaui"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+  <!-- Geometry only: each usage owns its control and keeps its binding scope. -->
+  <StreamGeometry x:Key="IconFavorite">M 12,2 L 15.1,8.3 L 22,9.3 L 17,14.2 L 18.2,21 L 12,17.8 L 5.8,21 L 7,14.2 L 2,9.3 L 8.9,8.3 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconAdd">M 8,1 L 8,15 M 1,8 L 15,8</StreamGeometry>
+  <StreamGeometry x:Key="IconSend">M 12,19 L 12,5 M 6,11 L 12,5 L 18,11</StreamGeometry>
+  <StreamGeometry x:Key="IconBack">M 11,3 L 2,12 L 11,21 L 13,19 L 7,13 L 22,13 L 22,11 L 7,11 L 13,5 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconClose">M 4,4 L 16,16 M 16,4 L 4,16</StreamGeometry>
+  <StreamGeometry x:Key="IconChat">M 5,3 L 19,3 Q 22,3 22,6 L 22,15 Q 22,18 19,18 L 10,18 L 5,22 L 5,18 Q 2,18 2,15 L 2,6 Q 2,3 5,3 Z M 5,5 Q 4,5 4,6 L 4,15 Q 4,16 5,16 L 7,16 L 7,18 L 9.5,16 L 19,16 Q 20,16 20,15 L 20,6 Q 20,5 19,5 Z M 7,8 L 17,8 L 17,10 L 7,10 Z M 7,12 L 14,12 L 14,14 L 7,14 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconSearch">M 10,3 C 6.13,3 3,6.13 3,10 C 3,13.87 6.13,17 10,17 C 11.57,17 13.02,16.46 14.16,15.57 L 19.29,20.71 L 20.71,19.29 L 15.57,14.16 C 16.46,13.02 17,11.57 17,10 C 17,6.13 13.87,3 10,3 Z M 10,5 C 12.76,5 15,7.24 15,10 C 15,12.76 12.76,15 10,15 C 7.24,15 5,12.76 5,10 C 5,7.24 7.24,5 10,5 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconLibrary">M 3,3 L 10,3 Q 12,3 12,5 Q 12,3 14,3 L 21,3 L 21,20 L 14,20 Q 12,20 12,22 Q 12,20 10,20 L 3,20 Z M 5,5 L 5,18 L 10,18 L 11,18.3 L 11,6 Q 11,5 10,5 Z M 14,5 Q 13,5 13,6 L 13,18.3 L 14,18 L 19,18 L 19,5 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconData">M 4,4 L 20,4 L 20,9 L 4,9 Z M 4,10 L 20,10 L 20,15 L 4,15 Z M 4,16 L 20,16 L 20,21 L 4,21 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconSettings">M 9,2 L 15,2 L 16,5 L 19,5 L 22,10 L 20,12 L 22,14 L 19,19 L 16,19 L 15,22 L 9,22 L 8,19 L 5,19 L 2,14 L 4,12 L 2,10 L 5,5 L 8,5 Z M 10.5,4 L 9.5,7 L 6.2,7 L 4.5,9.8 L 6.7,12 L 4.5,14.2 L 6.2,17 L 9.5,17 L 10.5,20 L 13.5,20 L 14.5,17 L 17.8,17 L 19.5,14.2 L 17.3,12 L 19.5,9.8 L 17.8,7 L 14.5,7 L 13.5,4 Z M 12,8 A 4,4 0 1 1 12,16 A 4,4 0 1 1 12,8 Z M 12,10 A 2,2 0 1 0 12,14 A 2,2 0 1 0 12,10 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconHome">M 12,3 L 21.5,11.4 L 20,13.1 L 18.5,11.8 L 18.5,21 L 13.5,21 L 13.5,14.5 L 10.5,14.5 L 10.5,21 L 5.5,21 L 5.5,11.8 L 4,13.1 L 2.5,11.4 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconPreviousPage">M 6,4 L 4,4 L 4,20 L 6,20 Z M 10,12 L 20,4 L 20,20 Z</StreamGeometry>
+  <StreamGeometry x:Key="IconRefresh">M 20,11 C 20,16 16,20 11,20 C 6,20 2,16 2,11 C 2,6 6,2 11,2 C 14.2,2 17.1,3.7 18.7,6.4 M 18.7,2 L 18.7,6.4 L 14.3,6.4</StreamGeometry>
+  <StreamGeometry x:Key="IconDelete">M 8,3 L 16,3 M 4,6 L 20,6 M 6,6 L 7,21 L 17,21 L 18,6 M 10,10 L 10,17 M 14,10 L 14,17</StreamGeometry>
+</ResourceDictionary>

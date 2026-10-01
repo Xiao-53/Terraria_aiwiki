@@ -22,6 +22,8 @@ internal interface IChatRuntimeGateway
 {
     event EventHandler<ChatAvailability>? StatusChanged;
     ChatAvailability Status { get; }
+    bool TryReserveAnswer();
+    void ReleaseAnswer();
     Task<AiAgentAnswer> AnswerAsync(
         string question,
         IReadOnlyList<AiConversationHistoryTurn> history,
@@ -44,6 +46,10 @@ internal sealed class WindowsChatRuntimeGateway : IChatRuntimeGateway, IDisposab
     public event EventHandler<ChatAvailability>? StatusChanged;
 
     public ChatAvailability Status => Map(_runtime.AiStatus);
+
+    public bool TryReserveAnswer() => _runtime.TryReserveAiAnswer();
+
+    public void ReleaseAnswer() => _runtime.ReleaseAiAnswer();
 
     public Task<AiAgentAnswer> AnswerAsync(
         string question,

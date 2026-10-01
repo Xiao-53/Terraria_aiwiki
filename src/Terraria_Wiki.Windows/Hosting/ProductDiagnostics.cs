@@ -12,6 +12,17 @@ internal enum ProductDiagnosticEvent
     StartupFailed,
     WebView2RecoveryOpened,
     ApplicationStopped,
+    QuickAccessStageCompleted,
+    TrayInitializationFailed,
+}
+
+internal enum QuickAccessStage
+{
+    FirstWindowShown,
+    AdapterCreated,
+    DomReady,
+    FirstPageCommitted,
+    Reopened,
 }
 
 internal sealed class ProductDiagnostics
@@ -47,7 +58,6 @@ internal sealed class ProductDiagnostics
         "host-settings-write-failed",
         "initialization-failed",
         "invalid-host-settings-argument",
-        "legacy-client-running",
         "local-app-data-unavailable",
         "missing-data-root-argument",
         "missing-host-settings-argument",
@@ -103,6 +113,7 @@ internal sealed class ProductDiagnostics
             detail,
             null,
             null,
+            null,
             null));
     }
 
@@ -118,10 +129,51 @@ internal sealed class ProductDiagnostics
             null,
             WindowsStartupClock.Name(stage),
             Math.Max(0, elapsedMilliseconds),
-            Math.Max(0, durationMilliseconds)));
+            Math.Max(0, durationMilliseconds),
+            null));
     }
 
-    private void WriteEntry(ProductDiagnosticEntry entry)
+    public void WriteQuickAccessStage(QuickAccessStage stage, long milliseconds)
+    {
+        WriteEntry(new ProductDiagnosticEntry(
+            DateTimeOffset.UtcNow,
+            ProductMetadata.Version,
+            ProductDiagnosticEvent.QuickAccessStageCompleted.ToString(),
+            null,
+            stage.ToString(),
+            null,
+            Math.Max(0, milliseconds),
+            null));
+    }
+
+    public void WriteShutdown(
+        long webViewStopMilliseconds,
+        long aiStopMilliseconds,
+        long viewerStopMilliseconds,
+        long databaseCloseMilliseconds,
+        long runtimeDisposeMilliseconds,
+        long closeTotalMilliseconds)
+    {
+        WriteEntry(new ProductDiagnosticEntry(
+            DateTimeOffset.UtcNow,
+            ProductMetadata.Version,
+            ProductDiagnosticEvent.ApplicationStopped.ToString(),
+            null,
+            null,
+            null,
+            null,
+            new ProductShutdownDiagnostic(
+                Math.Max(0, webViewStopMilliseconds),
+                Math.Max(0, aiStopMilliseconds),
+                Math.Max(0, viewerStopMilliseconds),
+                Math.Max(0, databaseCloseMilliseconds),
+                Math.Max(0, runtimeDisposeMilliseconds),
+                Math.Max(0, closeTotalMilliseconds))));
+    }
+
+    internal void WriteInvestigation(StartupInvestigationEntry entry) => WriteEntry(entry);
+
+    private void WriteEntry<T>(T entry)
     {
         var logPath = LogPath;
         if (logPath is null)
@@ -167,5 +219,14 @@ internal sealed class ProductDiagnostics
         string? ComponentVersion,
         string? Stage,
         long? ElapsedMilliseconds,
-        long? DurationMilliseconds);
+        long? DurationMilliseconds,
+        ProductShutdownDiagnostic? Shutdown);
+
+    private sealed record ProductShutdownDiagnostic(
+        long WebViewStopMilliseconds,
+        long AiStopMilliseconds,
+        long ViewerStopMilliseconds,
+        long DatabaseCloseMilliseconds,
+        long RuntimeDisposeMilliseconds,
+        long CloseTotalMilliseconds);
 }
