@@ -1,110 +1,139 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:settings="clr-namespace:Terraria_Wiki.Windows.Presentation.Settings"
+             xmlns:infrastructure="clr-namespace:Terraria_Wiki.Windows.Presentation.Infrastructure"
              x:Class="Terraria_Wiki.Windows.Presentation.Settings.SettingsView"
              x:DataType="settings:SettingsViewModel">
-  <Grid RowDefinitions="Auto,Auto,*" Margin="24">
+  <Grid RowDefinitions="Auto,*" Margin="24">
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Orientation="Horizontal" Spacing="32"
-                  AutomationProperties.Name="设置二级菜单">
-        <Button Content="常规设置" Classes="segment-button page-heading"
+                  AutomationProperties.Name="{DynamicResource Ui.SettingsTabs}">
+        <Button Content="{DynamicResource Ui.GeneralSettings}" Classes="segment-button page-heading" Width="200"
                 Classes.selected="{Binding IsGeneralSelected}"
                 Command="{Binding SelectGeneralCommand}"
                 AutomationProperties.AutomationId="GeneralSettingsTab"
-                AutomationProperties.Name="常规设置" />
-        <Button Content="AI 配置" Classes="segment-button page-heading"
+                AutomationProperties.Name="{DynamicResource Ui.GeneralSettings}" />
+        <Button Content="{DynamicResource Ui.AIConfiguration}" Classes="segment-button page-heading" Width="200"
                 Classes.selected="{Binding IsAiSelected}"
                 Command="{Binding SelectAiCommand}"
                 AutomationProperties.AutomationId="AiSettingsTab"
-                AutomationProperties.Name="AI 配置" />
+                AutomationProperties.Name="{DynamicResource Ui.AIConfiguration}" />
       </StackPanel>
 
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                   VerticalAlignment="Center" IsVisible="{Binding IsGeneralSelected}">
-        <Button Content="重试保存" Classes="toolbar-action" Command="{Binding SaveCommand}"
-                IsVisible="{Binding CanRetrySave}" AutomationProperties.Name="重试保存应用设置" />
+        <Button Content="{DynamicResource Ui.RetrySaving}" Classes="toolbar-action" Command="{Binding SaveCommand}"
+                IsVisible="{Binding CanRetrySave}" AutomationProperties.Name="{DynamicResource Ui.RetrySavingAppSettings}" />
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8"
                   VerticalAlignment="Center" IsVisible="{Binding IsAiSelected}">
-        <Button Content="保存配置" Classes="primary-action compact-action" Command="{Binding Ai.SaveCommand}"
-                AutomationProperties.Name="保存 AI 配置" Width="96" />
+        <Button Content="{DynamicResource Ui.SaveConfiguration}" Classes="primary-action compact-action" Command="{Binding Ai.SaveCommand}"
+                AutomationProperties.Name="{DynamicResource Ui.SaveAIConfiguration}" MinWidth="96" />
       </StackPanel>
     </Grid>
 
-    <Border Grid.Row="1" Classes="management-status" Margin="0,12,0,0"
-            MaxWidth="820" HorizontalAlignment="Stretch"
-            IsVisible="{Binding ShowGeneralStatus}">
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-        <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
-                   VerticalAlignment="Center" AutomationProperties.Name="应用设置状态" />
-        <ProgressBar Grid.Column="1" Width="72" IsIndeterminate="True"
-                     IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
-      </Grid>
-    </Border>
-    <Border Grid.Row="1" Classes="management-status" Margin="0,12,0,0"
-            MaxWidth="820" HorizontalAlignment="Stretch"
-            IsVisible="{Binding Ai.HasStatusMessage}" Opacity="{Binding Ai.NotificationOpacity}">
-      <Border.Transitions>
-        <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.18" /></Transitions>
-      </Border.Transitions>
-      <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-        <TextBlock Text="{Binding Ai.StatusMessage}" TextWrapping="Wrap"
-                   VerticalAlignment="Center" AutomationProperties.Name="AI 配置状态" />
-        <ProgressBar Grid.Column="1" Width="72" IsIndeterminate="True"
-                     IsVisible="{Binding Ai.IsBusy}" VerticalAlignment="Center" />
-      </Grid>
-    </Border>
+    <infrastructure:TopNotificationPanel Grid.Row="1" Margin="0,16,0,0" ZIndex="10"
+                                         ClipToBounds="True" IsHitTestVisible="False">
+      <StackPanel MaxWidth="820" HorizontalAlignment="Stretch" Spacing="8">
+        <StackPanel Spacing="8" IsVisible="{Binding IsGeneralSelected}">
+          <Border Classes="management-status floating-status"
+                  IsVisible="{Binding Notification.IsVisible}" Opacity="{Binding Notification.Opacity}">
+            <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <TextBlock Text="{Binding StatusMessage}" TextWrapping="Wrap"
+                         VerticalAlignment="Center" AutomationProperties.Name="{DynamicResource Ui.AppSettingsStatus}" />
+              <ProgressBar Grid.Column="1" Width="72" IsIndeterminate="True"
+                           IsVisible="{Binding IsBusy}" VerticalAlignment="Center" />
+            </Grid>
+          </Border>
+          <Border Classes="management-status floating-status"
+                  IsVisible="{Binding Updates.Notification.IsVisible}" Opacity="{Binding Updates.Notification.Opacity}">
+            <StackPanel Spacing="8">
+              <TextBlock Text="{Binding Updates.StatusMessage}" TextWrapping="Wrap"
+                         AutomationProperties.Name="{DynamicResource Ui.AppUpdateStatus}" />
+              <ProgressBar Minimum="0" Maximum="100" Value="{Binding Updates.DownloadProgress}"
+                           IsVisible="{Binding Updates.IsProgressVisible}"
+                           AutomationProperties.Name="{DynamicResource Ui.AppUpdateDownloadProgress}" />
+            </StackPanel>
+          </Border>
+          <Border Classes="management-status floating-status"
+                  IsVisible="{Binding Diagnostics.Notification.IsVisible}" Opacity="{Binding Diagnostics.Notification.Opacity}">
+            <TextBlock Text="{Binding Diagnostics.StatusMessage}" TextWrapping="Wrap"
+                       AutomationProperties.Name="{DynamicResource Ui.DiagnosticLogStatus}" />
+          </Border>
+        </StackPanel>
+        <Border Classes="management-status floating-status" IsVisible="{Binding Ai.HasStatusMessage}"
+                Opacity="{Binding Ai.NotificationOpacity}">
+          <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+            <TextBlock Text="{Binding Ai.StatusMessage}" TextWrapping="Wrap"
+                       VerticalAlignment="Center" AutomationProperties.Name="{DynamicResource Ui.AIConfigurationStatus}" />
+            <ProgressBar Grid.Column="1" Width="72" IsIndeterminate="True"
+                         IsVisible="{Binding Ai.IsBusy}" VerticalAlignment="Center" />
+          </Grid>
+        </Border>
+      </StackPanel>
+    </infrastructure:TopNotificationPanel>
 
-    <ScrollViewer Grid.Row="2" Margin="0,16,0,0"
+    <ScrollViewer Grid.Row="1" Margin="0,16,0,0"
                   VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
       <Grid MaxWidth="820" HorizontalAlignment="Stretch" Margin="0,0,0,24">
         <StackPanel Spacing="20" IsVisible="{Binding IsGeneralSelected}">
           <StackPanel Spacing="12">
-            <TextBlock Text="个性化" Classes="section-title" />
+            <TextBlock Text="{DynamicResource Ui.Personalization}" Classes="section-title" />
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="交互动效" FontWeight="SemiBold" />
-                <TextBlock Text="按钮与列表的颜色过渡；修改即生效，独立于 Windows 动画设置。"
+                <TextBlock Text="{DynamicResource Ui.InterfaceLanguageLabel}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.InterfaceLanguageContentHint}"
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
-              <ToggleSwitch Grid.Column="1" Classes="setting-toggle"
-                            IsChecked="{Binding IsInteractionFeedbackEnabled, Mode=TwoWay}"
-                            IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="交互动效" />
+              <ComboBox Grid.Column="1" SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}"
+                        Width="200" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.AutomationId="InterfaceLanguage"
+                        AutomationProperties.Name="{DynamicResource Ui.InterfaceLanguage}">
+                <ComboBoxItem Content="简体中文" />
+                <ComboBoxItem Content="English (US)" />
+              </ComboBox>
             </Grid>
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="启动首页" FontWeight="SemiBold" />
-                <TextBlock Text="更改将在下次启动时生效；无页面数据时仍进入数据管理。"
+                <TextBlock Text="{DynamicResource Ui.InteractionAnimations}" FontWeight="SemiBold" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" Classes="setting-toggle"
+                            IsChecked="{Binding IsInteractionFeedbackEnabled, Mode=TwoWay}"
+                            IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.InteractionAnimations}" />
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="{DynamicResource Ui.StartupPage}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.AppliesOnTheNextStartupWithoutPageData}"
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding StartupPageIndex, Mode=TwoWay}"
                         Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="启动首页">
-                <ComboBoxItem Content="AI 问答" />
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.StartupPage}">
+                <ComboBoxItem Content="{DynamicResource Ui.AIChat}" />
                 <ComboBoxItem Content="Wiki" />
               </ComboBox>
             </Grid>
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="应用主题" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.AppTheme}" FontWeight="SemiBold" />
               </StackPanel>
-              <ComboBox Grid.Column="1" SelectedIndex="{Binding AppThemeIndex, Mode=TwoWay}"
-                        Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="应用主题">
-                <ComboBoxItem Content="跟随系统" />
-                <ComboBoxItem Content="浅色" />
-                <ComboBoxItem Content="深色" />
-              </ComboBox>
+              <ToggleSwitch x:Name="AppThemeToggle" Grid.Column="1" Classes="setting-toggle"
+                            IsChecked="{Binding IsDarkTheme, Mode=TwoWay}"
+                            OnContent="{DynamicResource Ui.Dark}" OffContent="{DynamicResource Ui.Light}"
+                            IsEnabled="{Binding IsAvailable}"
+                            AutomationProperties.AutomationId="AppThemeToggle"
+                            AutomationProperties.Name="{DynamicResource Ui.DarkTheme}" />
             </Grid>
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="Wiki 内容主题" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.WikiContentTheme}" FontWeight="SemiBold" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding ContentThemeIndex, Mode=TwoWay}"
-                        Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
-                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="Wiki 内容主题">
-                <ComboBoxItem Content="跟随应用" />
-                <ComboBoxItem Content="Wiki 原始样式" />
+                        Width="200" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.WikiContentTheme}">
+                <ComboBoxItem Content="{DynamicResource Ui.FollowApp}" />
+                <ComboBoxItem Content="{DynamicResource Ui.OriginalWikiStyle}" />
               </ComboBox>
             </Grid>
           </StackPanel>
@@ -113,39 +142,39 @@
             <StackPanel Margin="0,20,0,0" Spacing="10">
               <TextBlock Text="Quick Ask" Classes="section-title" />
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-                <TextBlock Text="默认页面" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource Ui.DefaultPage}" VerticalAlignment="Center" />
                 <ComboBox Grid.Column="1" SelectedIndex="{Binding QuickAccess.PageIndex, Mode=TwoWay}"
                           Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
-                          AutomationProperties.Name="Quick Ask 默认页面">
+                          AutomationProperties.Name="{DynamicResource Ui.QuickAskDefaultPage}">
                   <ComboBoxItem Content="AI" />
                   <ComboBoxItem Content="Wiki" />
                 </ComboBox>
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-                <TextBlock Text="唤起快捷键" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource Ui.ShowShortcut}" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="{Binding QuickAccess.ShowHotkeyLabel}" Classes="toolbar-action"
                         Width="140" Height="36" HorizontalAlignment="Left" VerticalAlignment="Center" IsEnabled="{Binding !QuickAccess.Busy}"
                         Click="OnRecordShowHotkey" LostFocus="OnRecorderLostFocus"
-                        ToolTip.Tip="点击后按下快捷键；Esc 取消，Backspace 或 Delete 清除"
-                        AutomationProperties.Name="录入 Quick Ask 唤起快捷键" />
+                        ToolTip.Tip="{DynamicResource Ui.ClickThenPressAShortcutEscCancelsBackspace}"
+                        AutomationProperties.Name="{DynamicResource Ui.RecordQuickAskShowShortcut}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-                <TextBlock Text="隐藏快捷键" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource Ui.HideShortcut}" VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="{Binding QuickAccess.HideHotkeyLabel}" Classes="toolbar-action"
                         Width="140" Height="36" HorizontalAlignment="Left" VerticalAlignment="Center" IsEnabled="{Binding !QuickAccess.Busy}"
                         Click="OnRecordHideHotkey" LostFocus="OnRecorderLostFocus"
-                        ToolTip.Tip="点击后按下快捷键；Esc 取消，Backspace 或 Delete 清除"
-                        AutomationProperties.Name="录入 Quick Ask 隐藏快捷键" />
+                        ToolTip.Tip="{DynamicResource Ui.ClickThenPressAShortcutEscCancelsBackspace}"
+                        AutomationProperties.Name="{DynamicResource Ui.RecordQuickAskHideShortcut}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-                <TextBlock Text="主窗口关闭到托盘" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource Ui.CloseMainWindowToTray}" VerticalAlignment="Center" />
                 <ToggleSwitch Grid.Column="1" Classes="setting-toggle" IsChecked="{Binding QuickAccess.CloseToTray, Mode=TwoWay}"
-                              AutomationProperties.Name="主窗口关闭到托盘" />
+                              AutomationProperties.Name="{DynamicResource Ui.CloseMainWindowToTray}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
-                <TextBlock Text="Quick Ask 置顶" VerticalAlignment="Center" />
+                <TextBlock Text="{DynamicResource Ui.KeepQuickAskOnTop}" VerticalAlignment="Center" />
                 <ToggleSwitch Grid.Column="1" Classes="setting-toggle" IsChecked="{Binding QuickAccess.Topmost, Mode=TwoWay}"
-                              AutomationProperties.Name="Quick Ask 置顶" />
+                              AutomationProperties.Name="{DynamicResource Ui.KeepQuickAskOnTop}" />
               </Grid>
               <TextBlock Text="{Binding QuickAccess.Status}" Classes="muted" TextWrapping="Wrap" />
             </StackPanel>
@@ -153,210 +182,197 @@
 
           <Border Classes="section-surface">
             <StackPanel Margin="0,20,0,0" Spacing="12">
-              <TextBlock Text="阅读与搜索" Classes="section-title" />
+              <TextBlock Text="{DynamicResource Ui.ReadingAndSearch}" Classes="section-title" />
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="鼠标侧键导航（后退/前进）" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.MouseSideButtonsBackForward}" FontWeight="SemiBold" />
                 </StackPanel>
                 <ToggleSwitch Grid.Column="1" Classes="setting-toggle"
                               IsChecked="{Binding IsSideButtonBackEnabled, Mode=TwoWay}"
-                              IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="鼠标侧键导航（后退/前进）" />
+                              IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.MouseSideButtonsBackForward}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="最大搜索结果" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.MaximumSearchResults}" FontWeight="SemiBold" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding SearchLimit, Mode=TwoWay}"
                                Minimum="1" Maximum="100" Increment="1" FormatString="0"
-                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="最大搜索结果" />
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.MaximumSearchResults}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="AI 搜索候选数" FontWeight="SemiBold" />
-                  <TextBlock Text="每次 AI 问答从本地 Wiki 取回的候选结果，允许范围 1–100。"
+                  <TextBlock Text="{DynamicResource Ui.AISearchCandidates}" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.LocalWikiCandidatesRetrievedForEachAIQuestion}"
                              Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding AiSearchLimit, Mode=TwoWay}"
                                Minimum="1" Maximum="100" Increment="1" FormatString="0"
-                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="AI 搜索候选数" />
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.AISearchCandidates}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="定期完整核对 Wiki" FontWeight="SemiBold" />
-                  <TextBlock Text="关闭后不做周期核对；首次同步、恢复或同步锚点失效时仍会强制核对。"
+                  <TextBlock Text="{DynamicResource Ui.PeriodicallyCheckTheFullWiki}" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.TurningThisOffDisablesPeriodicChecksInitialSync}"
                              Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
                 <ToggleSwitch Grid.Column="1" Classes="setting-toggle" IsChecked="{Binding IsWikiFullScanEnabled, Mode=TwoWay}"
                               IsEnabled="{Binding IsAvailable}"
-                              AutomationProperties.Name="定期完整核对 Wiki" />
+                              AutomationProperties.Name="{DynamicResource Ui.PeriodicallyCheckTheFullWiki}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="完整核对间隔（天）" FontWeight="SemiBold" />
-                  <TextBlock Text="重新启用时默认 14 天。" Classes="muted" />
+                  <TextBlock Text="{DynamicResource Ui.FullCheckIntervalDays}" FontWeight="SemiBold" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding WikiFullScanIntervalDays, Mode=TwoWay}"
                                Minimum="1" Increment="1" FormatString="0"
                                IsEnabled="{Binding CanEditWikiFullScanInterval}"
-                               AutomationProperties.Name="Wiki 完整核对间隔天数" />
+                               AutomationProperties.Name="{DynamicResource Ui.WikiFullCheckIntervalInDays}" />
               </Grid>
             </StackPanel>
           </Border>
 
           <Border Classes="section-surface">
             <StackPanel Margin="0,20,0,0" Spacing="12">
-              <TextBlock Text="下载" Classes="section-title" />
+              <TextBlock Text="{DynamicResource Ui.Downloads}" Classes="section-title" />
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="页面并发数" FontWeight="SemiBold" />
-                  <TextBlock Text="允许范围 1–3，默认 2。" Classes="muted" />
+                  <TextBlock Text="{DynamicResource Ui.ConcurrentPages}" FontWeight="SemiBold" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding PageConcurrency, Mode=TwoWay}"
                                Minimum="1" Maximum="3" Increment="1" FormatString="0"
-                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="页面下载并发数" />
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.ConcurrentPageDownloads}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="资源并发数" FontWeight="SemiBold" />
-                  <TextBlock Text="允许范围 1–20，默认 10。" Classes="muted" />
+                  <TextBlock Text="{DynamicResource Ui.ConcurrentResources}" FontWeight="SemiBold" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding ResourceConcurrency, Mode=TwoWay}"
                                Minimum="1" Maximum="20" Increment="1" FormatString="0"
-                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="资源下载并发数" />
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.ConcurrentResourceDownloads}" />
               </Grid>
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="失败重试次数" FontWeight="SemiBold" />
-                  <TextBlock Text="允许范围 0–20；0 表示不自动重试。" Classes="muted" />
+                  <TextBlock Text="{DynamicResource Ui.RetryAttempts}" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.AllowedRangeZeroDisablesAutomaticRetries}" Classes="muted" />
                 </StackPanel>
                 <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding RetryAttempts, Mode=TwoWay}"
                                Minimum="0" Maximum="20" Increment="1" FormatString="0"
-                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="下载失败重试次数" />
+                               IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.DownloadRetryAttempts}" />
               </Grid>
             </StackPanel>
           </Border>
 
           <Border Classes="section-surface">
             <StackPanel Margin="0,20,0,0" Spacing="12">
-              <TextBlock Text="关于与更新" Classes="section-title" />
+              <TextBlock Text="{DynamicResource Ui.AboutAndUpdates}" Classes="section-title" />
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="当前版本" FontWeight="SemiBold" />
-                  <TextBlock Text="Windows 11 x64；更新仅来自公开 GitHub Releases。"
-                             Classes="muted" TextWrapping="Wrap" />
+                  <TextBlock Text="{DynamicResource Ui.CurrentVersion}" FontWeight="SemiBold" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                   <SelectableTextBlock Text="{Binding Updates.CurrentVersion}"
-                                       AutomationProperties.Name="当前应用版本" />
+                                       AutomationProperties.Name="{DynamicResource Ui.CurrentAppVersion}" />
                   <TextBlock Text="{Binding Updates.DistributionKind}" Classes="muted" />
                 </StackPanel>
               </Grid>
-              <Border Classes="management-status">
-                <StackPanel Spacing="8">
-                  <TextBlock Text="{Binding Updates.StatusMessage}" TextWrapping="Wrap"
-                             AutomationProperties.Name="应用更新状态" />
-                  <ProgressBar Minimum="0" Maximum="100" Value="{Binding Updates.DownloadProgress}"
-                               IsVisible="{Binding Updates.IsProgressVisible}"
-                               AutomationProperties.Name="应用更新下载进度" />
-                  <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Button Content="检查更新" Classes="secondary-action"
-                            Command="{Binding Updates.CheckCommand}"
-                            AutomationProperties.Name="检查 GitHub Releases 更新" />
-                    <Button Content="下载更新" Classes="secondary-action"
-                            Command="{Binding Updates.DownloadCommand}"
-                            AutomationProperties.Name="下载并校验应用更新" />
-                    <Button Content="取消" Classes="secondary-action"
-                            Command="{Binding Updates.CancelCommand}"
-                            AutomationProperties.Name="取消应用更新操作" />
-                    <Button Content="重启并更新" Classes="primary-action"
-                            Command="{Binding Updates.RestartCommand}"
-                            AutomationProperties.Name="安全关闭并应用更新" />
-                    <Button Content="打开 Releases" Classes="secondary-action"
-                            Command="{Binding Updates.OpenReleasesCommand}"
-                            AutomationProperties.Name="在浏览器打开 GitHub Releases" />
-                  </StackPanel>
+              <StackPanel Spacing="8">
+                <TextBlock Text="{Binding Updates.CapabilityMessage}" Classes="muted" TextWrapping="Wrap" />
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                  <Button Content="{DynamicResource Ui.CheckForUpdates}" Classes="secondary-action"
+                          Command="{Binding Updates.CheckCommand}"
+                          AutomationProperties.Name="{DynamicResource Ui.CheckGitHubReleasesForUpdates}" />
+                  <Button Content="{DynamicResource Ui.DownloadUpdate}" Classes="secondary-action"
+                          Command="{Binding Updates.DownloadCommand}"
+                          AutomationProperties.Name="{DynamicResource Ui.DownloadAndVerifyAppUpdate}" />
+                  <Button Content="{DynamicResource Ui.Cancel}" Classes="secondary-action"
+                          Command="{Binding Updates.CancelCommand}"
+                          AutomationProperties.Name="{DynamicResource Ui.CancelAppUpdateOperation}" />
+                  <Button Content="{DynamicResource Ui.RestartAndUpdate}" Classes="primary-action"
+                          Command="{Binding Updates.RestartCommand}"
+                          AutomationProperties.Name="{DynamicResource Ui.SafelyCloseAndApplyUpdate}" />
+                  <Button Content="{DynamicResource Ui.OpenReleases}" Classes="secondary-action"
+                          Command="{Binding Updates.OpenReleasesCommand}"
+                          AutomationProperties.Name="{DynamicResource Ui.OpenGitHubReleasesInBrowser}" />
                 </StackPanel>
-              </Border>
-              <TextBlock Text="首发安装器暂不使用商业代码签名；Windows 可能显示发布者未知或信誉警告。请只核对本项目 Release 页和 SHA-256 后运行。"
+              </StackPanel>
+              <TextBlock Text="{DynamicResource Ui.TheInitialInstallerDoesNotUseCommercialCode}"
                          Classes="muted" TextWrapping="Wrap" />
 
               <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <StackPanel Spacing="3" VerticalAlignment="Center">
-                  <TextBlock Text="运行环境" FontWeight="SemiBold" />
+                  <TextBlock Text="{DynamicResource Ui.RuntimeEnvironment}" FontWeight="SemiBold" />
                 </StackPanel>
                 <StackPanel Grid.Column="1" Spacing="2" VerticalAlignment="Center">
                   <SelectableTextBlock Text="{Binding Diagnostics.WindowsStatus}"
-                                       AutomationProperties.Name="Windows 运行环境" />
+                                       AutomationProperties.Name="{DynamicResource Ui.WindowsRuntimeEnvironment}" />
                   <SelectableTextBlock Text="{Binding Diagnostics.WebView2Status}"
-                                       AutomationProperties.Name="WebView2 Runtime 状态" />
+                                       AutomationProperties.Name="{DynamicResource Ui.WebViewRuntimeStatus}" />
                 </StackPanel>
               </Grid>
-              <Border Classes="management-status">
-                <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
-                  <TextBlock Text="{Binding Diagnostics.StatusMessage}" TextWrapping="Wrap"
-                             VerticalAlignment="Center" AutomationProperties.Name="诊断日志状态" />
-                  <Button Grid.Column="1" Content="打开日志文件夹" Classes="secondary-action"
-                          Command="{Binding Diagnostics.OpenLogFolderCommand}"
-                          IsVisible="{Binding Diagnostics.CanOpenLogFolder}"
-                          AutomationProperties.Name="打开本机诊断日志文件夹" />
-                </Grid>
-              </Border>
+              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+                <TextBlock Text="{Binding Diagnostics.Description}" TextWrapping="Wrap"
+                           VerticalAlignment="Center" />
+                <Button Grid.Column="1" Content="{DynamicResource Ui.OpenLogFolder}" Classes="secondary-action"
+                        Command="{Binding Diagnostics.OpenLogFolderCommand}"
+                        IsVisible="{Binding Diagnostics.CanOpenLogFolder}"
+                        AutomationProperties.Name="{DynamicResource Ui.OpenLocalDiagnosticLogFolder}" />
+              </Grid>
             </StackPanel>
           </Border>
         </StackPanel>
 
         <StackPanel Spacing="20" IsVisible="{Binding IsAiSelected}">
           <StackPanel Spacing="12">
-            <TextBlock Text="模型服务" Classes="section-title" />
+            <TextBlock Text="{DynamicResource Ui.ModelService}" Classes="section-title" />
             <TextBlock Text="{Binding Ai.ConfigurationError}" Classes="muted" TextWrapping="Wrap" />
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="提供商" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.Provider}" FontWeight="SemiBold" />
               </StackPanel>
-              <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ProviderIndex, Mode=TwoWay}"
+              <ComboBox Grid.Column="1" Classes="ai-selector" SelectedIndex="{Binding Ai.ProviderIndex, Mode=TwoWay}"
                         IsEnabled="{Binding Ai.CanEdit}"
                         AutomationProperties.AutomationId="AiProviderSelector"
-                        AutomationProperties.Name="AI 提供商">
-                <ComboBoxItem Content="DeepSeek 官方 API" />
-                <ComboBoxItem Content="自定义 OpenAI-compatible" />
+                        AutomationProperties.Name="{DynamicResource Ui.AIProvider}">
+                <ComboBoxItem Content="{DynamicResource Ui.OfficialDeepSeekAPI}" />
+                <ComboBoxItem Content="{DynamicResource Ui.CustomOpenAICompatible}" />
               </ComboBox>
             </Grid>
 
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
                   IsVisible="{Binding Ai.IsDeepSeek}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="官方服务地址" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.OfficialEndpoint}" FontWeight="SemiBold" />
               </StackPanel>
               <SelectableTextBlock Grid.Column="1" Text="https://api.deepseek.com"
                                    VerticalAlignment="Center" TextWrapping="Wrap"
-                                   AutomationProperties.Name="DeepSeek 官方服务地址" />
+                                   AutomationProperties.Name="{DynamicResource Ui.OfficialDeepSeekEndpoint}" />
             </Grid>
 
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
                   IsVisible="{Binding Ai.IsCustomProvider}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="服务地址" FontWeight="SemiBold" />
-                <TextBlock Text="远程地址必须使用 HTTPS；HTTP 仅允许本机回环 IP。" Classes="muted" TextWrapping="Wrap" />
+                <TextBlock Text="{DynamicResource Ui.Endpoint}" FontWeight="SemiBold" />
               </StackPanel>
               <TextBox Grid.Column="1" Text="{Binding Ai.CustomBaseUrl, Mode=TwoWay}"
+                       MinHeight="36" VerticalAlignment="Center" VerticalContentAlignment="Center"
                        PlaceholderText="https://api.example.com/v1"
                        IsEnabled="{Binding Ai.CanEdit}"
                        AutomationProperties.AutomationId="CustomAiEndpointInput"
-                       AutomationProperties.Name="自定义 AI 服务地址" />
+                       AutomationProperties.Name="{DynamicResource Ui.CustomAIEndpoint}" />
             </Grid>
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24"
                   IsVisible="{Binding Ai.IsCustomProvider}">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="API 格式" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.APIFormat}" FontWeight="SemiBold" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.CustomApiIndex, Mode=TwoWay}"
-                        IsEnabled="{Binding Ai.CanEdit}" AutomationProperties.Name="自定义 API 格式">
+                        IsEnabled="{Binding Ai.CanEdit}" AutomationProperties.Name="{DynamicResource Ui.CustomAPIFormat}">
                 <ComboBoxItem Content="Responses API" />
                 <ComboBoxItem Content="Chat Completions API" />
               </ComboBox>
@@ -364,12 +380,12 @@
 
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="模型名称" FontWeight="SemiBold" />
-                <TextBlock Text="可获取服务端模型列表，也可手动填写精确 model id；获取结果会保留供下次选择。"
+                <TextBlock Text="{DynamicResource Ui.ModelName}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.FetchTheServiceSModelListOrEnter}"
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
-              <Grid Grid.Column="1" RowDefinitions="Auto,Auto" ColumnDefinitions="*,96" ColumnSpacing="8" RowSpacing="8">
-                <ComboBox Classes="model-selector"
+              <Grid Grid.Column="1" RowDefinitions="Auto,Auto" ColumnDefinitions="*,140" ColumnSpacing="8" RowSpacing="8">
+                <ComboBox Classes="ai-selector model-selector"
                           IsEditable="True"
                           Text="{Binding Ai.Model, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}"
                           ItemsSource="{Binding Ai.DiscoveredModels}"
@@ -377,15 +393,15 @@
                           VerticalAlignment="Center"
                           IsEnabled="{Binding Ai.CanEdit}"
                           AutomationProperties.AutomationId="AiModelInput"
-                          AutomationProperties.Name="输入或选择 AI 模型名称" />
-                  <Button Grid.Column="1" Content="获取模型" VerticalAlignment="Center" Classes="secondary-action compact-action" HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="{DynamicResource Ui.EnterOrSelectAIModelName}" />
+                  <Button Grid.Column="1" Content="{DynamicResource Ui.FetchModels}" VerticalAlignment="Center" Classes="secondary-action compact-action" HorizontalAlignment="Stretch"
                           Command="{Binding Ai.DiscoverModelsCommand}"
                           AutomationProperties.AutomationId="DiscoverAiModels"
-                          AutomationProperties.Name="使用当前未保存配置获取并保存模型列表" />
-                  <Button Grid.Row="1" Grid.Column="1" Content="测试连接" Classes="secondary-action compact-action" HorizontalAlignment="Stretch"
+                          AutomationProperties.Name="{DynamicResource Ui.FetchAndSaveModelsUsingTheCurrentUnsaved}" />
+                  <Button Grid.Row="1" Grid.Column="1" Content="{DynamicResource Ui.TestConnection}" Classes="secondary-action compact-action" HorizontalAlignment="Stretch"
                           Command="{Binding Ai.TestConfigurationCommand}"
                           AutomationProperties.AutomationId="TestAiConfiguration"
-                          AutomationProperties.Name="使用当前未保存配置测试连接" />
+                          AutomationProperties.Name="{DynamicResource Ui.TestConnectionUsingTheCurrentUnsavedConfiguration}" />
               </Grid>
             </Grid>
 
@@ -403,45 +419,44 @@
                                           IsEnabled="{Binding Ai.CanEdit}"
                                           AutomationProperties.AutomationId="AiApiKeyInput"
                                           AutomationProperties.Name="AI API Key"
-                                          AutomationProperties.HelpText="密钥保存到 Windows Credential Manager；已有真实值不会回显，固定遮蔽标记仅表示已保存。" />
-                  <TextBlock Text="●●●●●●●●  已保存"
+                                          AutomationProperties.HelpText="{DynamicResource Ui.KeysAreStoredInWindowsCredentialManagerExisting}" />
+                  <TextBlock Text="{DynamicResource Ui.Saved}"
                              Margin="12,0,0,0"
                              VerticalAlignment="Center"
                              Foreground="{DynamicResource TerrariaTextSecondaryBrush}"
                              IsHitTestVisible="False"
                              IsVisible="{Binding Ai.ShowStoredCredentialMask}"
-                             AutomationProperties.Name="API Key 已保存，真实值不回显" />
+                             AutomationProperties.Name="{DynamicResource Ui.APIKeySavedItsValueIsHidden}" />
                 </Grid>
-                <Button Content="清除已保存的 API Key" Classes="secondary-action compact-action"
+                <Button Content="{DynamicResource Ui.ClearSavedAPIKey}" Classes="secondary-action compact-action"
                         MinWidth="88" HorizontalAlignment="Right"
                         Command="{Binding Ai.ClearCredentialCommand}"
                         IsVisible="{Binding Ai.HasStoredCredential}"
-                        ToolTip.Tip="立即从 Windows Credential Manager 删除密钥并停用 AI"
-                        AutomationProperties.Name="清除 Windows Credential Manager 中的 AI API Key" />
+                        ToolTip.Tip="{DynamicResource Ui.DeleteTheKeyFromWindowsCredentialManagerAnd}"
+                        AutomationProperties.Name="{DynamicResource Ui.ClearAIAPIKeyInWindowsCredentialManager}" />
               </StackPanel>
             </Grid>
 
             <Grid Classes="setting-row" ColumnDefinitions="*,300" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
-                <TextBlock Text="思考强度" FontWeight="SemiBold" />
-                <TextBlock Text="服务默认最兼容；其他档位会作为 reasoning effort 发送。" Classes="muted" TextWrapping="Wrap" />
+                <TextBlock Text="{DynamicResource Ui.ReasoningEffort}" FontWeight="SemiBold" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding Ai.ReasoningEffortIndex, Mode=TwoWay}"
                         IsEnabled="{Binding Ai.CanEdit}"
                         AutomationProperties.AutomationId="AiReasoningEffort"
-                        AutomationProperties.Name="AI 思考强度">
-                <ComboBoxItem Content="服务默认" />
-                <ComboBoxItem Content="关闭" />
-                <ComboBoxItem Content="低" />
-                <ComboBoxItem Content="高" />
-                <ComboBoxItem Content="最大" />
+                        AutomationProperties.Name="{DynamicResource Ui.AIReasoningEffort}">
+                <ComboBoxItem Content="{DynamicResource Ui.ServiceDefault}" />
+                <ComboBoxItem Content="{DynamicResource Ui.Off2}" />
+                <ComboBoxItem Content="{DynamicResource Ui.Low}" />
+                <ComboBoxItem Content="{DynamicResource Ui.High}" />
+                <ComboBoxItem Content="{DynamicResource Ui.Maximum}" />
               </ComboBox>
             </Grid>
 
             <Border Classes="card" Padding="16">
               <StackPanel Spacing="4">
-                <TextBlock Text="连接说明" FontWeight="SemiBold" />
-                <TextBlock Text="当前问题、最多最近 4 轮纯文本和当前读取的 Wiki 证据块会发送给所选远程模型；完整本地历史不会自动上传。请先确认服务商的数据处理条款；自定义兼容服务可能忽略或拒绝思考强度。"
+                <TextBlock Text="{DynamicResource Ui.ConnectionInformation}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.YourQuestionUpToTheLatestTurnsOf}"
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
             </Border>

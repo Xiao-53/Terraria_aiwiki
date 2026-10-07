@@ -15,6 +15,9 @@ internal sealed record WikiSyncState
     public DateTimeOffset LastFullScan { get; init; }
     public bool Incomplete { get; init; }
     public bool ResourcesCovered { get; init; }
+    public bool ForcePageRefresh { get; init; }
+    public bool DependenciesSkipped { get; init; }
+    public long[] CoveredEventIds { get; init; } = [];
 
     public static string IdentityFor(WikiBook book) => new Uri(book.ApiBaseUrl).AbsoluteUri.TrimEnd('/') + "|" +
         string.Join(',', book.AdditionalNamespaces.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -58,6 +61,12 @@ internal sealed record WikiSyncState
 internal sealed record SyncPage(string Title, int Namespace, long PageId, DateTime Modified, bool Redirect, bool Missing);
 internal sealed record SyncEvent(long Id, DateTimeOffset Time, string Title, int Namespace, string Type, string? LogType, string? Target);
 internal sealed class SyncCoverageException(string message) : Exception(message);
+
+internal sealed record WikiSyncMediaTask(string Url, bool Force)
+{
+    public static string Key(string url) => "sync_media_pending:" + Convert.ToHexString(
+        System.Security.Cryptography.SHA256.HashData(System.Text.Encoding.UTF8.GetBytes(url)));
+}
 
 // These projections deliberately exclude HTML and media blobs.
 public sealed class WikiPageMetadata

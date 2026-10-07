@@ -14,13 +14,20 @@ namespace Terraria_Wiki.Windows.Presentation.QuickAccess;
 
 internal sealed class QuickAccessViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        Chat.UseTextCatalog(Text);
+        Wiki.UseTextCatalog(Text);
+        Reader.UseTextCatalog(Text);
+    }
+
     private readonly Func<string, Task> _openArticle;
     private readonly Func<Task> _restorePage;
     private readonly Action _retryViewer;
     private bool _isWiki;
     private bool _wikiReading;
     private bool _sourceReading;
-    private string _viewerStatus = "正在准备本地 Wiki…";
+    private string _viewerStatus = UiTextCatalog.Message("PreparingTheLocalWiki");
     private string _homeTitle = "Terraria Wiki";
     private bool _viewerFailed;
     private bool _viewerReady;
@@ -81,7 +88,7 @@ internal sealed class QuickAccessViewModel : ObservableObject, IDisposable
     public bool IsNewConversationVisible => IsChat && !IsReading;
     public bool IsSearchBoxVisible => IsWiki;
     public string HomeTitle { get => _homeTitle; private set => SetProperty(ref _homeTitle, value); }
-    public string ViewerStatus { get => _viewerStatus; private set => SetProperty(ref _viewerStatus, value); }
+    public string ViewerStatus { get => Text.Render(_viewerStatus); private set => SetProperty(ref _viewerStatus, UiTextCatalog.FromSafeMessage(value)); }
     public bool ViewerFailed
     {
         get => _viewerFailed;
@@ -121,7 +128,7 @@ internal sealed class QuickAccessViewModel : ObservableObject, IDisposable
         Wiki.Detach();
         Reader.Detach();
         ViewerReady = false;
-        ViewerStatus = "本地 Wiki 正在恢复…";
+        ViewerStatus = UiTextCatalog.Message("RestoringTheLocalWiki");
     }
 
     public void SetHome(string title, bool resetSearch)
@@ -146,7 +153,7 @@ internal sealed class QuickAccessViewModel : ObservableObject, IDisposable
     {
         if (code is "viewer-history-empty" or "viewer-forward-history-empty"
             or "side-button-back-disabled" or "side-button-forward-disabled") return;
-        SetViewerStatus("正文暂时不可用；请重试。", failed: true);
+        SetViewerStatus(UiTextCatalog.Message("PageContentIsTemporarilyUnavailableRetry"), failed: true);
     }
     public void SetViewerReady(bool ready) => ViewerReady = ready;
 

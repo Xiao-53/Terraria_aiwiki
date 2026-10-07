@@ -1,0 +1,22 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             x:Class="Terraria_Wiki.Windows.Presentation.Infrastructure.ConfirmationOverlay">
+  <Border Background="{DynamicResource TerrariaOverlayScrimBrush}">
+    <Border Classes="confirmation-card" MaxWidth="520" Margin="24"
+            HorizontalAlignment="Center" VerticalAlignment="Center">
+      <Grid RowDefinitions="Auto,*,Auto" Margin="24" RowSpacing="16">
+        <TextBlock x:Name="Heading" Classes="section-title" TextWrapping="Wrap" />
+        <ScrollViewer Grid.Row="1" VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled"
+                      MaxHeight="320">
+          <TextBlock x:Name="Message" TextWrapping="Wrap" />
+        </ScrollViewer>
+        <WrapPanel Grid.Row="2" HorizontalAlignment="Right">
+          <Button x:Name="CancelButton" Content="{DynamicResource Ui.Cancel}" Classes="secondary-action"
+                  Margin="0,0,8,0" Click="CancelClicked"
+                  AutomationProperties.Name="{DynamicResource Ui.Cancel}" />
+          <Button x:Name="ConfirmButton" Click="ConfirmClicked" />
+        </WrapPanel>
+      </Grid>
+    </Border>
+  </Border>
+</UserControl>

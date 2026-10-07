@@ -5,7 +5,7 @@ using Terraria_Wiki.Windows.Presentation.Infrastructure;
 
 namespace Terraria_Wiki.Windows.Presentation.Wiki;
 
-internal sealed class WikiSearchResultViewModel
+internal sealed class WikiSearchResultViewModel : ObservableObject
 {
     private readonly Func<SearchResultItem, Task> _open;
 
@@ -19,16 +19,16 @@ internal sealed class WikiSearchResultViewModel
         SectionText = result.SectionPath;
         MatchText = result.EvidenceKind switch
         {
-            WikiSearchEvidenceKind.ExactTitle => "精确标题",
-            WikiSearchEvidenceKind.ExactRedirect => "精确重定向",
-            WikiSearchEvidenceKind.ExactCommunityAlias => "社区别名",
-            WikiSearchEvidenceKind.Heading => "章节标题",
-            WikiSearchEvidenceKind.TableRow => "表格内容",
-            WikiSearchEvidenceKind.ListItem => "列表内容",
-            WikiSearchEvidenceKind.Definition => "定义内容",
-            WikiSearchEvidenceKind.Infobox => "信息框",
-            WikiSearchEvidenceKind.Generic => "正文片段",
-            _ => result.Scope == WikiSearchScope.Partial ? "部分匹配" : "正文匹配",
+            WikiSearchEvidenceKind.ExactTitle => UiTextCatalog.Message("ExactTitle"),
+            WikiSearchEvidenceKind.ExactRedirect => UiTextCatalog.Message("ExactRedirect"),
+            WikiSearchEvidenceKind.ExactCommunityAlias => UiTextCatalog.Message("CommunityAlias"),
+            WikiSearchEvidenceKind.Heading => UiTextCatalog.Message("SectionHeading"),
+            WikiSearchEvidenceKind.TableRow => UiTextCatalog.Message("TableContent"),
+            WikiSearchEvidenceKind.ListItem => UiTextCatalog.Message("ListContent"),
+            WikiSearchEvidenceKind.Definition => UiTextCatalog.Message("Definition"),
+            WikiSearchEvidenceKind.Infobox => UiTextCatalog.Message("Infobox"),
+            WikiSearchEvidenceKind.Generic => UiTextCatalog.Message("PageExcerpt"),
+            _ => result.Scope == WikiSearchScope.Partial ? UiTextCatalog.Message("PartialMatch") : UiTextCatalog.Message("PageContentMatch"),
         };
         OpenCommand = new AsyncCommand(_ => OpenAsync());
     }
@@ -38,7 +38,8 @@ internal sealed class WikiSearchResultViewModel
     public string RedirectText { get; }
     public string Snippet { get; }
     public string SectionText { get; }
-    public string MatchText { get; }
+    private string _localizedMatchText = string.Empty;
+    public string MatchText { get => Text.Render(_localizedMatchText); private set => _localizedMatchText = value; }
     public AsyncCommand OpenCommand { get; }
 
     internal Task OpenAsync() => _open(Result);
@@ -46,12 +47,16 @@ internal sealed class WikiSearchResultViewModel
 
 internal sealed class WikiViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in Results) item.UseTextCatalog(Text);
+    }
     private static readonly TimeSpan SearchDelay = TimeSpan.FromMilliseconds(180);
     private readonly Func<SearchResultItem, Task> _openResult;
     private Func<string, CancellationToken, Task<IReadOnlyList<SearchResultItem>>>? _search;
     private CancellationTokenSource? _searchCancellation;
     private string _query = string.Empty;
-    private string _statusMessage = "正在准备本地 Wiki…";
+    private string _statusMessage = UiTextCatalog.Message("PreparingTheLocalWiki");
     private bool _isSearching;
     private bool _isAvailable;
     private bool _disposed;
@@ -77,8 +82,8 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
 
     public string StatusMessage
     {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        get => Text.Render(_statusMessage);
+        private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value));
     }
 
     public bool IsSearching
@@ -110,7 +115,7 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
     {
         _search = search ?? throw new ArgumentNullException(nameof(search));
         IsAvailable = true;
-        StatusMessage = "搜索本地 Wiki，结果会在同一个 Reader 中打开。";
+        StatusMessage = UiTextCatalog.Message("SearchTheLocalWikiResultsOpenInThe");
     }
 
     public void Detach()
@@ -121,7 +126,7 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
         _search = null;
         IsAvailable = false;
         IsSearching = false;
-        StatusMessage = "本地 Wiki 数据源不可用。";
+        StatusMessage = UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailable");
     }
 
     public void ResetForDataSourceChange()
@@ -133,8 +138,8 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
         Query = string.Empty;
         IsSearching = false;
         StatusMessage = IsAvailable
-            ? "活动 Wiki 已改变；请输入新的搜索内容。"
-            : "本地 Wiki 数据源不可用。";
+            ? UiTextCatalog.Message("TheActiveWikiHasChangedEnterANew")
+            : UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailable");
         RefreshResultProperties();
     }
 
@@ -164,7 +169,7 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
         {
             Results.Clear();
             IsSearching = false;
-            StatusMessage = "输入词条名称或关键词。";
+            StatusMessage = UiTextCatalog.Message("EnterAPageNameOrKeywords");
             RefreshResultProperties();
             return;
         }
@@ -172,13 +177,13 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
         {
             Results.Clear();
             IsSearching = false;
-            StatusMessage = "本地 Wiki 数据源不可用。";
+            StatusMessage = UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailable");
             RefreshResultProperties();
             return;
         }
 
         IsSearching = true;
-        StatusMessage = "正在搜索…";
+        StatusMessage = UiTextCatalog.Message("Searching");
         try
         {
             if (useDebounce)
@@ -189,25 +194,25 @@ internal sealed class WikiViewModel : ObservableObject, IDisposable
                 return;
             Results.Clear();
             foreach (var result in results)
-                Results.Add(new WikiSearchResultViewModel(result, _openResult));
-            StatusMessage = results.Count == 0 ? "没有找到结果。" : $"找到 {results.Count} 个结果。";
+                Results.Add(new WikiSearchResultViewModel(result, _openResult).WithText(Text));
+            StatusMessage = results.Count == 0 ? UiTextCatalog.Message("NoResultsFound") : UiTextCatalog.Message("FoundResults", results.Count);
             RefreshResultProperties();
         }
         catch (OperationCanceledException)
         {
             if (ReferenceEquals(current, _searchCancellation))
-                StatusMessage = "搜索已取消。";
+                StatusMessage = UiTextCatalog.Message("SearchCancelled");
         }
         catch (WikiQueryException exception) when (exception.Code == WikiQueryErrorCode.DataSourceUnavailable)
         {
             Results.Clear();
-            StatusMessage = "本地 Wiki 数据源不可用；请稍后重试。";
+            StatusMessage = UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailableTry");
             RefreshResultProperties();
         }
         catch
         {
             Results.Clear();
-            StatusMessage = "搜索失败；本地数据未被修改。";
+            StatusMessage = UiTextCatalog.Message("SearchFailedLocalDataIsUnchanged");
             RefreshResultProperties();
         }
         finally

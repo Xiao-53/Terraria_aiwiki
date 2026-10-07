@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Terraria_Wiki.Windows.Presentation.Infrastructure;
 using Avalonia;
 using Avalonia.Automation;
 using Avalonia.Controls;
@@ -22,7 +23,8 @@ public sealed partial class ButtonReviewWindow : Window
     private bool _answering;
     private bool _favorite;
     private Button _send = null!, _stop = null!, _newChat = null!, _favoriteButton = null!;
-    private StackPanel _confirmation = null!, _downloads = null!;
+    private StackPanel _downloads = null!;
+    private bool _confirmationOpen;
 
     public ButtonReviewWindow()
     {
@@ -160,11 +162,7 @@ public sealed partial class ButtonReviewWindow : Window
         square.Bind(Border.BackgroundProperty, new Binding(nameof(Button.Foreground)) { Source = _stop }); _stop.Content = square;
         _newChat = Toolbar("新对话", "IconAdd", () => { _favorite = false; UpdateFavorite(); Tell("已开始空白新对话"); }); _newChat.MinHeight = 44;
         Section("BTN-04 / 13 / 14 · Chat 新对话与发送／停止（44 DIP）", Row(_newChat, _send, _stop));
-        _confirmation = new StackPanel { Spacing = 8, IsVisible = false };
-        _confirmation.Children.Add(Text("模拟确认：是否删除这条演示记录？"));
-        _confirmation.Children.Add(Row(Action("取消", "secondary-action", () => { _confirmation.IsVisible = false; Tell("已取消，记录保留"); }),
-            Action("确认删除", "danger-action", () => { _confirmation.IsVisible = false; Tell("演示记录已删除；可重置"); })));
-        Section("BTN-02 / 03 · 资料库／数据管理页内确认", Row(Action("请求删除", "danger-action", RequestConfirmation)), _confirmation);
+        Section("BTN-02 / 03 · 资料库／数据管理模态确认", Row(Action("请求删除", "danger-action", RequestConfirmation)));
         _downloads = new StackPanel { Spacing = 12 };
         Section("MG-09 / 10 / 11 · 下载层级模拟", Row(Action("空库", "segment-button", () => SetDownloads(0)),
             Action("已有轻量库", "segment-button", () => SetDownloads(1)), Action("已有全量库", "segment-button", () => SetDownloads(2))), _downloads);
@@ -175,7 +173,20 @@ public sealed partial class ButtonReviewWindow : Window
         Section("BTN-02 / 03 · 数据管理维护区（170 × 44 DIP 单元，含边距）", maintenance);
         SetAnswering(false); SetDownloads(0); UpdateFavorite();
     }
-    private void RequestConfirmation() { _confirmation.IsVisible = true; _confirmation.BringIntoView(); Tell("等待模拟确认"); }
+    private async void RequestConfirmation()
+    {
+        if (_confirmationOpen) return;
+        _confirmationOpen = true;
+        try
+        {
+            var dialog = new ConfirmationOverlay(new UiTextCatalog());
+            dialog.Update("删除演示记录", "是否删除这条演示记录？", "确认删除", true, true);
+            Tell("等待模拟确认");
+            var approved = await dialog.ShowAsync(this);
+            Tell(approved ? "演示记录已删除；可重置" : "已取消，记录保留");
+        }
+        finally { _confirmationOpen = false; }
+    }
     private void ToggleFavorite() { _favorite = !_favorite; UpdateFavorite(); Tell(_favorite ? "已收藏" : "已取消收藏"); }
     private void UpdateFavorite()
     {

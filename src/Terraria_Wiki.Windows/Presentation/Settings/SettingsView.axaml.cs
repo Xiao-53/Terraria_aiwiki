@@ -3,6 +3,7 @@ using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Markup.Xaml;
+using Avalonia.Styling;
 using Avalonia.VisualTree;
 
 namespace Terraria_Wiki.Windows.Presentation.Settings;
@@ -11,14 +12,29 @@ internal sealed partial class SettingsView : UserControl
 {
     private Window? _window;
     private readonly List<Visual> _visibilityAncestors = [];
+    private SettingsViewModel? _notificationModel;
 
     public SettingsView()
     {
         AvaloniaXamlLoader.Load(this);
+        ActualThemeVariantChanged += (_, _) => UpdateThemeToggle();
+        DataContextChanged += (_, _) =>
+        {
+            _notificationModel?.SetPageActive(false);
+            _notificationModel = DataContext as SettingsViewModel;
+            UpdateThemeToggle();
+            OnPageVisibilityChanged(this, EventArgs.Empty);
+        };
         AddHandler(KeyDownEvent, OnCaptureKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
     }
 
     private QuickAccessSettingsViewModel? QuickAccess => (DataContext as SettingsViewModel)?.QuickAccess;
+
+    private void UpdateThemeToggle()
+    {
+        if (DataContext is SettingsViewModel settings)
+            settings.UpdateActualTheme(ActualThemeVariant == ThemeVariant.Dark);
+    }
 
     private async void OnRecordShowHotkey(object? sender, RoutedEventArgs args)
     {
@@ -50,7 +66,7 @@ internal sealed partial class SettingsView : UserControl
     private void OnPageVisibilityChanged(object? sender, EventArgs args)
     {
         if (DataContext is not SettingsViewModel settings) return;
-        settings.Ai.SetPageActive(IsEffectivelyVisible && settings.IsAiSelected);
+        settings.SetPageActive(IsEffectivelyVisible);
         if (!IsEffectivelyVisible) _ = settings.QuickAccess.CancelHotkeyCaptureAsync();
     }
 
@@ -77,6 +93,7 @@ internal sealed partial class SettingsView : UserControl
     protected override void OnAttachedToVisualTree(VisualTreeAttachmentEventArgs args)
     {
         base.OnAttachedToVisualTree(args);
+        UpdateThemeToggle();
         WatchVisibility();
         _window = TopLevel.GetTopLevel(this) as Window;
         if (_window is not null) _window.Deactivated += OnWindowDeactivated;
@@ -87,7 +104,7 @@ internal sealed partial class SettingsView : UserControl
         if (_window is not null) _window.Deactivated -= OnWindowDeactivated;
         _window = null;
         StopWatchingVisibility();
-        if (DataContext is SettingsViewModel settings) settings.Ai.SetPageActive(false);
+        if (DataContext is SettingsViewModel settings) settings.SetPageActive(false);
         if (QuickAccess is { } quick) _ = quick.CancelHotkeyCaptureAsync();
         base.OnDetachedFromVisualTree(args);
     }

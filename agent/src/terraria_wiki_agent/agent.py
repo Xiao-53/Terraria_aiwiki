@@ -521,15 +521,27 @@ class _RunEvidence:
             try:
                 result = await call_tool(name, tool_args)
             except ToolError as error:
-                if (
-                    name == "read_wiki"
-                    and tool_args.get("continuation_token")
-                    and str(error) == "invalid-arguments"
-                ):
+                if str(error) == "invalid-arguments":
+                    if name == "read_wiki" and tool_args.get("continuation_token"):
+                        raise ModelRetry(
+                            "Continuation is no longer valid. Restart read_wiki in page mode "
+                            "without cursor or continuation_token, and recheck the required facts "
+                            "in current evidence; do not combine different content versions."
+                        ) from None
+                    if name == "search_wiki":
+                        raise ModelRetry(
+                            "Invalid search_wiki arguments. Provide query as a string; omit "
+                            "max_results to use the configured default, or supply an integer "
+                            "from 1 through 100. Correct the arguments and try again."
+                        ) from None
                     raise ModelRetry(
-                        "Continuation is no longer valid. Restart read_wiki in page mode without "
-                        "cursor or continuation_token, and recheck the required facts in current "
-                        "evidence; do not combine different content versions."
+                        "Invalid read_wiki arguments. Provide a nonempty title; optional focus "
+                        "must be a string of at most 32768 characters. Omit mode or use page or "
+                        "section. Section reads require title#anchor from returned navigation "
+                        "or a catalog; otherwise use page mode. For a fresh read omit cursor "
+                        "and continuation_token. For continuation use the returned next_cursor "
+                        "as a nonnegative integer and its token with unchanged title/focus/mode. "
+                        "Correct the arguments and try again."
                     ) from None
                 raise
             if name == "read_wiki":

@@ -44,18 +44,20 @@ internal sealed partial class QuickAccessWindow : Window
     private bool _firstDomReady;
 
     public QuickAccessWindow(IChatConversationStore store,
-        ProductDiagnostics diagnostics, Stopwatch firstRequestClock)
+        ProductDiagnostics diagnostics, Stopwatch firstRequestClock, UiTextCatalog? uiText = null)
     {
         _diagnostics = diagnostics;
         _firstRequestClock = firstRequestClock;
         AvaloniaXamlLoader.Load(this);
+        uiText ??= new UiTextCatalog();
+        uiText.Attach(Resources);
         _focus = new QuickAccessFocusSession(QuickAccessNativeFocus.Foreground,
             QuickAccessNativeFocus.Inspect,
             foreground => QuickAccessNativeFocus.BelongsTo(foreground, NativeHandle),
             QuickAccessNativeFocus.Restore);
         Deactivated += (_, _) => _focus.InvalidateFocus();
         ViewModel = new QuickAccessViewModel(store, OpenArticleAsync, RestoreSelectedPageAsync,
-            () => _ = RebindAsync());
+            () => _ = RebindAsync()).WithText(uiText);
         DataContext = ViewModel;
         ViewModel.PropertyChanged += OnViewModelPropertyChanged;
         _webView = this.FindControl<NativeWebView>("ViewerWebView")!;
@@ -74,7 +76,7 @@ internal sealed partial class QuickAccessWindow : Window
     public QuickAccessViewModel ViewModel { get; }
     public event EventHandler? HiddenByUser;
     public void MarkHostUnavailable() =>
-        ViewModel.SetViewerStatus("主窗口尚未就绪；请在主窗口处理启动错误后重试。", failed: true);
+        ViewModel.SetViewerStatus(UiTextCatalog.Message("TheMainWindowIsNotReadyResolveIts"), failed: true);
 
     private nint NativeHandle => TryGetPlatformHandle()?.Handle ?? 0;
 
@@ -149,7 +151,7 @@ internal sealed partial class QuickAccessWindow : Window
         _rebindCancellation = CancellationTokenSource.CreateLinkedTokenSource(_lifetime.Token);
         var token = _rebindCancellation.Token;
         var generation = ++_generation;
-        ViewModel.SetViewerStatus("正在准备本地 Wiki…");
+        ViewModel.SetViewerStatus(UiTextCatalog.Message("PreparingTheLocalWiki"));
         ViewModel.SetViewerReady(false);
         try
         {
@@ -168,7 +170,7 @@ internal sealed partial class QuickAccessWindow : Window
             if (!active.IsPageDownloaded)
             {
                 _webView.IsVisible = false;
-                ViewModel.SetViewerStatus("当前 Wiki 尚未下载页面；请在主窗口的数据管理中下载或导入。");
+                ViewModel.SetViewerStatus(UiTextCatalog.Message("ThisWikiHasNoDownloadedPagesDownloadOr"));
                 return;
             }
             if (runtime.Viewer.Status.State != ViewerConsumerState.Ready)
@@ -200,7 +202,7 @@ internal sealed partial class QuickAccessWindow : Window
             }
             if (generation != _generation || !ReferenceEquals(session, _session)) return;
             ViewModel.Reader.Attach(session.OpenPageAsync, session.BackAsync, session.HasHistory);
-            ViewModel.SetViewerStatus("正在打开本地 Wiki 首页…");
+            ViewModel.SetViewerStatus(UiTextCatalog.Message("OpeningTheLocalWikiHomePage"));
             var pending = _pendingTitle;
             _pendingTitle = null;
             await session.OpenPageAsync(pending ?? _currentTitle ?? active.DefaultPageTitle, token);
@@ -209,7 +211,7 @@ internal sealed partial class QuickAccessWindow : Window
         catch (Exception)
         {
             if (generation == _generation)
-                ViewModel.SetViewerStatus("本地正文暂时不可用；请重试。", failed: true);
+                ViewModel.SetViewerStatus(UiTextCatalog.Message("LocalPageContentIsTemporarilyUnavailableRetry"), failed: true);
         }
     }
 
@@ -266,11 +268,11 @@ internal sealed partial class QuickAccessWindow : Window
         if (_session is not { IsReady: true } session)
         {
             _pendingTitle = title;
-            ViewModel.SetViewerStatus("正在准备正文，稍后会自动打开。");
+            ViewModel.SetViewerStatus(UiTextCatalog.Message("PreparingPageContentItWillOpenAutomaticallyWhen"));
             return;
         }
         try { await session.OpenPageAsync(title, _lifetime.Token); }
-        catch { ViewModel.SetViewerStatus("无法打开正文；请重试。", failed: true); }
+        catch { ViewModel.SetViewerStatus(UiTextCatalog.Message("CouldNotOpenPageContentRetry"), failed: true); }
     }
 
     private async Task RestoreSelectedPageAsync()
@@ -288,7 +290,7 @@ internal sealed partial class QuickAccessWindow : Window
             return;
         }
         try { await session.OpenPageAsync(target, _lifetime.Token); }
-        catch { ViewModel.SetViewerStatus("无法打开正文；请重试。", failed: true); }
+        catch { ViewModel.SetViewerStatus(UiTextCatalog.Message("CouldNotOpenPageContentRetry"), failed: true); }
     }
 
     private void OnViewModelPropertyChanged(object? sender, PropertyChangedEventArgs args)
@@ -323,7 +325,7 @@ internal sealed partial class QuickAccessWindow : Window
                     _firstRequestClock.ElapsedMilliseconds);
             }
             ViewModel.SetViewerReady(true);
-            ViewModel.SetViewerStatus("已打开 " + identity.CanonicalTitle + "。");
+            ViewModel.SetViewerStatus(UiTextCatalog.Message("Opened3", identity.CanonicalTitle));
             _ = ViewModel.Reader.ApplyPageIdentityAsync(identity);
         });
     }

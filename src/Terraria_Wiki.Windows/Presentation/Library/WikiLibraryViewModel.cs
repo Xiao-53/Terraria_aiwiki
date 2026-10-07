@@ -29,7 +29,7 @@ internal sealed class WikiPageItemViewModel
     private readonly Func<string, Task> _open;
 }
 
-internal sealed class ConversationHistoryItemViewModel
+internal sealed class ConversationHistoryItemViewModel : ObservableObject
 {
     public ConversationHistoryItemViewModel(
         ChatConversation conversation,
@@ -45,7 +45,7 @@ internal sealed class ConversationHistoryItemViewModel
     public ChatConversation Conversation { get; }
     public string Title => Conversation.Title;
     public string UpdatedText => Conversation.UpdatedAt.LocalDateTime.ToString("yyyy-MM-dd HH:mm");
-    public string Detail => $"{Conversation.Turns.Count} 轮" + (Conversation.IsFavorite ? " · 已收藏" : "");
+    public string Detail => Text.Render(UiTextCatalog.Join("", UiTextCatalog.Message("Turns2", Conversation.Turns.Count), Conversation.IsFavorite ? UiTextCatalog.Message("Favorited3") : ""));
     public AsyncCommand OpenCommand { get; }
     public RelayCommand DeleteCommand { get; }
     internal Task OpenAsync() => _open(Conversation);
@@ -55,6 +55,10 @@ internal sealed class ConversationHistoryItemViewModel
 
 internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in History) item.UseTextCatalog(Text);
+    }
     internal const int PageSize = 100;
     private static readonly TimeSpan FilterDelay = TimeSpan.FromMilliseconds(180);
     private readonly IChatConversationStore _conversationStore;
@@ -66,7 +70,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
     private WikiLibrarySection _currentSection = WikiLibrarySection.Pages;
     private ChatConversation? _pendingDelete;
     private string _query = string.Empty;
-    private string _statusMessage = "正在准备 Wiki 资料库…";
+    private string _statusMessage = UiTextCatalog.Message("PreparingTheWikiLibrary");
     private bool _isWikiAvailable;
     private bool _isBusy;
     private bool _isDeleteConfirmationVisible;
@@ -116,7 +120,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         get => _query;
         set { if (SetProperty(ref _query, value ?? string.Empty)) _ = LoadAsync(true, true); }
     }
-    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
+    public string StatusMessage { get => Text.Render(_statusMessage); private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)); }
     public bool IsBusy
     {
         get => _isBusy;
@@ -132,9 +136,9 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         get => _isDeleteConfirmationVisible;
         private set { if (SetProperty(ref _isDeleteConfirmationVisible, value)) RefreshViewState(); }
     }
-    public string DeleteConfirmationText => _pendingDelete is null
+    public string DeleteConfirmationText => Text.Render(_pendingDelete is null
         ? string.Empty
-        : $"确定删除对话“{_pendingDelete.Title}”吗？";
+        : UiTextCatalog.Message("DeleteConversation", _pendingDelete.Title));
     public int TotalCount
     {
         get => _totalCount;
@@ -164,7 +168,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         ArgumentNullException.ThrowIfNull(library);
         _getPages = library.GetPagesAsync;
         _isWikiAvailable = true;
-        StatusMessage = "浏览全部页面或本机对话历史。";
+        StatusMessage = UiTextCatalog.Message("BrowseAllPagesOrLocalConversationHistory");
     }
 
     internal void Attach(Func<PageRequest, CancellationToken, Task<PageSlice<WikiPageListItem>>> getPages)
@@ -180,7 +184,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         _isWikiAvailable = false;
         Pages.Clear();
         if (IsPagesSelected)
-            StatusMessage = "本地 Wiki 数据源不可用。";
+            StatusMessage = UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailable");
         RefreshViewState();
     }
 
@@ -219,9 +223,9 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
             await _conversationStore.DeleteUnfavoritedAsync();
             foreach (var id in removedIds)
                 _conversationDeleted(id);
-            resultMessage = "未收藏的对话历史已清空。";
+            resultMessage = UiTextCatalog.Message("UnfavoritedConversationHistoryCleared");
         }
-        catch { resultMessage = "无法清空对话历史；现有记录未被更改。"; }
+        catch { resultMessage = UiTextCatalog.Message("CouldNotClearConversationHistoryExistingRecordsAre"); }
         finally { IsBusy = false; CancelConfirmations(); }
         await LoadAsync(true, false);
         StatusMessage = resultMessage;
@@ -247,7 +251,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         var query = Query.Trim();
         var offset = reset ? 0 : CurrentItemCount;
         IsBusy = true;
-        StatusMessage = section == WikiLibrarySection.Pages ? "正在载入全部页面…" : "正在载入对话历史…";
+        StatusMessage = section == WikiLibrarySection.Pages ? UiTextCatalog.Message("LoadingAllPages") : UiTextCatalog.Message("LoadingConversationHistory");
         try
         {
             if (useFilterDelay)
@@ -261,7 +265,7 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
                 if (reset) Pages.Clear();
                 foreach (var item in slice.Items) Pages.Add(new WikiPageItemViewModel(item, _openPage));
                 TotalCount = slice.TotalCount;
-                StatusMessage = TotalCount == 0 ? EmptyMessage("页面") : $"已显示 {Pages.Count} / {TotalCount} 个页面";
+                StatusMessage = TotalCount == 0 ? EmptyMessage(UiTextCatalog.Message("Pages")) : UiTextCatalog.Message("ShowingPages", Pages.Count, TotalCount);
             }
             else
             {
@@ -271,9 +275,9 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
                     return false;
                 History.Clear();
                 foreach (var item in conversations)
-                    History.Add(new ConversationHistoryItemViewModel(item, _openConversation, RequestDelete));
+                    History.Add(new ConversationHistoryItemViewModel(item, _openConversation, RequestDelete).WithText(Text));
                 TotalCount = History.Count;
-                StatusMessage = TotalCount == 0 ? EmptyMessage("对话") : $"共 {TotalCount} 段本地对话";
+                StatusMessage = TotalCount == 0 ? EmptyMessage(UiTextCatalog.Message("Conversations")) : UiTextCatalog.Message("LocalConversations", TotalCount);
             }
             return true;
         }
@@ -282,8 +286,8 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         {
             if (ReferenceEquals(current, _loadCancellation))
                 StatusMessage = section == WikiLibrarySection.Pages
-                    ? "资料库暂时不可用；本地数据未被修改。"
-                    : "对话历史暂时不可用；当前内存对话仍可使用。";
+                    ? UiTextCatalog.Message("TheLibraryIsTemporarilyUnavailableLocalDataIs")
+                    : UiTextCatalog.Message("ConversationHistoryIsTemporarilyUnavailableTheCurrentConversation");
             return false;
         }
         finally
@@ -316,9 +320,9 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
         {
             await _conversationStore.DeleteAsync(conversation.Id);
             _conversationDeleted(conversation.Id);
-            resultMessage = "对话已删除。";
+            resultMessage = UiTextCatalog.Message("ConversationDeleted");
         }
-        catch { resultMessage = "无法删除对话；现有记录未被更改。"; }
+        catch { resultMessage = UiTextCatalog.Message("CouldNotDeleteTheConversationExistingRecordsAre"); }
         finally { IsBusy = false; CancelConfirmations(); }
         await LoadAsync(true, false);
         StatusMessage = resultMessage;
@@ -333,8 +337,8 @@ internal sealed class WikiLibraryViewModel : ObservableObject, IDisposable
     }
 
     private string EmptyMessage(string subject) => Query.Trim().Length == 0
-        ? $"还没有{subject}。"
-        : $"没有匹配“{Query.Trim()}”的{subject}。";
+        ? UiTextCatalog.Message("NoYet", subject)
+        : UiTextCatalog.Message("NoMatching", Query.Trim(), subject);
 
     private void CancelCurrentLoad()
     {

@@ -18,24 +18,24 @@
           <Button Command="{Binding NavigateChatCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsChatSelected}"
-                  ToolTip.Tip="AI 问答"
-                  AutomationProperties.Name="AI 问答导航">
+                  ToolTip.Tip="{DynamicResource Ui.AIChat}"
+                  AutomationProperties.Name="{DynamicResource Ui.AIChatNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsChatSelected}" />
               <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource IconChat}" />
-              <TextBlock Grid.Row="1" Text="问答" FontSize="11" LineHeight="14"
+              <TextBlock Grid.Row="1" Text="{DynamicResource Ui.Chat}" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
           <Button Command="{Binding NavigateWikiCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsWikiSelected}"
-                  ToolTip.Tip="Wiki 搜索"
+                  ToolTip.Tip="{DynamicResource Ui.WikiSearch}"
                   AutomationProperties.AutomationId="WikiNavigation"
-                  AutomationProperties.Name="Wiki 搜索导航">
+                  AutomationProperties.Name="{DynamicResource Ui.WikiSearchNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsWikiSelected}" />
@@ -49,48 +49,48 @@
           <Button Command="{Binding NavigateFavoritesCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsFavoritesSelected}"
-                  ToolTip.Tip="收藏"
+                  ToolTip.Tip="{DynamicResource Ui.Favorites}"
                   AutomationProperties.AutomationId="FavoritesNavigation"
-                  AutomationProperties.Name="收藏导航">
+                  AutomationProperties.Name="{DynamicResource Ui.FavoritesNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsFavoritesSelected}" />
               <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource IconFavorite}" />
-              <TextBlock Grid.Row="1" Text="收藏" FontSize="11" LineHeight="14"
+              <TextBlock Grid.Row="1" Text="{DynamicResource Ui.Favorites}" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
           <Button Command="{Binding NavigateLibraryCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsLibrarySelected}"
-                  ToolTip.Tip="Wiki 资料库"
+                  ToolTip.Tip="{DynamicResource Ui.WikiLibrary}"
                   AutomationProperties.AutomationId="LibraryNavigation"
-                  AutomationProperties.Name="Wiki 资料库导航">
+                  AutomationProperties.Name="{DynamicResource Ui.WikiLibraryNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsLibrarySelected}" />
               <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource IconLibrary}" />
-              <TextBlock Grid.Row="1" Text="资料" FontSize="11" LineHeight="14"
+              <TextBlock Grid.Row="1" Text="{DynamicResource Ui.Library}" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
           <Button Command="{Binding NavigateManagementCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsManagementSelected}"
-                  ToolTip.Tip="数据管理"
+                  ToolTip.Tip="{DynamicResource Ui.DataManagement}"
                   AutomationProperties.AutomationId="ManagementNavigation"
-                  AutomationProperties.Name="数据管理导航">
+                  AutomationProperties.Name="{DynamicResource Ui.DataManagementNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsManagementSelected}" />
               <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource IconData}" />
-              <TextBlock Grid.Row="1" Text="数据" FontSize="11" LineHeight="14"
+              <TextBlock Grid.Row="1" Text="{DynamicResource Ui.Data}" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
@@ -101,22 +101,22 @@
           <Button Command="{Binding NavigateSettingsCommand}"
                   Classes="rail-nav"
                   Classes.selected="{Binding IsSettingsSelected}"
-                  ToolTip.Tip="设置"
+                  ToolTip.Tip="{DynamicResource Ui.Settings}"
                   AutomationProperties.AutomationId="SettingsNavigation"
-                  AutomationProperties.Name="设置导航">
+                  AutomationProperties.Name="{DynamicResource Ui.SettingsNavigation}">
             <Grid RowDefinitions="34,Auto">
               <Border Classes="rail-indicator" HorizontalAlignment="Left"
                       Grid.RowSpan="2" IsVisible="{Binding IsSettingsSelected}" />
               <PathIcon Width="20" Height="20" HorizontalAlignment="Center"
                         VerticalAlignment="Center"
                         Data="{StaticResource IconSettings}" />
-              <TextBlock Grid.Row="1" Text="设置" FontSize="11" LineHeight="14"
+              <TextBlock Grid.Row="1" Text="{DynamicResource Ui.Settings}" FontSize="11" LineHeight="14"
                          HorizontalAlignment="Center" />
             </Grid>
           </Button>
           <Border Width="8" Height="8" CornerRadius="4"
                   Background="{DynamicResource TerrariaBrandBrush}"
-                  ToolTip.Tip="本地 Wiki" />
+                  ToolTip.Tip="{DynamicResource Ui.LocalWiki}" />
           <TextBlock Text="LOCAL" FontSize="9" Classes="muted"
                      HorizontalAlignment="Center" />
         </StackPanel>
@@ -135,26 +135,26 @@
               IsVisible="{Binding IsWikiSelected}">
           <Button Classes="icon-button" Command="{Binding GoToWikiHomeCommand}"
                   IsVisible="{Binding !IsWikiHomeActive}"
-                  ToolTip.Tip="打开 Wiki 首页"
+                  ToolTip.Tip="{DynamicResource Ui.OpenWikiHomePage}"
                   AutomationProperties.AutomationId="WikiHomeNavigation"
-                  AutomationProperties.Name="Wiki 主页">
+                  AutomationProperties.Name="{DynamicResource Ui.WikiHome}">
             <PathIcon Width="20" Height="20"
                       Data="{StaticResource IconHome}" />
           </Button>
           <Button Grid.Column="1" Classes="icon-button"
                   Command="{Binding ReturnToWikiSearchCommand}"
                   IsVisible="{Binding IsWikiReadingActive}"
-                  ToolTip.Tip="返回 Wiki 搜索结果"
+                  ToolTip.Tip="{DynamicResource Ui.BackToWikiSearchResults}"
                   AutomationProperties.AutomationId="WikiReturnToSearch"
-                  AutomationProperties.Name="返回 Wiki 搜索结果">
+                  AutomationProperties.Name="{DynamicResource Ui.BackToWikiSearchResults}">
             <PathIcon Width="20" Height="20"
                       Data="{StaticResource IconBack}" />
           </Button>
           <Button Grid.Column="2" Classes="icon-button" Command="{Binding Reader.BackCommand}"
                   IsVisible="{Binding IsWikiReadingActive}"
-                  ToolTip.Tip="返回上一 Wiki 页面"
+                  ToolTip.Tip="{DynamicResource Ui.BackToPreviousWikiPage}"
                   AutomationProperties.AutomationId="WikiPageBack"
-                  AutomationProperties.Name="返回上一 Wiki 页面">
+                  AutomationProperties.Name="{DynamicResource Ui.BackToPreviousWikiPage}">
             <PathIcon Width="20" Height="20"
                       Data="{StaticResource IconPreviousPage}" />
           </Button>
@@ -182,14 +182,14 @@
                      HorizontalAlignment="Right" VerticalAlignment="Center"
                      Text="{Binding Wiki.Query, Mode=TwoWay}"
                      IsEnabled="{Binding Wiki.IsAvailable}"
-                     PlaceholderText="输入关键词搜索…"
+                     PlaceholderText="{DynamicResource Ui.EnterKeywordsToSearch}"
                      AutomationProperties.AutomationId="WikiSearchInput"
-                     AutomationProperties.Name="Wiki 本地搜索" />
+                     AutomationProperties.Name="{DynamicResource Ui.LocalWikiSearch}" />
             <Button Classes="icon-button"
                     Command="{Binding Wiki.SearchCommand}"
-                    ToolTip.Tip="搜索本地 Wiki"
+                    ToolTip.Tip="{DynamicResource Ui.SearchLocalWiki}"
                     AutomationProperties.AutomationId="WikiSearchButton"
-                    AutomationProperties.Name="搜索本地 Wiki">
+                    AutomationProperties.Name="{DynamicResource Ui.SearchLocalWiki}">
               <PathIcon Width="20" Height="20"
                         Data="{StaticResource IconSearch}" />
             </Button>
@@ -201,23 +201,23 @@
           <TextBlock Text="{Binding StartupStatus}" Classes="muted"
                      IsVisible="{Binding HasStartupError}"
                      VerticalAlignment="Center" TextTrimming="CharacterEllipsis"
-                     AutomationProperties.Name="应用状态" />
-          <Button Content="获取 WebView2" Command="{Binding GetWebView2Command}"
+                     AutomationProperties.Name="{DynamicResource Ui.AppStatus}" />
+          <Button Content="{DynamicResource Ui.GetWebView}" Command="{Binding GetWebView2Command}"
                   Classes="secondary-action"
                   IsVisible="{Binding CanGetWebView2}"
-                  ToolTip.Tip="打开 Microsoft 官方 WebView2 下载页面"
+                  ToolTip.Tip="{DynamicResource Ui.OpenMicrosoftSOfficialWebViewDownloadPage}"
                   AutomationProperties.AutomationId="GetWebView2"
-                  AutomationProperties.Name="获取 Microsoft Edge WebView2 Runtime" />
-          <Button Content="重试" Command="{Binding RetryStartupCommand}"
+                  AutomationProperties.Name="{DynamicResource Ui.GetMicrosoftEdgeWebViewRuntime}" />
+          <Button Content="{DynamicResource Ui.Retry}" Command="{Binding RetryStartupCommand}"
                   Classes="secondary-action"
                   IsVisible="{Binding CanRetryStartup}"
-                  AutomationProperties.Name="重试应用启动" />
-          <Button Content="打开 Wiki" Command="{Binding OpenWikiReaderCommand}"
+                  AutomationProperties.Name="{DynamicResource Ui.RetryAppStartup}" />
+          <Button Content="{DynamicResource Ui.OpenWiki}" Command="{Binding OpenWikiReaderCommand}"
                   Classes="wiki-preview-button"
                   IsVisible="{Binding IsWikiPreviewVisible}"
-                  ToolTip.Tip="打开 Wiki Reader"
+                  ToolTip.Tip="{DynamicResource Ui.OpenWikiReader2}"
                   AutomationProperties.AutomationId="WikiPreview"
-                  AutomationProperties.Name="打开 Wiki 预览" />
+                  AutomationProperties.Name="{DynamicResource Ui.OpenWikiPreview}" />
         </StackPanel>
       </Grid>
     </Border>
@@ -248,7 +248,7 @@
                     KeyboardIncrement="16" DragIncrement="1"
                     IsVisible="{Binding IsReaderInlineVisible}"
                     AutomationProperties.AutomationId="ReaderSplitter"
-                    AutomationProperties.Name="调整对话与 Wiki 宽度" />
+                    AutomationProperties.Name="{DynamicResource Ui.ResizeConversationAndWikiPanes}" />
 
       <Border x:Name="OverlayScrim" Grid.Row="0" Grid.Column="0" Grid.ColumnSpan="3"
               Background="{DynamicResource TerrariaOverlayScrimBrush}"

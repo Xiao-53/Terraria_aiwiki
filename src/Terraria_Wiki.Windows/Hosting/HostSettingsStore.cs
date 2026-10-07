@@ -251,11 +251,11 @@ internal sealed record HostSettingsDocument
 
 internal sealed record QuickAccessPreferences
 {
-    public string DefaultPage { get; init; } = "chat";
-    public string ShowHotkey { get; init; } = "F7";
-    public string HideHotkey { get; init; } = "F8";
+    public string DefaultPage { get; init; } = "wiki";
+    public string ShowHotkey { get; init; } = "Ctrl+O";
+    public string HideHotkey { get; init; } = "Ctrl+P";
     public bool CloseToTray { get; init; } = true;
-    public bool Topmost { get; init; }
+    public bool Topmost { get; init; } = true;
     public int? X { get; init; }
     public int? Y { get; init; }
     public double Width { get; init; } = 520;

@@ -3,15 +3,16 @@ namespace Terraria_Wiki.Application;
 public sealed record ApplicationPreferences
 {
     public const string DefaultLanguage = "zh-cn";
-    public const string DefaultAppTheme = "auto";
+    public const string DefaultAppTheme = "light";
     public const string DefaultContentTheme = "auto";
     public const string DefaultStartupPage = "chat";
-    public const int DefaultSearchLimit = 50;
+    public const int DefaultSearchLimit = 5;
     public const int DefaultAiSearchLimit = 5;
-    public const int DefaultPageConcurrency = 2;
-    public const int DefaultResourceConcurrency = 10;
-    public const int DefaultRetryAttempts = 5;
+    public const int DefaultPageConcurrency = 3;
+    public const int DefaultResourceConcurrency = 20;
+    public const int DefaultRetryAttempts = 3;
     public const int DefaultActiveWikiId = 1;
+    // Initial interval when the user enables periodic checks.
     public const int DefaultWikiFullScanIntervalDays = 14;
 
     public string Language { get; init; } = DefaultLanguage;
@@ -26,5 +27,5 @@ public sealed record ApplicationPreferences
     public int ResourceConcurrency { get; init; } = DefaultResourceConcurrency;
     public int RetryAttempts { get; init; } = DefaultRetryAttempts;
     // null disables periodic checks, but never recovery or identity checks.
-    public int? WikiFullScanIntervalDays { get; init; } = DefaultWikiFullScanIntervalDays;
+    public int? WikiFullScanIntervalDays { get; init; }
 }

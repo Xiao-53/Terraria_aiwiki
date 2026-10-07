@@ -1,5 +1,7 @@
 namespace Terraria_Wiki.Core.Operations;
 
+public enum WikiUpdateMode { Automatic, Full, Quick }
+
 public sealed record WikiOperationOptions(
     int MaxSearchResults = 50,
     int PageConcurrency = 2,
@@ -7,8 +9,12 @@ public sealed record WikiOperationOptions(
     int MaxRetryAttempts = 5,
     int? FullScanIntervalDays = 14)
 {
+    public Func<string, CancellationToken, Task<bool>>? ConfirmFullScanAsync { get; init; }
+    public WikiUpdateMode UpdateMode { get; init; }
+
     public WikiOperationOptions Validate()
     {
+        if (!Enum.IsDefined(UpdateMode)) throw new ArgumentOutOfRangeException(nameof(UpdateMode));
         if (MaxSearchResults <= 0) throw new ArgumentOutOfRangeException(nameof(MaxSearchResults));
         if (PageConcurrency is < 1 or > 3) throw new ArgumentOutOfRangeException(nameof(PageConcurrency));
         if (ResourceConcurrency is < 1 or > 20) throw new ArgumentOutOfRangeException(nameof(ResourceConcurrency));
@@ -22,7 +28,8 @@ public sealed record WikiProgress(
     string Code,
     int Current = 0,
     int Total = 0,
-    string? Detail = null);
+    string? Detail = null,
+    Exception? Error = null);
 
 public sealed record WikiOperationSummary(
     int Pages = 0,

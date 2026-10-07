@@ -6,7 +6,8 @@ using Terraria_Wiki.Models;
 namespace Terraria_Wiki.Core.Data;
 
 /// <summary>Strict, bounded MediaWiki reads for the existing lifecycle updater.</summary>
-internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport, int retries, CancellationToken token)
+internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport, int retries, CancellationToken token,
+    IProgress<Terraria_Wiki.Core.Operations.WikiProgress>? progress = null)
 {
     public HashSet<int> Namespaces { get; } = new(
         book.AdditionalNamespaces.Split(',', StringSplitOptions.RemoveEmptyEntries)
@@ -139,27 +140,34 @@ internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport
     public async Task<HashSet<string>> DependenciesAsync(IEnumerable<(string Title, bool File)> sources)
     {
         var result = new HashSet<string>(StringComparer.Ordinal);
-        var seen = new HashSet<string>(StringComparer.Ordinal);
-        var pending = new Queue<(string Title, bool File)>(sources);
+        var scheduled = new HashSet<(string Title, bool File)>();
+        var pending = new Queue<(string Title, bool File)>();
+        void Schedule((string Title, bool File) source)
+        {
+            if (!scheduled.Add(source)) return;
+            if (scheduled.Count > 10000) throw new SyncCoverageException("dependency-candidate-limit");
+            pending.Enqueue(source);
+        }
+        foreach (var source in sources) Schedule(source);
         var requests = 0;
+        void CountRequest()
+        {
+            if (++requests > 1000) throw new SyncCoverageException("dependency-request-limit");
+        }
         while (pending.TryDequeue(out var source))
         {
-            if (!seen.Add(source.Title)) continue;
             var args = source.File
                 ? "list=imageusage&iulimit=max&iutitle="
                 : "list=embeddedin&eilimit=max&eititle=";
-            await foreach (var root in PagesAsync(args + Uri.EscapeDataString(source.Title), 100))
+            await foreach (var root in PagesAsync(args + Uri.EscapeDataString(source.Title), 100, CountRequest))
             {
-                if (++requests > 100) throw new SyncCoverageException("dependency-request-limit");
                 foreach (var entry in Array(root, source.File ? "imageusage" : "embeddedin"))
                 {
                     var title = Text(entry, "title");
                     var ns = (int)Number(entry, "ns");
                     if (ns == 828) throw new SyncCoverageException("module-dependency-not-provable");
                     if (Namespaces.Contains(ns)) result.Add(title);
-                    pending.Enqueue((title, false));
-                    if (seen.Count + pending.Count + result.Count > 10000)
-                        throw new SyncCoverageException("dependency-candidate-limit");
+                    Schedule((title, false));
                 }
             }
         }
@@ -179,12 +187,13 @@ internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport
 
     public async Task<string?> AssetSourceAsync(string key)
     {
-        var root = await QueryAsync("prop=imageinfo&iiprop=url&titles=" + Uri.EscapeDataString("File:" + key));
+        var root = await QueryAsync("prop=imageinfo&iiprop=url&redirects=1&titles=" + Uri.EscapeDataString("File:" + key));
         var pages = root.GetProperty("query").GetProperty("pages");
         var entries = pages.ValueKind == JsonValueKind.Array ? pages.EnumerateArray().ToArray() : pages.EnumerateObject().Select(p => p.Value).ToArray();
         if (entries.Length != 1 || !entries[0].TryGetProperty("imageinfo", out var info)) return null;
         var urls = info.EnumerateArray().Select(item => OptionalText(item, "url"))
-            .Where(url => url is not null && WikiContentProcessor.GetFileNameFromUrl(url) == key).ToArray();
+            .Where(url => Uri.TryCreate(url, UriKind.Absolute, out var uri) && uri.Scheme is "http" or "https")
+            .Distinct(StringComparer.Ordinal).ToArray();
         return urls.Length == 1 ? urls[0] : null;
     }
 
@@ -211,12 +220,13 @@ internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport
         return result;
     }
 
-    private async IAsyncEnumerable<JsonElement> PagesAsync(string args, int maxRequests)
+    private async IAsyncEnumerable<JsonElement> PagesAsync(string args, int maxRequests, Action? beforeRequest = null)
     {
         var seen = new HashSet<string>(StringComparer.Ordinal);
         var continuation = string.Empty;
         for (var count = 0; count < maxRequests; count++)
         {
+            beforeRequest?.Invoke();
             var root = await QueryAsync(args + continuation);
             yield return root;
             if (!root.TryGetProperty("continue", out var next)) yield break;
@@ -253,8 +263,16 @@ internal sealed class WikiSyncReader(WikiBook book, IWikiHttpTransport transport
                     throw new SyncCoverageException("query-missing");
                 return root.Clone();
             }
-            catch (HttpRequestException exception) when (attempt < retries)
-            { await WikiHttpRetry.DelayAsync(exception, attempt + 1, token); }
+            catch (HttpRequestException exception) when (attempt < retries && !WikiHttpRetry.IsAccessDenied(exception))
+            {
+                progress?.Report(new Terraria_Wiki.Core.Operations.WikiProgress("http-retry", attempt + 1, retries, Error: exception));
+                await WikiHttpRetry.DelayAsync(exception, attempt + 1, token);
+            }
+            catch (OperationCanceledException exception) when (!token.IsCancellationRequested && attempt < retries)
+            {
+                progress?.Report(new Terraria_Wiki.Core.Operations.WikiProgress("http-retry", attempt + 1, retries, Error: exception));
+                await WikiHttpRetry.DelayAsync(exception, attempt + 1, token);
+            }
             catch (JsonException exception) { throw new SyncCoverageException("invalid-json:" + exception.GetType().Name); }
         }
     }

@@ -26,16 +26,18 @@ internal sealed class ChatToolProgressViewModel : ObservableObject
     public ChatToolProgressViewModel(string name, string displayName, string status)
     {
         Name = name;
-        DisplayName = displayName;
+        _displayName = displayName;
         _status = status;
     }
 
     public string Name { get; }
-    public string DisplayName { get; }
-    public string Status { get => _status; set => SetProperty(ref _status, value); }
+    private readonly string _displayName;
+    public string DisplayName => Text.Render(_displayName);
+    public bool IsRunning { get; set; }
+    public string Status { get => Text.Render(_status); set => SetProperty(ref _status, UiTextCatalog.FromSafeMessage(value)); }
 }
 
-internal sealed class ChatSourceViewModel
+internal sealed class ChatSourceViewModel : ObservableObject
 {
     private readonly Func<AiAgentSource, Task> _open;
 
@@ -50,7 +52,8 @@ internal sealed class ChatSourceViewModel
 
     public AiAgentSource Source { get; }
     public string Title { get; }
-    public string Detail { get; }
+    private string _localizedDetail = string.Empty;
+    public string Detail { get => Text.Render(_localizedDetail); private set => _localizedDetail = value; }
     public AsyncCommand OpenCommand { get; }
     internal Task OpenAsync() => _open(Source);
 
@@ -60,15 +63,21 @@ internal sealed class ChatSourceViewModel
         if (!string.IsNullOrWhiteSpace(source.Anchor))
             details.Add("§ " + source.Anchor);
         if (!string.Equals(source.RequestedTitle, source.ResolvedTitle, StringComparison.Ordinal))
-            details.Add("请求：" + source.RequestedTitle);
+            details.Add(UiTextCatalog.Message("SourceRequestedTitle", source.RequestedTitle));
         if (source.LastModified is not null)
             details.Add(source.LastModified.Value.ToString("yyyy-MM-dd"));
-        return string.Join(" · ", details);
+        return UiTextCatalog.Join(" · ", details.ToArray());
     }
 }
 
 internal sealed class ChatTurnViewModel : ObservableObject
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in Sources) item.UseTextCatalog(Text);
+        foreach (var item in Tools) item.UseTextCatalog(Text);
+    }
+
     private static readonly TimeSpan RenderInterval = TimeSpan.FromMilliseconds(75);
     private readonly SafeMarkdownParser _parser;
     private readonly Func<AiAgentSource, Task> _openSource;
@@ -94,9 +103,9 @@ internal sealed class ChatTurnViewModel : ObservableObject
         _runState = MapRunState(model.Status);
         _statusMessage = StatusFor(model.Status);
         foreach (var source in model.Sources)
-            Sources.Add(new ChatSourceViewModel(source, openSource));
+            Sources.Add(new ChatSourceViewModel(source, openSource).WithText(Text));
         foreach (var call in model.ToolTrace)
-            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)));
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)).WithText(Text));
     }
 
     public ChatConversationTurn Model { get; private set; }
@@ -116,10 +125,10 @@ internal sealed class ChatTurnViewModel : ObservableObject
             OnPropertyChanged(nameof(ActivityTitle));
         }
     }
-    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
+    public string StatusMessage { get => Text.Render(_statusMessage); private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)); }
     public string UsageText
     {
-        get => _usageText;
+        get => Text.Render(_usageText);
         private set
         {
             if (SetProperty(ref _usageText, value))
@@ -151,29 +160,32 @@ internal sealed class ChatTurnViewModel : ObservableObject
     public bool IsToolTraceVisible => HasTools && !IsAnswering;
     public bool IsTerminalStatusVisible => !IsAnswering;
     public bool IsAttentionStatusVisible => !IsAnswering && Model.Status != ChatConversationTurnStatus.Completed;
-    public string ActivityTitle => HasAnswer
-        ? "正在生成回答"
-        : HasTools ? "正在查阅本地 Wiki" : "正在分析问题";
+    public string ActivityTitle => Text.Render(HasAnswer
+        ? UiTextCatalog.Message("GeneratingAnswer")
+        : HasTools ? UiTextCatalog.Message("ReadingTheLocalWiki") : UiTextCatalog.Message("AnalyzingYourQuestion"));
 
     public void ApplyEvent(AiRunEvent value)
     {
         switch (value.Kind)
         {
             case AiRunEventKind.RunStarted:
-                StatusMessage = "模型已开始分析。";
+                StatusMessage = UiTextCatalog.Message("TheModelHasStartedAnalyzing");
                 break;
             case AiRunEventKind.ToolStarted:
                 Tools.Add(new ChatToolProgressViewModel(
-                    value.Name ?? "wiki_tool", DisplayToolName(value.Name), "正在执行…"));
+                    value.Name ?? "wiki_tool", DisplayToolName(value.Name), UiTextCatalog.Message("Running")) { IsRunning = true }.WithText(Text));
                 RaiseToolProperties();
                 break;
             case AiRunEventKind.ToolFinished:
-                var item = Tools.LastOrDefault(tool => tool.Name == value.Name && tool.Status == "正在执行…");
+                var item = Tools.LastOrDefault(tool => tool.Name == value.Name && tool.IsRunning);
                 if (item is null)
                     Tools.Add(new ChatToolProgressViewModel(
-                        value.Name ?? "wiki_tool", DisplayToolName(value.Name), DisplayToolStatus(value.Status)));
+                        value.Name ?? "wiki_tool", DisplayToolName(value.Name), DisplayToolStatus(value.Status)).WithText(Text));
                 else
+                {
+                    item.IsRunning = false;
                     item.Status = DisplayToolStatus(value.Status);
+                }
                 RaiseToolProperties();
                 break;
             case AiRunEventKind.AnswerDelta:
@@ -191,10 +203,10 @@ internal sealed class ChatTurnViewModel : ObservableObject
         AnswerDocument = _parser.Parse(answer.Markdown);
         Sources.Clear();
         foreach (var source in answer.Sources)
-            Sources.Add(new ChatSourceViewModel(source, _openSource));
+            Sources.Add(new ChatSourceViewModel(source, _openSource).WithText(Text));
         Tools.Clear();
         foreach (var call in answer.ToolTrace)
-            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)));
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)).WithText(Text));
         RaiseToolProperties();
         OnPropertyChanged(nameof(HasSources));
         UsageText = ChatViewModel.FormatTokenSpend(answer.Usage);
@@ -212,8 +224,8 @@ internal sealed class ChatTurnViewModel : ObservableObject
         };
         RunState = ChatRunState.Completed;
         StatusMessage = status == ChatConversationTurnStatus.Completed
-            ? "回答完成。"
-            : "本地证据不足，请尝试更明确的问题。";
+            ? UiTextCatalog.Message("AnswerComplete")
+            : UiTextCatalog.Message("NotEnoughLocalEvidenceTryAMoreSpecific");
     }
 
     public void FinishNonSuccess(ChatConversationTurnStatus status, string message, DateTimeOffset now)
@@ -293,31 +305,36 @@ internal sealed class ChatTurnViewModel : ObservableObject
 
     private static string StatusFor(ChatConversationTurnStatus status) => status switch
     {
-        ChatConversationTurnStatus.Completed => "回答完成。",
-        ChatConversationTurnStatus.InsufficientEvidence => "本地证据不足。",
-        ChatConversationTurnStatus.Cancelled => "AI 回答已取消。",
-        ChatConversationTurnStatus.Interrupted => "上次回答中断。",
-        ChatConversationTurnStatus.Failed => "AI 回答失败。",
-        _ => "正在查询本地 Wiki…",
+        ChatConversationTurnStatus.Completed => UiTextCatalog.Message("AnswerComplete"),
+        ChatConversationTurnStatus.InsufficientEvidence => UiTextCatalog.Message("NotEnoughLocalEvidence"),
+        ChatConversationTurnStatus.Cancelled => UiTextCatalog.Message("AIAnswerCancelled"),
+        ChatConversationTurnStatus.Interrupted => UiTextCatalog.Message("ThePreviousAnswerWasInterrupted"),
+        ChatConversationTurnStatus.Failed => UiTextCatalog.Message("AIAnswerFailed"),
+        _ => UiTextCatalog.Message("SearchingTheLocalWiki"),
     };
 
     private static string DisplayToolName(string? name) => name switch
     {
-        "search_wiki" => "搜索 Wiki",
-        "read_wiki" => "读取页面",
-        _ => "Wiki 工具",
+        "search_wiki" => UiTextCatalog.Message("SearchWiki"),
+        "read_wiki" => UiTextCatalog.Message("ReadPage"),
+        _ => UiTextCatalog.Message("WikiTool"),
     };
 
     private static string DisplayToolStatus(string? status) => status switch
     {
-        "succeeded" => "完成",
-        "not_found" => "未找到",
-        _ => "失败",
+        "succeeded" => UiTextCatalog.Message("Complete"),
+        "not_found" => UiTextCatalog.Message("NotFound"),
+        _ => UiTextCatalog.Message("Failed"),
     };
 }
 
 internal sealed class ChatViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in Turns) item.UseTextCatalog(Text);
+    }
+
     internal const int HistoryCharacterBudget = 24_000;
     private const string HistoryTruncationMarker = "\n\n[较早回答已在本地截断]";
     private readonly SafeMarkdownParser _markdownParser;
@@ -329,7 +346,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     private CancellationTokenSource? _answerCancellation;
     private ChatConversation? _conversation;
     private string _question = string.Empty;
-    private string _statusMessage = "AI Runtime 正在启动。";
+    private string _statusMessage = UiTextCatalog.Message("AIIsStarting");
     private ChatAvailabilityState _availability = ChatAvailabilityState.Starting;
     private bool _disposed;
 
@@ -358,12 +375,12 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         get => _question;
         set { if (SetProperty(ref _question, value)) RefreshCommands(); }
     }
-    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
+    public string StatusMessage { get => Text.Render(_statusMessage); private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)); }
     public bool IsEmpty => Turns.Count == 0;
     public bool IsAnswering => Turns.LastOrDefault()?.IsAnswering == true;
     public bool IsSendVisible => !IsAnswering;
     public bool IsStopVisible => IsAnswering;
-    public string ComposerPlaceholder => IsAnswering ? "AI 正在回答…" : "向 AI 提问…";
+    public string ComposerPlaceholder => Text.Render(IsAnswering ? UiTextCatalog.Message("AIIsAnswering") : UiTextCatalog.Message("AskAI"));
     public bool CanEditQuestion => !IsAnswering;
     public bool IsQuestionReadOnly => !CanEditQuestion;
     public bool CanSend => _availability == ChatAvailabilityState.Ready
@@ -374,7 +391,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     public bool IsAiUnavailable => _availability is ChatAvailabilityState.Disabled or ChatAvailabilityState.Failed;
     public bool IsAvailabilityStatusVisible => _availability != ChatAvailabilityState.Ready && !IsAnswering;
     public bool IsFavorite => _conversation?.IsFavorite == true;
-    public string FavoriteActionText => IsFavorite ? "取消收藏整段对话" : "收藏整段对话";
+    public string FavoriteActionText => Text.Render(IsFavorite ? UiTextCatalog.Message("UnfavoriteThisConversation") : UiTextCatalog.Message("FavoriteThisConversation"));
     public bool CanFavorite => _conversation is not null && !IsAnswering;
     public bool CanStartNewConversation => !IsAnswering;
     public Guid? CurrentConversationId => _conversation?.Id;
@@ -384,7 +401,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     public SafeMarkdownDocument AnswerDocument => Turns.LastOrDefault()?.AnswerDocument ?? SafeMarkdownDocument.Empty;
     public ObservableCollection<ChatToolProgressViewModel> Tools => Turns.LastOrDefault()?.Tools ?? [];
     public ObservableCollection<ChatSourceViewModel> Sources => Turns.LastOrDefault()?.Sources ?? [];
-    public string UsageText => Turns.LastOrDefault()?.UsageText ?? string.Empty;
+    public string UsageText => Text.Render(Turns.LastOrDefault()?.UsageText ?? string.Empty);
     public ChatRunState RunState => Turns.LastOrDefault()?.RunState ?? (IsEmpty ? ChatRunState.Empty : ChatRunState.Ready);
     public bool HasAnswer => Turns.LastOrDefault()?.HasAnswer == true;
     public bool IsThinking => Turns.LastOrDefault()?.IsThinking == true;
@@ -416,7 +433,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         _runtimeOwner?.Dispose();
         _runtimeOwner = null;
         _availability = ChatAvailabilityState.Stopped;
-        StatusMessage = "AI Runtime 不可用；离线 Wiki 仍可使用。";
+        StatusMessage = UiTextCatalog.Message("AIIsUnavailableTheOfflineWikiIsStill");
         RefreshProperties();
     }
 
@@ -428,9 +445,9 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         _conversation = conversation;
         Turns.Clear();
         foreach (var turn in conversation.Turns)
-            Turns.Add(new ChatTurnViewModel(turn, _markdownParser, _openSource));
+            Turns.Add(new ChatTurnViewModel(turn, _markdownParser, _openSource).WithText(Text));
         Question = string.Empty;
-        StatusMessage = "已打开本地对话。";
+        StatusMessage = UiTextCatalog.Message("LocalConversationOpened");
         RaiseConversationProperties();
         ConversationChanged?.Invoke(conversation.Id);
         return true;
@@ -442,7 +459,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             return;
         _conversation = null;
         Turns.Clear();
-        StatusMessage = "已开始新对话。";
+        StatusMessage = UiTextCatalog.Message("NewConversationStarted");
         RaiseConversationProperties();
         ConversationChanged?.Invoke(null);
     }
@@ -470,7 +487,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             return;
         if (!runtime.TryReserveAnswer())
         {
-            StatusMessage = "AI 正在另一个窗口回答；草稿已保留。";
+            StatusMessage = UiTextCatalog.Message("AIIsAnsweringInAnotherWindowYourDraft");
             return;
         }
 
@@ -497,7 +514,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             Turns = conversation.Turns.Append(pending).ToArray(),
         };
         _conversation = conversation;
-        var turnViewModel = new ChatTurnViewModel(pending, _markdownParser, _openSource);
+        var turnViewModel = new ChatTurnViewModel(pending, _markdownParser, _openSource).WithText(Text);
         Turns.Add(turnViewModel);
         Question = string.Empty;
         RaiseConversationProperties();
@@ -505,7 +522,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
 
         _answerCancellation = new CancellationTokenSource();
         var current = _answerCancellation;
-        StatusMessage = "正在查询本地 Wiki…";
+        StatusMessage = UiTextCatalog.Message("SearchingTheLocalWiki");
         try
         {
             var answer = await runtime.AnswerAsync(
@@ -519,14 +536,14 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         catch (OperationCanceledException)
         {
             turnViewModel.FinishNonSuccess(
-                ChatConversationTurnStatus.Cancelled, "AI 回答已取消。", DateTimeOffset.Now);
+                ChatConversationTurnStatus.Cancelled, UiTextCatalog.Message("AIAnswerCancelled"), DateTimeOffset.Now);
             StatusMessage = turnViewModel.StatusMessage;
         }
         catch (AiRuntimeException exception)
         {
             turnViewModel.FinishNonSuccess(
                 ChatConversationTurnStatus.Failed,
-                exception.Message + " 离线 Wiki 仍可使用。",
+                UiTextCatalog.Join("", UiTextCatalog.FromSafeMessage(exception.Message), UiTextCatalog.Message("TheOfflineWikiIsStillAvailable")),
                 DateTimeOffset.Now);
             StatusMessage = turnViewModel.StatusMessage;
         }
@@ -534,7 +551,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         {
             turnViewModel.FinishNonSuccess(
                 ChatConversationTurnStatus.Failed,
-                "AI 回答失败；离线 Wiki 仍可使用。",
+                UiTextCatalog.Message("AIAnswerFailedTheOfflineWikiIsStill"),
                 DateTimeOffset.Now);
             StatusMessage = turnViewModel.StatusMessage;
         }
@@ -566,10 +583,10 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     {
         if (_runtime is null || !CanRetry)
             return;
-        StatusMessage = "正在重新启动 AI Runtime…";
+        StatusMessage = UiTextCatalog.Message("RestartingAI");
         try { await _runtime.RetryAsync(CancellationToken.None); }
-        catch (OperationCanceledException) { StatusMessage = "重试 AI 已取消。"; }
-        catch { StatusMessage = "AI Runtime 启动失败；离线 Wiki 仍可使用。"; }
+        catch (OperationCanceledException) { StatusMessage = UiTextCatalog.Message("AIRetryCancelled"); }
+        catch { StatusMessage = UiTextCatalog.Message("AIFailedToStartTheOfflineWikiIs"); }
     }
 
     internal async Task ToggleFavoriteAsync()
@@ -584,7 +601,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         try
         {
             await _store.SaveAsync(_conversation);
-            StatusMessage = _conversation.IsFavorite ? "已收藏整段对话。" : "已取消收藏；对话仍保留在历史中。";
+            StatusMessage = _conversation.IsFavorite ? UiTextCatalog.Message("ConversationFavorited") : UiTextCatalog.Message("RemovedFromFavoritesTheConversationRemainsInHistory");
             ConversationChanged?.Invoke(_conversation.Id);
         }
         catch (ChatConversationStoreException exception)
@@ -595,7 +612,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         catch
         {
             _conversation = _conversation with { IsFavorite = !_conversation.IsFavorite };
-            StatusMessage = "无法更新对话收藏。";
+            StatusMessage = UiTextCatalog.Message("CouldNotUpdateTheConversationFavorite");
         }
         RaiseConversationProperties();
     }
@@ -640,9 +657,9 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     internal static string FormatTokenSpend(AiAgentUsage usage)
     {
         var cache = usage.CachedInputTokens > 0
-            ? $"缓存 {usage.CachedInputTokens}，未缓存 {usage.InputTokens - usage.CachedInputTokens}"
-            : $"缓存未命中/不可用，未缓存 {usage.InputTokens}";
-        return $"输入 {usage.InputTokens}（{cache}） · 输出 {usage.OutputTokens} · 合计 {usage.TotalTokens} Token";
+            ? UiTextCatalog.Message("CachedUncached", usage.CachedInputTokens, usage.InputTokens - usage.CachedInputTokens)
+            : UiTextCatalog.Message("CacheMissUnavailableUncached", usage.InputTokens);
+        return UiTextCatalog.Message("InputOutputTotalTokens", usage.InputTokens, cache, usage.OutputTokens, usage.TotalTokens);
     }
 
     private static string TruncateAtParagraph(string value, int limit)
@@ -672,7 +689,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         if (_conversation is null)
             return;
         try { await _store.SaveAsync(_conversation); }
-        catch { StatusMessage = "当前对话仍可使用，但本地自动保存暂时不可用。"; }
+        catch { StatusMessage = UiTextCatalog.Message("YouCanKeepUsingThisConversationButLocal"); }
     }
 
     private void SyncConversationFromTurns()

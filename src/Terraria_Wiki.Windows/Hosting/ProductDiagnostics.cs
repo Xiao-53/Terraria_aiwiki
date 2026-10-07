@@ -1,6 +1,7 @@
 using System.Text;
 using System.Text.Json;
 using Terraria_Wiki.Windows.Updates;
+using Terraria_Wiki.Core.Operations;
 
 namespace Terraria_Wiki.Windows.Hosting;
 
@@ -89,6 +90,57 @@ internal sealed class ProductDiagnostics
     public string? LogDirectory { get; }
     internal string? LogPath => LogDirectory is null ? null : Path.Combine(LogDirectory, "application.log");
     internal string? PreviousLogPath => LogPath is null ? null : LogPath + ".previous";
+    internal string? WikiLogPath => LogDirectory is null ? null : Path.Combine(LogDirectory, "wiki-sync.log");
+    private static readonly HashSet<string> AllowedWikiStages = new(StringComparer.Ordinal)
+    {
+        "download-start", "download-redirects-start", "download-page-list-start", "update-start", "redirect-list", "page-list", "page-download", "page-skipped",
+        "resource-downloaded", "resource-skipped", "http-retry", "download-item-missing", "download-item-failed",
+        "sync-discovery", "sync-full-scan", "sync-capability-unavailable", "sync-pages-start", "sync-page-failed",
+        "sync-delete", "sync-index-maintenance", "sync-page-cursor-committed", "sync-orphan-media-retained",
+        "sync-media-start", "sync-media-failed", "resource-source-resolved",
+        "viewer-rebind", "viewer-rebind-navigation", "viewer-rebind-quick"
+    };
+
+    internal void WriteWikiOperation(Guid operationId, int? wikiId, string operationEvent,
+        WikiProgress? progress = null, Exception? error = null, string? result = null)
+    {
+        if (operationEvent is not ("started" or "progress" or "completed" or "failed" or "cancelled")) return;
+        // Deliberately record structured exception codes, never Message/ToString or
+        // stack traces: those can contain user paths, response bodies or credentials.
+        var errors = new List<object>();
+        for (var current = error ?? progress?.Error; current is not null && errors.Count < 4; current = current.InnerException)
+            errors.Add(new
+            {
+                type = current.GetType().Name, hResult = current.HResult,
+                httpStatus = current is HttpRequestException http ? (int?)http.StatusCode : null,
+                sqliteResult = current is SQLite.SQLiteException sqlite ? sqlite.Result.ToString() : null,
+                socketError = current is System.Net.Sockets.SocketException socket ? socket.SocketErrorCode.ToString() : null
+            });
+        WriteEntry(new
+        {
+            timestampUtc = DateTimeOffset.UtcNow, applicationVersion = ProductMetadata.Version,
+            operationId, wikiId, operationEvent, stage = progress is not null && AllowedWikiStages.Contains(progress.Code) ? progress.Code : null,
+            current = progress?.Current, total = progress?.Total,
+            detail = progress is not null && AllowedWikiStages.Contains(progress.Code) ? SafeWikiDetail(progress.Detail) : null,
+            result = SafeWikiDetail(result), errors
+        }, WikiLogPath);
+    }
+
+    private static string? SafeWikiDetail(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value)) return null;
+        if (value.Contains('<') || value.Contains('\\') ||
+            value.Contains("bearer", StringComparison.OrdinalIgnoreCase) ||
+            value.Contains("api_key", StringComparison.OrdinalIgnoreCase)) return null;
+        if (value.Length >= 3 && char.IsAsciiLetter(value[0]) && value[1] == ':' && value[2] == '/') return null;
+        if (value.Contains("://", StringComparison.Ordinal) && Uri.TryCreate(value, UriKind.Absolute, out var uri))
+        {
+            if (uri.Scheme is not ("http" or "https")) return null;
+            value = uri.GetLeftPart(UriPartial.Path); // No URL query, user info or fragment.
+            if (!string.IsNullOrEmpty(uri.UserInfo)) return null;
+        }
+        return new string(value.Where(character => !char.IsControl(character)).Take(300).ToArray());
+    }
 
     internal static ProductDiagnostics CreateDefault()
     {
@@ -173,14 +225,16 @@ internal sealed class ProductDiagnostics
 
     internal void WriteInvestigation(StartupInvestigationEntry entry) => WriteEntry(entry);
 
-    private void WriteEntry<T>(T entry)
+    private void WriteEntry<T>(T entry) => WriteEntry(entry, LogPath);
+
+    private void WriteEntry<T>(T entry, string? logPath)
     {
-        var logPath = LogPath;
         if (logPath is null)
             return;
 
         var line = JsonSerializer.Serialize(entry, JsonOptions) + Environment.NewLine;
         var bytes = Encoding.UTF8.GetByteCount(line);
+        if (bytes > _maxLogBytes) return;
 
         try
         {
@@ -188,7 +242,7 @@ internal sealed class ProductDiagnostics
             {
                 Directory.CreateDirectory(LogDirectory!);
                 if (File.Exists(logPath) && new FileInfo(logPath).Length + bytes > _maxLogBytes)
-                    File.Move(logPath, PreviousLogPath!, overwrite: true);
+                    File.Move(logPath, logPath + ".previous", overwrite: true);
                 File.AppendAllText(logPath, line, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
             }
         }

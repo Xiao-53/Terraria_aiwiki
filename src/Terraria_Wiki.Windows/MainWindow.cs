@@ -1,4 +1,5 @@
 using System.Diagnostics;
+using Terraria_Wiki.Core.Operations;
 using System.Runtime.InteropServices;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -61,6 +62,7 @@ internal sealed partial class MainWindow : Window
     private readonly ShellView _shellView;
     private readonly IChatConversationStore _conversationStore;
     private readonly HostSettingsStore _hostSettingsStore;
+    private readonly UiTextCatalog _uiText = new();
     private readonly IProductUpdateService _productUpdateService;
     private readonly ProductDiagnostics _diagnostics;
     private WindowsClientRuntime? _runtime;
@@ -68,6 +70,9 @@ internal sealed partial class MainWindow : Window
     private QuickAccessWindow? _quickWindow;
     private GlobalHotkeys? _globalHotkeys;
     private TrayIcon? _trayIcon;
+    private NativeMenuItem? _trayMainItem;
+    private NativeMenuItem? _traySettingsItem;
+    private NativeMenuItem? _trayExitItem;
     private QuickAccessPreferences _quickPreferences = new();
     private bool _quickRuntimeReady;
     private bool _forceExit;
@@ -96,6 +101,8 @@ internal sealed partial class MainWindow : Window
 
         using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.MainWindowXaml))
             AvaloniaXamlLoader.Load(this);
+        _uiText.Attach(Resources);
+        _uiText.LanguageChanged += OnUiLanguageChanged;
         _shellView = this.FindControl<ShellView>("ShellHost")!;
         _productUpdateService = new VelopackProductUpdateService();
         using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ProductDiagnosticsInitialization))
@@ -139,6 +146,7 @@ internal sealed partial class MainWindow : Window
                 _hostSettingsStore.LoadQuickAccessAsync,
                 SaveQuickAccessAsync,
                 suspended => _globalHotkeys?.SetSuspendedAsync(suspended) ?? Task.FromResult(true));
+            _shellViewModel.UseTextCatalog(_uiText);
         }
         using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.ShellDataContext))
             _shellView.DataContext = _shellViewModel;
@@ -191,13 +199,13 @@ internal sealed partial class MainWindow : Window
             using var trayTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.TrayInitialization);
             using var iconStream = AssetLoader.Open(new Uri("avares://Terraria_Wiki.Windows/Assets/appicon.ico"));
             var menu = new NativeMenu();
-            var mainItem = new NativeMenuItem("打开主窗口");
+            var mainItem = _trayMainItem = new NativeMenuItem(_uiText.Get("OpenMainWindow"));
             mainItem.Click += (_, _) => ShowMain();
             var quickItem = new NativeMenuItem("Quick Ask");
             quickItem.Click += (_, _) => ShowQuick();
-            var settingsItem = new NativeMenuItem("设置");
+            var settingsItem = _traySettingsItem = new NativeMenuItem(_uiText.Get("Settings"));
             settingsItem.Click += (_, _) => { ShowMain(); _shellViewModel.NavigateSettings(); };
-            var exitItem = new NativeMenuItem("退出");
+            var exitItem = _trayExitItem = new NativeMenuItem(_uiText.Get("Exit"));
             exitItem.Click += async (_, _) => await ExitAsync();
             menu.Items.Add(mainItem);
             menu.Items.Add(quickItem);
@@ -226,7 +234,7 @@ internal sealed partial class MainWindow : Window
             using var hotkeyTiming = WindowsStartupInvestigation.Measure(StartupInvestigationPhase.HotkeyInitialization);
             _globalHotkeys = new GlobalHotkeys(() => ShowQuick(QuickAccessShowIntent.GlobalHotkey), HideQuick);
             if (!await _globalHotkeys.TrySetAsync(_quickPreferences.ShowHotkey, _quickPreferences.HideHotkey))
-                _shellViewModel.SetStartupStatus("Quick Ask 快捷键不可用；可通过托盘打开。");
+                _shellViewModel.SetStartupStatus(UiTextCatalog.Message("QuickAskShortcutsAreUnavailableOpenItFrom"));
         }
         catch
         {
@@ -280,7 +288,7 @@ internal sealed partial class MainWindow : Window
             if (_quickWindow is null)
             {
                 var quick = new QuickAccessWindow(_conversationStore,
-                    _diagnostics, clock);
+                    _diagnostics, clock, _uiText);
                 quick.HiddenByUser += OnQuickHidden;
                 PlaceQuickWindow(quick, restoreSavedBounds: true);
                 quick.RequestedThemeVariant = RequestedThemeVariant;
@@ -298,7 +306,7 @@ internal sealed partial class MainWindow : Window
         }
         catch
         {
-            _shellViewModel.SetStartupStatus("Quick Ask 无法打开；主窗口仍可使用。", isError: true);
+            _shellViewModel.SetStartupStatus(UiTextCatalog.Message("CouldNotOpenQuickAskTheMainWindow"), isError: true);
         }
     }
 
@@ -367,6 +375,13 @@ internal sealed partial class MainWindow : Window
         // Avalonia raises Opened again after Hide/Show. Restoring from the tray must
         // reuse the current runtime, not reacquire our own single-instance lock.
         Opened -= OnOpened;
+        try
+        {
+            var preferences = await _hostSettingsStore.LoadPreferencesAsync(_lifetime.Token);
+            _uiText.SetLanguage(preferences?.Language ?? ApplicationPreferences.DefaultLanguage);
+        }
+        catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { return; }
+        catch { } // Existing startup recovery reports invalid settings; do not overwrite them.
         ApplyNativeWindowTheme();
         var opened = ElapsedFromProcessStart();
         RecordStartupStage(
@@ -399,25 +414,34 @@ internal sealed partial class MainWindow : Window
         _shellViewModel.RefreshAfterWikiDataChange(args.RequiresViewerRebind);
         if (!args.RequiresViewerRebind || _runtime is null)
             return;
+        var operationId = Guid.NewGuid();
+        var stage = "viewer-rebind";
+        _diagnostics.WriteWikiOperation(operationId, null, "started", new WikiProgress(stage));
         try
         {
+            stage = "viewer-rebind-navigation";
+            _diagnostics.WriteWikiOperation(operationId, null, "progress", new WikiProgress(stage));
             await RebindViewerAsync(_runtime, _lifetime.Token);
+            stage = "viewer-rebind-quick";
             if (_quickWindow is { } quick) await quick.RebindAsync(resetContent: true);
+            _diagnostics.WriteWikiOperation(operationId, null, "completed", new WikiProgress(stage));
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested)
         {
         }
-        catch
+        catch (Exception exception)
         {
+            _diagnostics.WriteWikiOperation(operationId, null, "failed", new WikiProgress(stage), exception,
+                result: _viewerSession?.LastBridgeErrorCode);
             _shellViewModel.SetStartupStatus(
-                "Wiki 数据已改变，但 Reader 暂时无法恢复；离线数据管理仍可使用。",
+                UiTextCatalog.Message("WikiDataChangedButTheReaderCouldNot"),
                 isError: true);
         }
     }
 
     private async Task StartAsync()
     {
-        _shellViewModel.SetStartupStatus("正在确认 WebView2、Wiki 数据目录和本地数据库…");
+        _shellViewModel.SetStartupStatus(UiTextCatalog.Message("CheckingWebViewTheWikiDataDirectoryAndLocal"));
         try
         {
             WindowsClientRuntime runtime;
@@ -429,6 +453,7 @@ internal sealed partial class MainWindow : Window
                     _lifetime.Token,
                     _hostSettingsStore);
             _runtime = runtime;
+            _uiText.SetLanguage(runtime.Preferences.Language);
             _shellViewModel.SetWebView2Status(runtime.WebView2);
             _diagnostics.Write(ProductDiagnosticEvent.RuntimeReady, runtime.WebView2.Version);
             _timings.RuntimeReadyMilliseconds = ElapsedFromProcessStart();
@@ -498,7 +523,7 @@ internal sealed partial class MainWindow : Window
                 return;
             }
 
-            _shellViewModel.Reader.SetStatus("正在载入本地 Wiki 首页…");
+            _shellViewModel.Reader.SetStatus(UiTextCatalog.Message("LoadingTheLocalWikiHomePage"));
             var navigationTimer = Stopwatch.StartNew();
             try
             {
@@ -540,7 +565,7 @@ internal sealed partial class MainWindow : Window
                 await _shellViewModel.Reader.ApplyPageIdentityAsync(currentPage);
             _shellViewModel.ApplyStartupPage(runtime.Preferences.StartupPage);
             _shellViewModel.SetStartupStatus(
-                $"本地 Wiki 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
+                UiTextCatalog.Message("LocalWikiReadyWebView", runtime.WebView2.Version ?? "available"));
             StartHiddenWebViewPoc(runtime);
 
             if (_smokeLogPath is not null)
@@ -611,13 +636,13 @@ internal sealed partial class MainWindow : Window
         var isDark = IsDarkTheme();
         var darkMode = isDark ? 1 : 0;
         var captionColor = isDark
-            ? ToColorRef(0x22, 0x26, 0x1F)
+            ? NativeThemeColor("TerrariaDarkNavigationColor")
             : ToColorRef(0xFF, 0xFF, 0xFF);
         var borderColor = isDark
-            ? ToColorRef(0x34, 0x3A, 0x32)
+            ? NativeThemeColor("TerrariaDarkStrokeColor")
             : ToColorRef(0xDC, 0xE5, 0xD7);
         var textColor = isDark
-            ? ToColorRef(0xFF, 0xFF, 0xFF)
+            ? NativeThemeColor("TerrariaDarkTextColor")
             : ToColorRef(0x00, 0x00, 0x00);
 
         try
@@ -660,6 +685,11 @@ internal sealed partial class MainWindow : Window
         }
     }
 
+    private int NativeThemeColor(string key) =>
+        this.TryFindResource(key, out var resource) && resource is Avalonia.Media.Color color
+            ? ToColorRef(color.R, color.G, color.B)
+            : -1; // DWM_COLOR_DEFAULT if theme resources are unavailable.
+
     private static int ToColorRef(byte red, byte green, byte blue) =>
         red | (green << 8) | (blue << 16);
 
@@ -670,14 +700,14 @@ internal sealed partial class MainWindow : Window
             WindowsStartupStage.ViewerNavigationCompleted,
             _timings.ViewerNavigationCompletedMilliseconds,
             Math.Max(0, _timings.ViewerNavigationCompletedMilliseconds - _viewerNavigationStartedMilliseconds));
-        _shellViewModel.Reader.SetStatus("正在准备本地 Wiki 内容…");
+        _shellViewModel.Reader.SetStatus(UiTextCatalog.Message("PreparingLocalWikiContent"));
     }
 
     private void OnViewerSessionStatusChanged(object? sender, string message) =>
         Dispatcher.UIThread.Post(() => _shellViewModel.Reader.SetStatus(message));
 
     private void OnViewerProtocolError(object? sender, ViewerProtocolError error) =>
-        Dispatcher.UIThread.Post(() => _shellViewModel.Reader.SetStatus($"Viewer：{error.Message}"));
+        Dispatcher.UIThread.Post(() => _shellViewModel.Reader.SetStatus(UiTextCatalog.Message("ViewerError", error.Message)));
 
     private void OnViewerReadyChanged(object? sender, bool isReady) =>
         Dispatcher.UIThread.Post(() => _shellViewModel.Reader.SetTransportReady(isReady));
@@ -688,9 +718,9 @@ internal sealed partial class MainWindow : Window
             _shellViewModel.Reader.SetStatus(
                 status.Error is null
                     ? status.Message ?? status.State.ToString()
-                    : "Viewer 暂时不可用。");
+                    : UiTextCatalog.Message("ViewerTemporarilyUnavailable"));
             if (status.State == ViewerConsumerState.Failed)
-                _shellViewModel.SetStartupStatus("Viewer 启动失败；处理后重试。", isError: true);
+                _shellViewModel.SetStartupStatus(UiTextCatalog.Message("ViewerFailedToStartResolveTheIssueAnd"), isError: true);
         });
 
     private void ShowStartupError(Exception exception)
@@ -698,7 +728,7 @@ internal sealed partial class MainWindow : Window
         var presentation = ClassifyStartupFailure(exception);
         _diagnostics.Write(ProductDiagnosticEvent.StartupFailed, GetSafeErrorCode(exception));
         _shellViewModel.SetStartupStatus(
-            presentation.Message + " 处理后点击“重试”。",
+            UiTextCatalog.Join("", UiTextCatalog.FromSafeMessage(presentation.Message), UiTextCatalog.Message("ResolveTheIssueThenChooseRetry")),
             isError: true,
             presentation.Recovery);
     }
@@ -707,41 +737,41 @@ internal sealed partial class MainWindow : Window
     {
         WindowsClientStartupException { Code: "webview2-missing" } => new(
             StartupRecoveryKind.InstallWebView2,
-            "未检测到 Microsoft Edge WebView2 Runtime；请从 Microsoft 官方页面安装或修复 Evergreen Runtime。"),
+            UiTextCatalog.Message("MicrosoftEdgeWebViewRuntimeWasNotDetectedInstall")),
         DataRootResolutionException { Code: "data-root-required" } => new(
             StartupRecoveryKind.Retry,
-            "Wiki 数据目录当前不可用。请恢复默认数据目录后重试。"),
+            UiTextCatalog.Message("TheWikiDataDirectoryIsCurrentlyUnavailableRestore")),
         DataRootResolutionException { Code: "default-data-root-unavailable" } => new(
             StartupRecoveryKind.Retry,
-            "无法创建默认 Wiki 数据目录。请检查本机存储权限和可用空间。"),
+            UiTextCatalog.Message("CouldNotCreateTheDefaultWikiDataDirectory")),
         DataRootResolutionException => new(
             StartupRecoveryKind.Retry,
-            "Wiki 数据目录不可用。请恢复默认数据目录后重试。"),
+            UiTextCatalog.Message("TheWikiDataDirectoryIsUnavailableRestoreThe")),
         ApplicationUseCaseException { Code: "data-directory-conflict" } => new(
             StartupRecoveryKind.Retry,
-            "检测到旧目录与目标目录中同时存在 Wiki 数据；应用未修改任何一套数据。请清理冲突的旧目录后重试。"),
+            UiTextCatalog.Message("WikiDataExistsInBothTheOldAnd")),
         ApplicationUseCaseException { Code: "database-family-conflict" } => new(
             StartupRecoveryKind.Retry,
-            "检测到相互冲突的 Wiki 数据库文件；应用未修改这些文件。请清理冲突文件后重试。"),
+            UiTextCatalog.Message("ConflictingWikiDatabaseFilesWereDetectedTheyWere")),
         ApplicationUseCaseException => new(
             StartupRecoveryKind.Retry,
-            "Wiki 数据库无法初始化。请恢复默认数据目录中的数据库后重试。"),
+            UiTextCatalog.Message("CouldNotInitializeTheWikiDatabaseRestoreThe")),
         WindowsClientStartupException { Code: "viewer-assets-missing" } => new(
             StartupRecoveryKind.Retry,
-            "本地 Viewer 静态资源缺失，请修复应用文件。"),
+            UiTextCatalog.Message("LocalViewerAssetsAreMissingRepairTheApp")),
         WindowsClientStartupException { Code: "viewer-bind-failed" } => new(
             StartupRecoveryKind.Retry,
-            "本地 Viewer 无法绑定 loopback 端口。"),
+            UiTextCatalog.Message("TheLocalViewerCouldNotBindALoopback")),
         WindowsClientStartupException { Code: "viewer-navigation-failed" } => new(
             StartupRecoveryKind.Retry,
-            "本地 Viewer 无法开始页面导航。"),
+            UiTextCatalog.Message("TheLocalViewerCouldNotStartPageNavigation")),
         WindowsClientStartupException { Code: "viewer-dom-ready-timeout" } => new(
             StartupRecoveryKind.Retry,
-            "本地 Viewer 页面未能在时限内就绪。"),
+            UiTextCatalog.Message("TheLocalViewerPageDidNotBecomeReady")),
         WindowsClientStartupException startup => new(StartupRecoveryKind.Retry, startup.Message),
         HostMountException mount => new(StartupRecoveryKind.Retry, mount.Message),
         HostSettingsException settings => new(StartupRecoveryKind.Retry, settings.Message),
-        _ => new(StartupRecoveryKind.Retry, "应用启动失败。"),
+        _ => new(StartupRecoveryKind.Retry, UiTextCatalog.Message("AppStartupFailed")),
     };
 
     internal static WindowsClientStartupException WrapViewerServerFailure(Exception exception) => exception switch
@@ -859,7 +889,7 @@ internal sealed partial class MainWindow : Window
         catch (Exception exception)
         {
             _smokeResult = WindowsSmokeResult.Failure(GetSafeErrorCode(exception));
-            _shellViewModel.SetStartupStatus("Smoke 失败。", isError: true);
+            _shellViewModel.SetStartupStatus(UiTextCatalog.Message("SmokeFailed"), isError: true);
         }
         finally
         {
@@ -957,7 +987,7 @@ internal sealed partial class MainWindow : Window
         {
             if (_trayIcon is { IsVisible: true }) Hide();
             else
-                _shellViewModel.SetStartupStatus("托盘不可用，窗口已保留；请在设置中关闭“关闭到托盘”后退出。",
+                _shellViewModel.SetStartupStatus(UiTextCatalog.Message("TheTrayIsUnavailableSoThisWindowWas"),
                     isError: true, recovery: StartupRecoveryKind.None);
             return;
         }
@@ -989,7 +1019,7 @@ internal sealed partial class MainWindow : Window
         var closeTimer = Stopwatch.StartNew();
         _timings.CloseRequestedMilliseconds = ElapsedFromProcessStart();
         _lifetime.Cancel();
-        _shellViewModel.SetStartupStatus("正在关闭 AI、Viewer 和本地数据库…");
+        _shellViewModel.SetStartupStatus(UiTextCatalog.Message("ClosingAIViewerAndTheLocalDatabase"));
         _globalHotkeys?.Dispose();
         _globalHotkeys = null;
         _trayIcon?.Dispose();
@@ -1099,11 +1129,11 @@ internal sealed partial class MainWindow : Window
         cancellationToken.ThrowIfCancellationRequested();
         var files = await StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
         {
-            Title = "选择 Wiki 数据库",
+            Title = _uiText.Get("SelectWikiDatabase"),
             AllowMultiple = false,
             FileTypeFilter =
             [
-                new FilePickerFileType("SQLite 数据库") { Patterns = ["*.db"] },
+                new FilePickerFileType(_uiText.Get("SQLiteDatabase")) { Patterns = ["*.db"] },
             ],
         });
         cancellationToken.ThrowIfCancellationRequested();
@@ -1127,7 +1157,7 @@ internal sealed partial class MainWindow : Window
         {
             return new WindowsAiRuntimeStatus(
                 WindowsAiRuntimeState.Disabled,
-                "AI 配置已保存；Wiki 数据库恢复连接后即可启动 AI。",
+                UiTextCatalog.Message("AIConfigurationSavedAICanStartWhenThe"),
                 "data-root-required");
         }
         await runtime.RetryAiAsync(cancellationToken);
@@ -1195,12 +1225,12 @@ internal sealed partial class MainWindow : Window
         cancellationToken.ThrowIfCancellationRequested();
         var file = await StorageProvider.SaveFilePickerAsync(new FilePickerSaveOptions
         {
-            Title = "导出 Wiki 数据库",
+            Title = _uiText.Get("ExportWikiDatabase"),
             SuggestedFileName = SanitizeFileName(wiki.Title) + "-" + DateTime.Now.ToString("yyyyMMdd") + ".db",
             DefaultExtension = "db",
             FileTypeChoices =
             [
-                new FilePickerFileType("SQLite 数据库") { Patterns = ["*.db"] },
+                new FilePickerFileType(_uiText.Get("SQLiteDatabase")) { Patterns = ["*.db"] },
             ],
         });
         cancellationToken.ThrowIfCancellationRequested();
@@ -1226,6 +1256,7 @@ internal sealed partial class MainWindow : Window
 
     private async Task ApplyPreferencesAsync(ApplicationPreferences preferences)
     {
+        _uiText.SetLanguage(preferences.Language);
         var runtime = _runtime;
         if (runtime is null)
             return;
@@ -1261,6 +1292,13 @@ internal sealed partial class MainWindow : Window
         }
     }
 
+    private void OnUiLanguageChanged(object? sender, EventArgs args)
+    {
+        if (_trayMainItem is { } main) main.Header = _uiText.Get("OpenMainWindow");
+        if (_traySettingsItem is { } settings) settings.Header = _uiText.Get("Settings");
+        if (_trayExitItem is { } exit) exit.Header = _uiText.Get("Exit");
+    }
+
     private async Task RebindViewerAsync(
         WindowsClientRuntime runtime,
         CancellationToken cancellationToken)
@@ -1270,7 +1308,7 @@ internal sealed partial class MainWindow : Window
         if (!active.IsPageDownloaded)
         {
             _shellViewModel.Reader.Detach();
-            _shellViewModel.Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
+            _shellViewModel.Reader.SetStatus(UiTextCatalog.Message("ThisWikiHasNoDownloadedPagesDownloadOr2"));
             _shellViewModel.CloseReader();
             return;
         }
@@ -1288,7 +1326,7 @@ internal sealed partial class MainWindow : Window
         if (session.CurrentPage is { } currentPage)
             await _shellViewModel.Reader.ApplyPageIdentityAsync(currentPage);
         _shellViewModel.SetStartupStatus(
-            $"{active.Title} 已就绪 · WebView2 {runtime.WebView2.Version ?? "available"}");
+            UiTextCatalog.Message("ReadyWebView", active.Title, runtime.WebView2.Version ?? "available"));
     }
 
     private async Task<WikiBookSnapshot> SwitchWikiAndRebindAsync(

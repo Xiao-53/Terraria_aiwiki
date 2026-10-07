@@ -7,7 +7,7 @@ using Terraria_Wiki.Windows.Viewer;
 
 namespace Terraria_Wiki.Windows.Presentation.Favorites;
 
-internal sealed class ChatFavoriteItemViewModel
+internal sealed class ChatFavoriteItemViewModel : ObservableObject
 {
     private readonly Func<ChatConversation, Task> _open;
     private readonly Func<ChatConversation, Task> _remove;
@@ -27,7 +27,7 @@ internal sealed class ChatFavoriteItemViewModel
     public ChatConversation Conversation { get; }
     public string Question => Conversation.Title;
     public string Preview => Conversation.Turns.LastOrDefault()?.Markdown ?? "";
-    public string TimeText => $"{Conversation.UpdatedAt.LocalDateTime:yyyy-MM-dd HH:mm} · {Conversation.Turns.Count} 轮";
+    public string TimeText => Text.Render(UiTextCatalog.Message("Turns", Conversation.UpdatedAt.LocalDateTime, Conversation.Turns.Count));
     public AsyncCommand OpenCommand { get; }
     public AsyncCommand RemoveCommand { get; }
     internal Task OpenAsync() => _open(Conversation);
@@ -62,6 +62,10 @@ internal sealed class WikiFavoriteItemViewModel
 
 internal sealed class FavoritesViewModel : ObservableObject
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in ChatFavorites) item.UseTextCatalog(Text);
+    }
     private readonly IChatConversationStore _conversationStore;
     private readonly Func<ChatConversation, Task> _openChat;
     private readonly Func<GlobalWikiFavoriteItem, Task> _openWiki;
@@ -70,7 +74,7 @@ internal sealed class FavoritesViewModel : ObservableObject
     private Task? _refreshTask;
     private bool _refreshRequested;
     private int _attachmentGeneration;
-    private string _statusMessage = "收藏会保存在本机。";
+    private string _statusMessage = UiTextCatalog.Message("FavoritesAreSavedOnThisComputer");
     private bool _isBusy;
 
     public FavoritesViewModel(
@@ -87,7 +91,7 @@ internal sealed class FavoritesViewModel : ObservableObject
     public ObservableCollection<ChatFavoriteItemViewModel> ChatFavorites { get; } = [];
     public ObservableCollection<WikiFavoriteItemViewModel> WikiFavorites { get; } = [];
     public event Action<Guid, bool>? ConversationFavoriteChanged;
-    public string StatusMessage { get => _statusMessage; private set => SetProperty(ref _statusMessage, value); }
+    public string StatusMessage { get => Text.Render(_statusMessage); private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)); }
     public bool IsBusy
     {
         get => _isBusy;
@@ -95,6 +99,10 @@ internal sealed class FavoritesViewModel : ObservableObject
     }
     public bool HasChatFavorites => ChatFavorites.Count > 0;
     public bool HasWikiFavorites => WikiFavorites.Count > 0;
+    public string ChatFavoriteCountText => FormatCount(ChatFavorites.Count);
+    public string WikiFavoriteCountText => FormatCount(WikiFavorites.Count);
+    private string FormatCount(int count) => Text.Render(count == 1
+        ? UiTextCatalog.Message("OneItem") : UiTextCatalog.Message("ItemCount", count));
     public bool IsEmpty => !HasChatFavorites && !HasWikiFavorites;
     public AsyncCommand RefreshCommand { get; }
 
@@ -153,13 +161,13 @@ internal sealed class FavoritesViewModel : ObservableObject
             var state = await library.SetFavoriteAsync(wikiId, pageTitle, favorite);
             await RefreshAsync();
             StatusMessage = favorite
-                ? $"已收藏 {wikiDisplayTitle} · {pageTitle}。"
-                : $"已取消收藏 {wikiDisplayTitle} · {pageTitle}。";
+                ? UiTextCatalog.Message("Favorited", wikiDisplayTitle, pageTitle)
+                : UiTextCatalog.Message("RemovedFromFavorites", wikiDisplayTitle, pageTitle);
             return new ReaderFavoriteUpdate(true, state);
         }
         catch
         {
-            StatusMessage = "无法更新 Wiki 收藏；现有收藏未被更改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotUpdateWikiFavoritesExistingFavoritesAre");
             return new ReaderFavoriteUpdate(false, IsFavorite: !favorite);
         }
     }
@@ -175,12 +183,12 @@ internal sealed class FavoritesViewModel : ObservableObject
             else
                 await _wikiLibrary.RemoveFavoriteAsync(title);
             await RefreshAsync();
-            StatusMessage = favorite ? $"已收藏 {title}。" : $"已取消收藏 {title}。";
+            StatusMessage = favorite ? UiTextCatalog.Message("Favorited2", title) : UiTextCatalog.Message("RemovedFromFavorites2", title);
             return favorite;
         }
         catch
         {
-            StatusMessage = "无法更新 Wiki 收藏。";
+            StatusMessage = UiTextCatalog.Message("CouldNotUpdateWikiFavorites");
             return !favorite;
         }
     }
@@ -242,7 +250,7 @@ internal sealed class FavoritesViewModel : ObservableObject
         {
             ChatFavorites.Clear();
             foreach (var item in conversations.Where(item => item.IsFavorite))
-                ChatFavorites.Add(new ChatFavoriteItemViewModel(item, _openChat, RemoveChatAsync));
+                ChatFavorites.Add(new ChatFavoriteItemViewModel(item, _openChat, RemoveChatAsync).WithText(Text));
         }
         if (!wikiFailed && wikiResult is not null)
         {
@@ -253,10 +261,10 @@ internal sealed class FavoritesViewModel : ObservableObject
 
         RaiseCollectionProperties();
         StatusMessage = chatFailed || wikiFailed
-            ? "部分收藏暂时不可用；已保留仍可读取的内容。"
+            ? UiTextCatalog.Message("SomeFavoritesAreTemporarilyUnavailableReadableItemsAre")
             : wikiResult?.Issues.Count > 0
-                ? $"{ChatFavorites.Count} 个对话 · {WikiFavorites.Count} 个 Wiki 页面 · {wikiResult.Issues.Count} 个 Wiki 暂不可用"
-                : IsEmpty ? "还没有收藏。" : $"{ChatFavorites.Count} 个对话 · {WikiFavorites.Count} 个 Wiki 页面";
+                ? UiTextCatalog.Message("ConversationsWikiPagesWikisUnavailable", ChatFavorites.Count, WikiFavorites.Count, wikiResult.Issues.Count)
+                : IsEmpty ? UiTextCatalog.Message("NoFavoritesYet") : UiTextCatalog.Message("ConversationsWikiPages", ChatFavorites.Count, WikiFavorites.Count);
     }
 
     private async Task RemoveChatAsync(ChatConversation conversation)
@@ -270,11 +278,11 @@ internal sealed class FavoritesViewModel : ObservableObject
             });
             ConversationFavoriteChanged?.Invoke(conversation.Id, false);
             await RefreshAsync();
-            StatusMessage = "已取消收藏；对话仍保留在历史中。";
+            StatusMessage = UiTextCatalog.Message("RemovedFromFavoritesTheConversationRemainsInHistory");
         }
         catch
         {
-            StatusMessage = "无法更新对话收藏；现有收藏未被更改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotUpdateConversationFavoritesExistingFavoritesAre");
         }
     }
 
@@ -286,7 +294,7 @@ internal sealed class FavoritesViewModel : ObservableObject
             item.PageTitle,
             favorite: false);
         if (!result.Succeeded)
-            StatusMessage = "无法取消此 Wiki 收藏；现有收藏未被更改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotRemoveThisWikiFavoriteExistingFavorites");
     }
 
     private async Task OpenWikiAsync(GlobalWikiFavoriteItem item)
@@ -294,15 +302,15 @@ internal sealed class FavoritesViewModel : ObservableObject
         try
         {
             await _openWiki(item);
-            StatusMessage = $"已打开 {item.WikiDisplayTitle} · {item.PageTitle}。";
+            StatusMessage = UiTextCatalog.Message("Opened", item.WikiDisplayTitle, item.PageTitle);
         }
         catch (OperationCanceledException)
         {
-            StatusMessage = "打开 Wiki 收藏已取消。";
+            StatusMessage = UiTextCatalog.Message("OpeningTheWikiFavoriteWasCancelled");
         }
         catch
         {
-            StatusMessage = "无法切换并打开此 Wiki 收藏；现有收藏未被更改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotSwitchToAndOpenThisWiki");
         }
     }
 
@@ -310,6 +318,8 @@ internal sealed class FavoritesViewModel : ObservableObject
     {
         OnPropertyChanged(nameof(HasChatFavorites));
         OnPropertyChanged(nameof(HasWikiFavorites));
+        OnPropertyChanged(nameof(ChatFavoriteCountText));
+        OnPropertyChanged(nameof(WikiFavoriteCountText));
         OnPropertyChanged(nameof(IsEmpty));
     }
 }

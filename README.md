@@ -20,4 +20,4 @@ Terraria AI Wiki 是一个面向 Windows 的本地 Terraria Wiki 阅读与 AI �
 
 项目基于 [BigBearKing/terraria-wiki-offline](https://github.com/BigBearKing/terraria-wiki-offline) 演进，Viewer 资产来源快照对应上游提交 `a1dd899`。第三方源码中已有的版权与许可声明保持原样。
 
-本项目为非官方项目，与 Re-Logic、wiki.gg 或 Calamity Mod 团队无隶属或背书关系。Terraria 及相关名称、商标和游戏素材属于各自权利人。Wiki 内容与第三方组件分别遵循其适用条款；公开源码本身不授予软件使用、修改或再分发许可，项目软件许可证尚待明确。
+本项目为非官方项目，与 Re-Logic、wiki.gg 或 Calamity Mod 团队无隶属或背书关系。Terraria 及相关名称、商标和游戏素材属于各自权利人。Wiki 内容与第三方组件分别遵循其适用条款；项目自有源码采用 CC BY-NC-SA 4.0（与上游当前协议相同）；第三方源码与素材保留各自许可及权利限制。

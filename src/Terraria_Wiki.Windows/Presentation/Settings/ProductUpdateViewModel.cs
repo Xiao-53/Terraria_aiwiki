@@ -27,6 +27,7 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
     private string? _availableVersion;
     private int _downloadProgress;
     private bool _disposed;
+    private readonly string _capabilityMessage;
 
     internal ProductUpdateViewModel(
         IProductUpdateService service,
@@ -39,7 +40,8 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
         _state = service.Capabilities.CanUpdate
             ? ProductUpdateState.Idle
             : ProductUpdateState.Disabled;
-        _statusMessage = service.Capabilities.StatusMessage;
+        _statusMessage = UiTextCatalog.FromSafeMessage(service.Capabilities.StatusMessage);
+        _capabilityMessage = _statusMessage;
         CheckCommand = new AsyncCommand(_ => CheckAsync(), _ => CanCheck);
         DownloadCommand = new AsyncCommand(_ => DownloadAsync(), _ => CanDownload);
         CancelCommand = new RelayCommand(_ => Cancel(), _ => CanCancel);
@@ -50,7 +52,9 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
     }
 
     public string CurrentVersion => _service.Capabilities.CurrentVersion;
-    public string DistributionKind => _service.Capabilities.IsPortable ? "Portable" : "安装版";
+    public string CapabilityMessage => Text.Render(_capabilityMessage);
+    public StatusNotification Notification { get; } = new();
+    public string DistributionKind => Text.Render(_service.Capabilities.IsPortable ? "Portable" : UiTextCatalog.Message("Installed2"));
     public Uri? ReleasesUri => _service.Capabilities.ReleasesUri;
     public ProductUpdateState State
     {
@@ -64,8 +68,12 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
 
     public string StatusMessage
     {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        get => Text.Render(_statusMessage);
+        private set
+        {
+            SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value));
+            Notification.Show(!string.IsNullOrWhiteSpace(value));
+        }
     }
 
     public string? AvailableVersion
@@ -106,31 +114,31 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
         try
         {
             State = ProductUpdateState.Checking;
-            StatusMessage = "正在检查 GitHub Releases…";
+            StatusMessage = UiTextCatalog.Message("CheckingGitHubReleases");
             AvailableVersion = null;
             var update = await _service.CheckAsync(current.Token);
             current.Token.ThrowIfCancellationRequested();
             if (update is null)
             {
                 State = ProductUpdateState.UpToDate;
-                StatusMessage = "当前已是 stable 渠道的最新版本。";
+                StatusMessage = UiTextCatalog.Message("YouHaveTheLatestVersionOnTheStable");
             }
             else
             {
                 AvailableVersion = update.Version;
                 State = ProductUpdateState.Available;
-                StatusMessage = $"发现版本 {update.Version}；下载完成后由你确认重启。";
+                StatusMessage = UiTextCatalog.Message("VersionIsAvailableYouChooseWhenToRestart", update.Version);
             }
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
             State = ProductUpdateState.Cancelled;
-            StatusMessage = "检查更新已取消；当前版本不受影响。";
+            StatusMessage = UiTextCatalog.Message("UpdateCheckCancelledCurrentVersionIsUnaffected");
         }
         catch
         {
             State = ProductUpdateState.Failed;
-            StatusMessage = "无法检查 GitHub Releases；离线功能和当前版本不受影响。";
+            StatusMessage = UiTextCatalog.Message("CouldNotCheckGitHubReleasesOfflineFeaturesAnd");
         }
         finally
         {
@@ -146,7 +154,7 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
         try
         {
             State = ProductUpdateState.Downloading;
-            StatusMessage = "正在下载并校验完整更新包…";
+            StatusMessage = UiTextCatalog.Message("DownloadingAndVerifyingTheFullUpdatePackage");
             DownloadProgress = 0;
             var progress = new Progress<int>(value =>
             {
@@ -157,17 +165,17 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
             current.Token.ThrowIfCancellationRequested();
             DownloadProgress = 100;
             State = ProductUpdateState.ReadyToRestart;
-            StatusMessage = "更新已校验，点击“重启并更新”后才会应用。";
+            StatusMessage = UiTextCatalog.Message("UpdateVerifiedItWillOnlyBeAppliedWhen");
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
             State = ProductUpdateState.Cancelled;
-            StatusMessage = "下载已取消；当前版本未改变。";
+            StatusMessage = UiTextCatalog.Message("DownloadCancelledCurrentVersionIsUnchanged");
         }
         catch
         {
             State = ProductUpdateState.Failed;
-            StatusMessage = "更新下载或校验失败；当前版本未改变。";
+            StatusMessage = UiTextCatalog.Message("UpdateDownloadOrVerificationFailedCurrentVersionIs");
         }
         finally
         {
@@ -179,15 +187,20 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
     {
         if (!CanRestart)
             return;
+        Notification.SetBusy(true);
         try
         {
-            StatusMessage = "正在安全关闭本地服务并应用更新…";
+            StatusMessage = UiTextCatalog.Message("SafelyClosingLocalServicesAndApplyingTheUpdate");
             await _applyAndRestart();
         }
         catch
         {
             State = ProductUpdateState.Failed;
-            StatusMessage = "无法启动更新程序；请从 GitHub Releases 手动下载。";
+            StatusMessage = UiTextCatalog.Message("CouldNotStartTheUpdaterDownloadManuallyFrom");
+        }
+        finally
+        {
+            Notification.SetBusy(false);
         }
     }
 
@@ -201,7 +214,7 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
         }
         catch
         {
-            StatusMessage = "无法打开浏览器；请手动访问项目的 GitHub Releases 页面。";
+            StatusMessage = UiTextCatalog.Message("CouldNotOpenTheBrowserVisitTheProject");
         }
     }
 
@@ -209,6 +222,7 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
     {
         var current = new CancellationTokenSource();
         _operation = current;
+        Notification.SetBusy(true);
         RefreshCommands();
         return current;
     }
@@ -219,6 +233,7 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
             return;
         _operation = null;
         current.Dispose();
+        Notification.SetBusy(false);
         RefreshCommands();
     }
 
@@ -246,5 +261,6 @@ internal sealed class ProductUpdateViewModel : ObservableObject, IDisposable
         _operation?.Cancel();
         _operation?.Dispose();
         _operation = null;
+        Notification.Dispose();
     }
 }

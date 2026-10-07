@@ -6,16 +6,16 @@
   <Grid RowDefinitions="Auto,*" Margin="24">
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
-        <TextBlock Text="收藏" Classes="page-title" />
+        <TextBlock Text="{DynamicResource Ui.Favorites}" Classes="page-title" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
-              VerticalAlignment="Center" AutomationProperties.Name="刷新收藏">
+              VerticalAlignment="Center" AutomationProperties.Name="{DynamicResource Ui.RefreshFavorites}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Path Width="16" Height="16" Stretch="Uniform"
                 Data="{StaticResource IconRefresh}"
                 Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                 StrokeLineCap="Round" StrokeJoin="Round" />
-          <TextBlock Text="刷新" FontSize="13" FontWeight="SemiBold" />
+          <TextBlock Text="{DynamicResource Ui.Refresh}" FontSize="13" FontWeight="SemiBold" />
         </StackPanel>
       </Button>
     </Grid>
@@ -26,8 +26,8 @@
       <StackPanel Spacing="24" MaxWidth="820" HorizontalAlignment="Stretch">
         <StackPanel Spacing="8">
           <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-            <TextBlock Text="对话收藏" Classes="section-title" />
-            <TextBlock Grid.Column="1" Text="{Binding ChatFavorites.Count, StringFormat={}{0} 项}"
+            <TextBlock Text="{DynamicResource Ui.FavoriteConversations}" Classes="section-title" />
+            <TextBlock Grid.Column="1" Text="{Binding ChatFavoriteCountText}"
                        Classes="tag" VerticalAlignment="Center" />
           </Grid>
           <ItemsControl ItemsSource="{Binding ChatFavorites}" IsVisible="{Binding HasChatFavorites}">
@@ -35,7 +35,7 @@
               <DataTemplate x:DataType="favorites:ChatFavoriteItemViewModel">
                 <Grid ColumnDefinitions="*,Auto">
                   <Button Command="{Binding OpenCommand}" Classes="list-row"
-                          AutomationProperties.Name="打开收藏对话">
+                          AutomationProperties.Name="{DynamicResource Ui.OpenFavoriteConversation}">
                     <StackPanel Spacing="4">
                       <TextBlock Text="{Binding Question}" FontWeight="SemiBold" TextWrapping="Wrap" />
                       <TextBlock Text="{Binding Preview}" Classes="muted" TextWrapping="Wrap" MaxLines="2" />
@@ -44,7 +44,7 @@
                   </Button>
                   <Button Grid.Column="1" Classes="icon-button" Command="{Binding RemoveCommand}"
                           Margin="8,0,0,0" VerticalAlignment="Center"
-                          ToolTip.Tip="取消收藏" AutomationProperties.Name="取消收藏对话">
+                          ToolTip.Tip="{DynamicResource Ui.Unfavorite}" AutomationProperties.Name="{DynamicResource Ui.UnfavoriteConversation}">
                     <Path Width="20" Height="20" Data="{StaticResource IconClose}"
                           Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8" StrokeLineCap="Round" />
                   </Button>
@@ -52,15 +52,15 @@
               </DataTemplate>
             </ItemsControl.ItemTemplate>
           </ItemsControl>
-          <TextBlock Text="在 AI 问答页收藏整段对话后会显示在这里。"
+          <TextBlock Text="{DynamicResource Ui.FavoriteAConversationInAIChatToSee}"
                      Classes="muted" Margin="0,8" IsVisible="{Binding !HasChatFavorites}" />
         </StackPanel>
 
         <Border Classes="section-surface" Padding="0,20,0,0">
           <StackPanel Spacing="8">
             <Grid ColumnDefinitions="*,Auto" Margin="0,0,0,4">
-              <TextBlock Text="Wiki 收藏" Classes="section-title" />
-              <TextBlock Grid.Column="1" Text="{Binding WikiFavorites.Count, StringFormat={}{0} 项}"
+              <TextBlock Text="{DynamicResource Ui.WikiFavorites}" Classes="section-title" />
+              <TextBlock Grid.Column="1" Text="{Binding WikiFavoriteCountText}"
                          Classes="tag" VerticalAlignment="Center" />
             </Grid>
             <ItemsControl ItemsSource="{Binding WikiFavorites}" IsVisible="{Binding HasWikiFavorites}">
@@ -68,7 +68,7 @@
                 <DataTemplate x:DataType="favorites:WikiFavoriteItemViewModel">
                   <Grid ColumnDefinitions="*,Auto">
                     <Button Command="{Binding OpenCommand}" Classes="list-row"
-                            AutomationProperties.Name="打开 Wiki 收藏">
+                            AutomationProperties.Name="{DynamicResource Ui.OpenWikiFavorite}">
                       <StackPanel Spacing="3">
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                         <TextBlock Text="{Binding WikiTitle}" Classes="muted" />
@@ -77,7 +77,7 @@
                     </Button>
                     <Button Grid.Column="1" Classes="icon-button" Command="{Binding RemoveCommand}"
                             Margin="8,0,0,0" VerticalAlignment="Center"
-                            ToolTip.Tip="取消收藏" AutomationProperties.Name="取消 Wiki 收藏">
+                            ToolTip.Tip="{DynamicResource Ui.Unfavorite}" AutomationProperties.Name="{DynamicResource Ui.UnfavoriteWikiPage}">
                       <Path Width="20" Height="20" Data="{StaticResource IconClose}"
                           Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8" StrokeLineCap="Round" />
                     </Button>
@@ -85,14 +85,14 @@
                 </DataTemplate>
               </ItemsControl.ItemTemplate>
             </ItemsControl>
-            <TextBlock Text="在 Reader 标题栏点击星标即可收藏页面。"
+            <TextBlock Text="{DynamicResource Ui.ClickTheStarInTheReaderTitleBar}"
                        Classes="muted" Margin="0,8" IsVisible="{Binding !HasWikiFavorites}" />
           </StackPanel>
         </Border>
 
         <TextBlock Text="{Binding StatusMessage}" Classes="muted"
                    HorizontalAlignment="Center" Margin="0,0,0,12"
-                   AutomationProperties.Name="收藏状态" />
+                   AutomationProperties.Name="{DynamicResource Ui.FavoritesStatus}" />
       </StackPanel>
     </ScrollViewer>
   </Grid>

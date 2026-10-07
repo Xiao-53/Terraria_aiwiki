@@ -27,8 +27,8 @@ internal sealed class ReaderPaneViewModel : ObservableObject
     private Func<ViewerPageIdentity, Task<bool>>? _isFavorite;
     private Func<ViewerPageIdentity, bool, Task<ReaderFavoriteUpdate>>? _setFavorite;
     private string _title = "Wiki";
-    private string _location = "等待本地 Viewer…";
-    private string _statusMessage = "Reader 正在启动。";
+    private string _location = UiTextCatalog.Message("WaitingForTheLocalViewer");
+    private string _statusMessage = UiTextCatalog.Message("ReaderIsStarting");
     private bool _isBusy;
     private bool _isReady;
     private ViewerPageIdentity? _currentPage;
@@ -51,14 +51,14 @@ internal sealed class ReaderPaneViewModel : ObservableObject
 
     public string Location
     {
-        get => _location;
+        get => Text.Render(_location);
         private set => SetProperty(ref _location, value);
     }
 
     public string StatusMessage
     {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        get => Text.Render(_statusMessage);
+        private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value));
     }
 
     public bool IsBusy
@@ -104,7 +104,7 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         }
     }
 
-    public string FavoriteActionText => IsWikiFavorite ? "取消收藏当前 Wiki 页面" : "收藏当前 Wiki 页面";
+    public string FavoriteActionText => Text.Render(IsWikiFavorite ? UiTextCatalog.Message("UnfavoriteTheCurrentWikiPage") : UiTextCatalog.Message("FavoriteTheCurrentWikiPage"));
 
     public void Attach(
         Func<string, CancellationToken, Task> openPage,
@@ -115,8 +115,8 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         _goBack = goBack ?? throw new ArgumentNullException(nameof(goBack));
         _canGoBack = canGoBack;
         IsReady = true;
-        StatusMessage = _currentPage is null ? "本地 Viewer 已就绪。" : $"已打开 {_currentPage.CanonicalTitle}。";
-        Location = _currentPage?.WikiDisplayTitle ?? "等待页面提交…";
+        StatusMessage = _currentPage is null ? UiTextCatalog.Message("LocalViewerReady") : UiTextCatalog.Message("Opened3", _currentPage.CanonicalTitle);
+        Location = _currentPage?.WikiDisplayTitle ?? UiTextCatalog.Message("WaitingForThePageToCommit");
     }
 
     public void Detach()
@@ -127,8 +127,8 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         _isFavoriteLoading = false;
         IsReady = false;
         IsBusy = false;
-        StatusMessage = "Reader 不可用。";
-        Location = "等待本地 Viewer…";
+        StatusMessage = UiTextCatalog.Message("ReaderUnavailable");
+        Location = UiTextCatalog.Message("WaitingForTheLocalViewer");
         Interlocked.Increment(ref _identityVersion);
         _currentPage = null;
         IsWikiFavorite = false;
@@ -168,8 +168,8 @@ internal sealed class ReaderPaneViewModel : ObservableObject
     {
         IsReady = isReady && _openPage is not null;
         StatusMessage = IsReady
-            ? "本地 Viewer 已就绪。"
-            : "正在准备本地 Wiki 内容…";
+            ? UiTextCatalog.Message("LocalViewerReady")
+            : UiTextCatalog.Message("PreparingLocalWikiContent");
     }
 
     public async Task ApplyPageIdentityAsync(ViewerPageIdentity identity)
@@ -195,14 +195,14 @@ internal sealed class ReaderPaneViewModel : ObservableObject
             if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
                 return;
             IsWikiFavorite = favorite;
-            StatusMessage = $"已打开 {identity.CanonicalTitle}。";
+            StatusMessage = UiTextCatalog.Message("Opened3", identity.CanonicalTitle);
         }
         catch
         {
             if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
                 return;
             IsWikiFavorite = false;
-            StatusMessage = "无法读取 Wiki 收藏状态。";
+            StatusMessage = UiTextCatalog.Message("CouldNotReadTheWikiFavoriteStatus");
         }
         finally
         {
@@ -220,28 +220,28 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         ArgumentNullException.ThrowIfNull(request);
         if (_openPage is null)
         {
-            StatusMessage = "Reader 尚未就绪。";
+            StatusMessage = UiTextCatalog.Message("ReaderIsNotReadyYet");
             return;
         }
 
         IsBusy = true;
         var identityVersion = Volatile.Read(ref _identityVersion);
-        StatusMessage = $"正在打开 {request.Title}…";
+        StatusMessage = UiTextCatalog.Message("Opening", request.Title);
         try
         {
             await _openPage(request.Target, cancellationToken);
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = $"已发送打开 {request.Title} 的请求。";
+                StatusMessage = UiTextCatalog.Message("RequestedOpening", request.Title);
         }
         catch (OperationCanceledException)
         {
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = "打开页面已取消。";
+                StatusMessage = UiTextCatalog.Message("OpeningThePageWasCancelled");
         }
         catch
         {
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = "无法打开该 Wiki 页面。";
+                StatusMessage = UiTextCatalog.Message("CouldNotOpenThisWikiPage");
         }
         finally
         {
@@ -259,17 +259,17 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         {
             await _goBack(CancellationToken.None);
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = "已发送返回上一页的请求。";
+                StatusMessage = UiTextCatalog.Message("RequestedGoingBackToThePreviousPage");
         }
         catch (OperationCanceledException)
         {
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = "返回操作已取消。";
+                StatusMessage = UiTextCatalog.Message("GoingBackWasCancelled");
         }
         catch
         {
             if (identityVersion == Volatile.Read(ref _identityVersion))
-                StatusMessage = "无法返回上一页。";
+                StatusMessage = UiTextCatalog.Message("CouldNotGoBackToThePreviousPage");
         }
         finally
         {
@@ -292,17 +292,17 @@ internal sealed class ReaderPaneViewModel : ObservableObject
         catch
         {
             if (version == Volatile.Read(ref _identityVersion) && _currentPage == identity)
-                StatusMessage = "无法更新 Wiki 收藏；当前状态未改变。";
+                StatusMessage = UiTextCatalog.Message("CouldNotUpdateWikiFavoritesCurrentStateIs");
             return;
         }
         if (version != Volatile.Read(ref _identityVersion) || _currentPage != identity)
             return;
         if (!result.Succeeded)
         {
-            StatusMessage = "无法更新 Wiki 收藏；当前状态未改变。";
+            StatusMessage = UiTextCatalog.Message("CouldNotUpdateWikiFavoritesCurrentStateIs");
             return;
         }
         IsWikiFavorite = result.IsFavorite;
-        StatusMessage = requested ? $"已收藏 {identity.CanonicalTitle}。" : $"已取消收藏 {identity.CanonicalTitle}。";
+        StatusMessage = requested ? UiTextCatalog.Message("Favorited2", identity.CanonicalTitle) : UiTextCatalog.Message("RemovedFromFavorites2", identity.CanonicalTitle);
     }
 }

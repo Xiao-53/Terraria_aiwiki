@@ -8,24 +8,34 @@ namespace Terraria_Wiki.Windows.Presentation.Settings;
 
 internal sealed class SettingsViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        Ai.UseTextCatalog(Text);
+        Updates.UseTextCatalog(Text);
+        Diagnostics.UseTextCatalog(Text);
+        QuickAccess.UseTextCatalog(Text);
+    }
+
     private readonly Func<ApplicationPreferences, Task> _applyPreferences;
     private Func<CancellationToken, Task<ApplicationPreferences>>? _load;
     private Func<ApplicationPreferences, CancellationToken, Task<ApplicationPreferences>>? _save;
     private CancellationTokenSource? _operationCancellation;
     private ApplicationPreferences? _savedPreferences;
-    private string _statusMessage = "正在准备设置…";
+    private string _statusMessage = UiTextCatalog.Message("PreparingSettings");
     private bool _isAvailable;
     private bool _isBusy;
     private int _editVersion;
     private Task? _saveTask;
     private int _appThemeIndex;
+    private int _languageIndex;
+    private bool _actualThemeIsDark;
     private int _contentThemeIndex;
     private int _startupPageIndex;
     private bool _isInteractionFeedbackEnabled = true;
     private bool _isSideButtonBackEnabled = true;
     private decimal _searchLimit = ApplicationPreferences.DefaultSearchLimit;
     private decimal _aiSearchLimit = ApplicationPreferences.DefaultAiSearchLimit;
-    private bool _isWikiFullScanEnabled = true;
+    private bool _isWikiFullScanEnabled;
     private decimal _wikiFullScanIntervalDays = ApplicationPreferences.DefaultWikiFullScanIntervalDays;
     private decimal _pageConcurrency = ApplicationPreferences.DefaultPageConcurrency;
     private decimal _resourceConcurrency = ApplicationPreferences.DefaultResourceConcurrency;
@@ -33,6 +43,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     private bool _isDirty;
     private int _selectedPageIndex;
     private bool _disposed;
+    private bool _pageActive = true;
 
     public SettingsViewModel(
         Func<ApplicationPreferences, Task>? applyPreferences = null,
@@ -79,12 +90,23 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         SaveCommand = new AsyncCommand(_ => SaveAsync(), _ => CanSave);
         SelectGeneralCommand = new RelayCommand(_ => SelectedPageIndex = 0);
         SelectAiCommand = new RelayCommand(_ => SelectedPageIndex = 1);
+        Notification.PropertyChanged += (_, _) => OnPropertyChanged(nameof(ShowGeneralStatus));
     }
 
     public AiSettingsViewModel Ai { get; }
     public ProductUpdateViewModel Updates { get; }
     public ProductDiagnosticsViewModel Diagnostics { get; }
     public QuickAccessSettingsViewModel QuickAccess { get; }
+    public StatusNotification Notification { get; } = new();
+
+    public void SetPageActive(bool active)
+    {
+        _pageActive = active;
+        Notification.SetPageActive(active && IsGeneralSelected);
+        Updates.Notification.SetPageActive(active && IsGeneralSelected);
+        Diagnostics.Notification.SetPageActive(active && IsGeneralSelected);
+        Ai.SetPageActive(active && IsAiSelected);
+    }
 
     public int SelectedPageIndex
     {
@@ -96,7 +118,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(IsGeneralSelected));
             OnPropertyChanged(nameof(IsAiSelected));
             OnPropertyChanged(nameof(ShowGeneralStatus));
-            Ai.SetPageActive(IsAiSelected);
+            SetPageActive(_pageActive);
             if (IsAiSelected)
                 _ = Ai.EnsureLoadedAsync();
         }
@@ -104,15 +126,16 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
 
     public bool IsGeneralSelected => SelectedPageIndex == 0;
     public bool IsAiSelected => SelectedPageIndex == 1;
-    public bool ShowGeneralStatus => IsGeneralSelected && !string.IsNullOrWhiteSpace(StatusMessage);
+    public bool ShowGeneralStatus => IsGeneralSelected && Notification.IsVisible;
     public bool CanRetrySave => IsDirty && !IsBusy;
     public string StatusMessage
     {
-        get => _statusMessage;
+        get => Text.Render(_statusMessage);
         private set
         {
-            if (SetProperty(ref _statusMessage, value))
+            if (SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)))
                 OnPropertyChanged(nameof(ShowGeneralStatus));
+            Notification.Show(!string.IsNullOrWhiteSpace(value));
         }
     }
 
@@ -136,6 +159,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _isBusy, value))
             {
+                Notification.SetBusy(value);
                 OnPropertyChanged(nameof(ShowGeneralStatus));
                 RefreshState();
             }
@@ -155,13 +179,45 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     public int AppThemeIndex
     {
         get => _appThemeIndex;
-        set { if (SetProperty(ref _appThemeIndex, value)) MarkDirty(); }
+        set
+        {
+            if (!SetProperty(ref _appThemeIndex, value)) return;
+            OnPropertyChanged(nameof(IsDarkTheme));
+            MarkDirty();
+        }
+    }
+
+    public int LanguageIndex
+    {
+        get => _languageIndex;
+        set
+        {
+            if (value is < 0 or > 1 || !IsAvailable || _disposed) return;
+            if (SetProperty(ref _languageIndex, value)) MarkDirty();
+        }
     }
 
     public int ContentThemeIndex
     {
         get => _contentThemeIndex;
         set { if (SetProperty(ref _contentThemeIndex, value)) MarkDirty(); }
+    }
+
+    public bool IsDarkTheme
+    {
+        get => AppThemeIndex switch { 1 => false, 2 => true, _ => _actualThemeIsDark };
+        set
+        {
+            if (!IsAvailable || _disposed) return;
+            AppThemeIndex = value ? 2 : 1;
+        }
+    }
+
+    internal void UpdateActualTheme(bool isDark)
+    {
+        if (_actualThemeIsDark == isDark) return;
+        _actualThemeIsDark = isDark;
+        if (AppThemeIndex == 0) OnPropertyChanged(nameof(IsDarkTheme));
     }
 
     public int StartupPageIndex
@@ -182,7 +238,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string InteractionFeedbackStateText => IsInteractionFeedbackEnabled ? "开" : "关";
+    public string InteractionFeedbackStateText => Text.Render(IsInteractionFeedbackEnabled ? UiTextCatalog.Message("On") : UiTextCatalog.Message("Off"));
 
     public bool IsSideButtonBackEnabled
     {
@@ -196,7 +252,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         }
     }
 
-    public string SideButtonStateText => IsSideButtonBackEnabled ? "开" : "关";
+    public string SideButtonStateText => Text.Render(IsSideButtonBackEnabled ? UiTextCatalog.Message("On") : UiTextCatalog.Message("Off"));
 
     public decimal SearchLimit
     {
@@ -287,7 +343,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         IsAvailable = false;
         IsBusy = false;
         IsDirty = false;
-        StatusMessage = "应用设置不可用。";
+        StatusMessage = UiTextCatalog.Message("AppSettingsUnavailable");
     }
 
     internal async Task RefreshAsync()
@@ -309,11 +365,11 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "设置载入已取消。";
+            StatusMessage = UiTextCatalog.Message("LoadingSettingsWasCancelled");
         }
         catch
         {
-            StatusMessage = "无法读取设置；现有配置未被修改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotReadSettingsExistingConfigurationIsUnchanged");
         }
         finally
         {
@@ -355,21 +411,22 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
                     try
                     {
                         await _applyPreferences(saved);
+                        Text.SetLanguage(saved.Language);
                         current.Token.ThrowIfCancellationRequested();
                         StatusMessage = string.Empty;
                     }
                     catch (OperationCanceledException) when (current.IsCancellationRequested) { break; }
-                    catch { StatusMessage = "设置已保存；部分界面效果将在下次启动时生效。"; }
+                    catch { StatusMessage = UiTextCatalog.Message("SettingsSavedSomeInterfaceChangesWillTakeEffect"); }
                 }
                 catch (OperationCanceledException) when (current.IsCancellationRequested) { break; }
                 catch (ApplicationUseCaseException exception) when (exception.Code == "invalid-preferences")
                 {
-                    StatusMessage = "设置值超出允许范围，请检查后重试。";
+                    StatusMessage = UiTextCatalog.Message("ASettingIsOutsideTheAllowedRangeCheck");
                     if (version == _editVersion) break;
                 }
                 catch
                 {
-                    StatusMessage = "设置保存失败；当前会话继续使用上次有效配置，可重试保存。";
+                    StatusMessage = UiTextCatalog.Message("SettingsFailedToSaveThisSessionUsesThe");
                     if (version == _editVersion) break;
                 }
             }
@@ -391,6 +448,8 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         QuickAccess.Dispose();
         Ai.Dispose();
         Updates.Dispose();
+        Diagnostics.Dispose();
+        Notification.Dispose();
     }
 
     private CancellationTokenSource BeginOperation()
@@ -413,6 +472,8 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     private void Apply(ApplicationPreferences preferences)
     {
         _savedPreferences = preferences;
+        _languageIndex = preferences.Language == "en-us" ? 1 : 0;
+        Text.SetLanguage(preferences.Language);
         _appThemeIndex = preferences.AppTheme switch { "light" => 1, "dark" => 2, _ => 0 };
         _contentThemeIndex = preferences.ContentTheme == "original" ? 1 : 0;
         _startupPageIndex = preferences.StartupPage == "wiki" ? 1 : 0;
@@ -427,6 +488,8 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         _resourceConcurrency = preferences.ResourceConcurrency;
         _retryAttempts = preferences.RetryAttempts;
         OnPropertyChanged(nameof(AppThemeIndex));
+        OnPropertyChanged(nameof(LanguageIndex));
+        OnPropertyChanged(nameof(IsDarkTheme));
         OnPropertyChanged(nameof(ContentThemeIndex));
         OnPropertyChanged(nameof(StartupPageIndex));
         OnPropertyChanged(nameof(IsInteractionFeedbackEnabled));
@@ -446,6 +509,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
 
     private ApplicationPreferences BuildPreferences() => (_savedPreferences ?? new ApplicationPreferences()) with
     {
+        Language = LanguageIndex == 1 ? "en-us" : "zh-cn",
         AppTheme = AppThemeIndex switch { 1 => "light", 2 => "dark", _ => "auto" },
         ContentTheme = ContentThemeIndex == 1 ? "original" : "auto",
         StartupPage = StartupPageIndex == 1 ? "wiki" : "chat",

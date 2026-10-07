@@ -505,6 +505,19 @@
                 padding-right: 0 !important;
             }
 
+            /* Match the native text selection colors without changing control states. */
+            html body::selection, html body ::selection,
+            html.light body::selection, html.light body ::selection {
+                background-color: #5f7f3918;
+                color: #000000;
+                text-shadow: none;
+            }
+
+            html.dark body::selection, html.dark body ::selection {
+                background-color: #a7be8224;
+                color: #e7ebe3;
+            }
+
             /* 覆盖 Viewer.js 全局的形变/缩放动画速度 */
             .viewer-transition {
                 transition: all 0.15s !important;

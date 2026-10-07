@@ -11,7 +11,31 @@
     </ResourceDictionary>
   </Application.Resources>
   <Application.Styles>
-    <fluent:FluentTheme DensityStyle="Compact" />
+    <fluent:FluentTheme DensityStyle="Compact">
+      <fluent:FluentTheme.Palettes>
+        <fluent:ColorPaletteResources x:Key="Dark"
+            Accent="{StaticResource TerrariaDarkBrandColor}"
+            AltHigh="{StaticResource TerrariaDarkSurfaceColor}"
+            AltMediumHigh="{StaticResource TerrariaDarkSurfaceAltColor}"
+            AltMedium="{StaticResource TerrariaDarkSurfaceAltColor}"
+            AltMediumLow="{StaticResource TerrariaDarkSurfaceColor}"
+            BaseHigh="{StaticResource TerrariaDarkTextColor}"
+            BaseMediumHigh="{StaticResource TerrariaDarkTextColor}"
+            BaseMedium="{StaticResource TerrariaDarkTextSecondaryColor}"
+            BaseMediumLow="{StaticResource TerrariaDarkTextDisabledColor}"
+            BaseLow="{StaticResource TerrariaDarkStrokeColor}"
+            ChromeLow="{StaticResource TerrariaDarkBackgroundColor}"
+            ChromeMedium="{StaticResource TerrariaDarkSurfaceColor}"
+            ChromeMediumLow="{StaticResource TerrariaDarkSurfaceAltColor}"
+            ChromeDisabledHigh="{StaticResource TerrariaDarkSurfaceAltColor}"
+            ChromeDisabledLow="{StaticResource TerrariaDarkTextDisabledColor}"
+            ChromeHigh="{StaticResource TerrariaDarkTextDisabledColor}"
+            ChromeGray="{StaticResource TerrariaDarkTextDisabledColor}"
+            ChromeWhite="{StaticResource TerrariaDarkTextColor}"
+            ErrorText="{StaticResource TerrariaDarkDangerColor}"
+            RegionColor="{StaticResource TerrariaDarkSurfaceColor}" />
+      </fluent:FluentTheme.Palettes>
+    </fluent:FluentTheme>
     <StyleInclude Source="avares://Terraria_Wiki.Windows/Presentation/Styles/Controls.axaml" />
   </Application.Styles>
 </Application>

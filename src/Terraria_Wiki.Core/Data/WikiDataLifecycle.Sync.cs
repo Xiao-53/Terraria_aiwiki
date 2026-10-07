@@ -1,15 +1,32 @@
 using System.Text.Json;
-using System.Xml.Linq;
 using System.Collections.Concurrent;
 using System.Net;
 using HtmlAgilityPack;
 using Terraria_Wiki.Core.Operations;
+using Terraria_Wiki.Core.Net;
 using Terraria_Wiki.Models;
 
 namespace Terraria_Wiki.Core.Data;
 
 public sealed partial class WikiDataLifecycle
 {
+    private static async Task<WikiSyncState?> CaptureDownloadBaselineAsync(WikiSyncReader reader, bool includeResources)
+    {
+        try
+        {
+            var started = await reader.ServerTimeAsync();
+            var anchor = (await reader.EventsAsync(null, started)).LastOrDefault();
+            if (anchor is null || anchor.Time > started) return null;
+            // Keep the START cursor so updates replay changes made during the download.
+            return new WikiSyncState
+            {
+                Identity = reader.Identity, CoveredThrough = started, LastFullScan = started,
+                AnchorId = anchor.Id, AnchorTime = anchor.Time, ResourcesCovered = includeResources
+            };
+        }
+        catch (SyncCoverageException) { return null; }
+    }
+
     private async Task<WikiSyncState?> ReadSyncStateAsync(CancellationToken token)
     {
         var json = await _contentDatabase.ReadSyncMetadataAsync("sync_state", token);
@@ -24,21 +41,26 @@ public sealed partial class WikiDataLifecycle
     {
         Prepare(paths);
         progress?.Report(new WikiProgress("update-start"));
-        var reader = new WikiSyncReader(book, _httpTransport, options.MaxRetryAttempts, token);
+        var reader = new WikiSyncReader(book, _httpTransport, options.MaxRetryAttempts, token, progress);
         var previous = await ReadSyncStateAsync(token);
-        await SaveSyncStateAsync((previous ?? new WikiSyncState()) with { Incomplete = true }, token);
+        var mediaQueue = await _contentDatabase.ReadSyncMediaQueueAsync(reader.Identity, token);
         var upper = await reader.ServerTimeAsync();
-        var full = previous is null || !previous.Matches(book) || previous.Incomplete ||
-            (includeResources && !previous.ResourcesCovered) ||
+        var quick = options.UpdateMode == WikiUpdateMode.Quick;
+        string? fallback = options.UpdateMode == WikiUpdateMode.Full ? "explicit-full-update" : previous is null ? "baseline-missing" : !previous.Matches(book) ? "identity-changed" :
+            previous.Incomplete && !(quick && previous.DependenciesSkipped && !previous.ForcePageRefresh) ? "page-recovery" : !mediaQueue.Valid ? "media-queue-invalid" :
+            includeResources && !previous.ResourcesCovered ? "media-baseline-missing" :
             previous.CoveredThrough == default || previous.CoveredThrough > upper ||
-            previous.LastFullScan == default || previous.LastFullScan > previous.CoveredThrough ||
-            (options.FullScanIntervalDays is { } intervalDays && (upper - previous.LastFullScan).TotalDays >= intervalDays);
-        var forceAll = false;
+            previous.LastFullScan == default || previous.LastFullScan > previous.CoveredThrough ? "invalid-cursor" :
+            !quick && previous.DependenciesSkipped ? "quick-update-reconciliation" :
+            !quick && options.FullScanIntervalDays is { } intervalDays && (upper - previous.LastFullScan).TotalDays >= intervalDays ? "periodic" : null;
+        if (quick && fallback is not null)
+            throw new WikiOperationException("quick-update-requires-full", "Quick update requires a trustworthy baseline.");
+        var full = fallback is not null;
+        var forceAll = options.UpdateMode == WikiUpdateMode.Full || fallback == "quick-update-reconciliation" || (!quick && previous?.ForcePageRefresh == true);
         var forced = new HashSet<string>(StringComparer.Ordinal);
         var fileEvents = new HashSet<string>(StringComparer.Ordinal);
         var events = new List<SyncEvent>();
         var candidates = new List<SyncPage>();
-        string? fallback = full ? "baseline-or-recovery" : null;
 
         if (!full)
         {
@@ -49,14 +71,15 @@ public sealed partial class WikiDataLifecycle
                 events = await reader.EventsAsync(previous!.CoveredThrough.AddMinutes(-5), upper);
                 var titles = new HashSet<string>(StringComparer.Ordinal);
                 var dependencies = new List<(string Title, bool File)>();
-                foreach (var entry in events)
+                var coveredEvents = (previous.CoveredEventIds ?? []).ToHashSet();
+                foreach (var entry in events.Where(entry => !coveredEvents.Contains(entry.Id)))
                 {
                     if (entry.Type == "categorize") continue;
                     if (entry.Type is not ("edit" or "new" or "log") ||
                         (entry.Type == "log" && entry.LogType is not ("move" or "delete" or "upload" or "protect" or "patrol")))
                         throw new SyncCoverageException("unhandled-content-event");
                     if (entry.LogType is "protect" or "patrol") continue;
-                    if (entry.Namespace == 828) throw new SyncCoverageException("module-dependency-not-provable");
+                    if (!quick && entry.Namespace == 828) throw new SyncCoverageException("module-dependency-not-provable");
                     titles.Add(entry.Title);
                     dependencies.Add((entry.Title, entry.Namespace == 6));
                     if (entry.Namespace == 6) fileEvents.Add(entry.Title);
@@ -67,12 +90,13 @@ public sealed partial class WikiDataLifecycle
                         if (entry.Namespace == 6) fileEvents.Add(target);
                     }
                 }
-                forced = await reader.DependenciesAsync(dependencies);
+                forced = quick ? titles.ToHashSet(StringComparer.Ordinal) : await reader.DependenciesAsync(dependencies);
                 titles.UnionWith(forced);
                 candidates = await reader.CurrentAsync(titles);
             }
             catch (SyncCoverageException exception)
             {
+                if (quick) throw new WikiOperationException("quick-update-requires-full", "Quick update cannot establish log coverage.", exception);
                 full = true;
                 forceAll = exception.Message != "anchor-unavailable"; // Unknown dependencies cannot trust touched alone.
                 fallback = exception.Message;
@@ -83,6 +107,14 @@ public sealed partial class WikiDataLifecycle
         Dictionary<string, WikiRedirect> redirects;
         if (full)
         {
+            // Ask before requesting the directory or marking any page incomplete.
+            if (options.ConfirmFullScanAsync is { } confirm)
+            {
+                progress?.Report(new WikiProgress("sync-full-scan-approval", Detail: fallback));
+                var approved = await confirm(fallback!, token).WaitAsync(token);
+                token.ThrowIfCancellationRequested();
+                if (!approved) throw new WikiOperationException("full-scan-declined", "Full scan was declined.");
+            }
             progress?.Report(new WikiProgress("sync-full-scan", Detail: fallback));
             // Obtain the complete listing before even calculating a deletion difference.
             candidates = await reader.DirectoryAsync();
@@ -97,8 +129,9 @@ public sealed partial class WikiDataLifecycle
                 events = await reader.EventsAsync(null, upper);
                 await reader.DependenciesAsync([("Template:__TerrariaAIWiki_sync_probe__", false), ("File:__TerrariaAIWiki_sync_probe__.png", true)]);
             }
-            catch (SyncCoverageException)
+            catch (SyncCoverageException exception)
             {
+                progress?.Report(new WikiProgress("sync-capability-unavailable", Detail: exception.Message));
                 events.Clear(); // This source remains in full-scan mode until capabilities can be established.
             }
         }
@@ -120,7 +153,7 @@ public sealed partial class WikiDataLifecycle
         var redirectTargets = full ? await reader.FullRedirectsAsync(targets) :
             await reader.RedirectsAsync(targets.Where(p => p.Redirect).Select(p => p.Title));
         var resourcesByPage = new ConcurrentDictionary<string, string[]>(
-            await _contentDatabase.ReadSyncResourceUrlsAsync(full || fileEvents.Count > 0 ? null : targets.Select(p => p.Title), token), StringComparer.Ordinal);
+            await _contentDatabase.ReadSyncResourceUrlsAsync(full || fileEvents.Count > 0 || mediaQueue.Tasks.Count > 0 ? null : targets.Select(p => p.Title), token), StringComparer.Ordinal);
         var urls = new HashSet<string>(StringComparer.Ordinal);
         var pages = 0;
         var deleted = 0;
@@ -130,6 +163,12 @@ public sealed partial class WikiDataLifecycle
         var resourceCount = 0;
         var indexChanged = await _contentDatabase.ReadSyncMetadataAsync("sync_index_pending", token) == "1";
         var resourceMetadataChanged = false;
+        var pageProcessed = 0;
+
+        // Discovery alone cannot dirty an otherwise valid cursor. Persist recovery only
+        // before the first mutation, including the need to reparse unknown dependencies.
+        await SaveSyncStateAsync((previous ?? new WikiSyncState()) with
+        { Incomplete = true, ForcePageRefresh = forceAll, DependenciesSkipped = quick || previous?.DependenciesSkipped == true }, token);
 
         if (includeResources && full)
         {
@@ -159,28 +198,36 @@ public sealed partial class WikiDataLifecycle
         }
 
         // Save all new/moved destinations before deleting or converting any old title.
-        await Parallel.ForEachAsync(targets.Where(p => !p.Redirect),
+        var pageTargets = targets.Where(p => !p.Redirect).ToList();
+        progress?.Report(new WikiProgress("sync-pages-start", Total: pageTargets.Count));
+        await Parallel.ForEachAsync(pageTargets,
             new ParallelOptions { MaxDegreeOfParallelism = options.PageConcurrency, CancellationToken = token }, async (page, _) =>
         {
             token.ThrowIfCancellationRequested();
             var replace = forceAll || forced.Contains(page.Title) || !localByTitle.TryGetValue(page.Title, out var stored) || stored.LastModified != page.Modified;
             var recoverUrls = includeResources && full && !resourcesByPage.ContainsKey(page.Title);
-            if (!replace && !recoverUrls) { Interlocked.Increment(ref skipped); return; }
+            if (!replace && !recoverUrls)
+            {
+                Interlocked.Increment(ref skipped);
+                progress?.Report(new WikiProgress("page-skipped", Interlocked.Increment(ref pageProcessed), pageTargets.Count, page.Title));
+                return;
+            }
             try
             {
                 await RetryAsync(async () =>
                 {
-                    // Fetch current metadata before AND after parse; concurrent edits leave a retryable failure.
-                    var before = (await reader.CurrentAsync([page.Title])).Single();
+                    // Explicit full refresh downloads each page once, using the directory
+                    // timestamp conservatively. The START cursor replays concurrent edits.
+                    var downloadReplacement = options.UpdateMode == WikiUpdateMode.Full;
+                    var before = downloadReplacement ? page : (await reader.CurrentAsync([page.Title])).Single();
                     if (before.Missing || before.Redirect || !reader.Namespaces.Contains(before.Namespace))
                         throw new InvalidDataException("Page changed identity during synchronization.");
-                    var xml = await _httpTransport.GetStringAsync(book,
-                        new Uri($"{book.ApiBaseUrl}?action=parse&page={Uri.EscapeDataString(page.Title)}&prop=text&format=xml"), token);
-                    var html = XDocument.Parse(xml).Descendants("text").FirstOrDefault()?.Value
-                        ?? throw new InvalidDataException("MediaWiki parse response did not contain page HTML.");
-                    var after = (await reader.CurrentAsync([page.Title])).Single();
-                    if (before != after) throw new InvalidDataException("Page changed while parsing; retry required.");
-                    var processed = WikiContentProcessor.Process(html, book, page.Title);
+                    var processed = await FetchProcessedPageAsync(book, page.Title, token);
+                    if (!downloadReplacement)
+                    {
+                        var after = (await reader.CurrentAsync([page.Title])).Single();
+                        if (before != after) throw new InvalidDataException("Page changed while parsing; retry required.");
+                    }
                     resourcesByPage[page.Title] = processed.ResourceUrls.ToArray();
                     // Persist URL tasks before committing the page; a crash cannot lose pending media.
                     await _contentDatabase.WriteSyncMetadataAsync("sync_resources:" + page.Title, JsonSerializer.Serialize(resourcesByPage[page.Title]), token);
@@ -197,16 +244,22 @@ public sealed partial class WikiDataLifecycle
                         indexChanged = true;
                     }
                     else Interlocked.Increment(ref skipped);
-                }, options.MaxRetryAttempts, token);
-                progress?.Report(new WikiProgress("page-download", pages, targets.Count, page.Title));
+                }, options.MaxRetryAttempts, token, progress);
+                progress?.Report(new WikiProgress("page-download", Interlocked.Increment(ref pageProcessed), pageTargets.Count, page.Title));
             }
-            catch (OperationCanceledException) { throw; }
-            catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable) { throw; }
+            catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+            catch (HttpRequestException exception) when (WikiHttpRetry.IsAccessDenied(exception) ||
+                exception.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
+            {
+                progress?.Report(new WikiProgress("sync-page-failed", Detail: page.Title, Error: exception));
+                throw;
+            }
             catch (Exception exception)
             {
                 Interlocked.Increment(ref failed);
-                progress?.Report(new WikiProgress("sync-page-failed", Detail: page.Title + ": " + exception.Message));
+                progress?.Report(new WikiProgress("sync-page-failed", Detail: page.Title, Error: exception));
                 await AppendFailureAsync(paths.FailedPageListPath, $"{page.Title}|{page.Modified:O}", token);
+                Interlocked.Increment(ref pageProcessed);
             }
         });
 
@@ -248,28 +301,40 @@ public sealed partial class WikiDataLifecycle
             await _contentDatabase.WriteSyncMetadataAsync("sync_index_pending", "0", token);
         }
 
-        if (includeResources)
+        async Task CommitPageCursorAsync()
         {
-            if (full) urls.UnionWith(resourcesByPage.Values.SelectMany(value => value));
+            var anchor = events.LastOrDefault();
+            await SaveSyncStateAsync(new WikiSyncState
+            {
+                Identity = reader.Identity, CoveredThrough = upper,
+                AnchorId = anchor?.Id ?? (full ? 0 : previous!.AnchorId),
+                AnchorTime = anchor?.Time ?? (full ? default : previous!.AnchorTime),
+                LastFullScan = full ? upper : previous!.LastFullScan,
+                Incomplete = false, ResourcesCovered = includeResources || previous?.ResourcesCovered == true,
+                DependenciesSkipped = !full && (quick || previous?.DependenciesSkipped == true),
+                CoveredEventIds = events.Where(entry => entry.Time >= upper.AddMinutes(-5)).Select(entry => entry.Id).ToArray()
+            }, token);
+            DeleteIfExists(paths.FailedPageListPath);
+            progress?.Report(new WikiProgress("sync-page-cursor-committed"));
+        }
+
+        if (!includeResources && failed == 0) await CommitPageCursorAsync();
+
+        if (includeResources && failed == 0)
+        {
+            foreach (var page in candidates.Where(page => page.Missing || page.Redirect))
+                resourcesByPage.TryRemove(page.Title, out _);
             if (full)
             {
+                var currentPages = pageTargets.Select(page => page.Title).ToHashSet(StringComparer.Ordinal);
+                urls.UnionWith(resourcesByPage.Where(entry => currentPages.Contains(entry.Key)).SelectMany(entry => entry.Value));
                 var mapped = urls.Select(WikiContentProcessor.GetFileNameFromUrl).ToHashSet(StringComparer.Ordinal);
-                foreach (var asset in await _contentDatabase.GetAllPrimaryKeysAsync<WikiAsset>(token))
-                {
-                    if (mapped.Contains(asset)) continue;
-                    // An old/imported database may contain media no longer referenced by a page.
-                    // Resolve its exact key through the file API, never through an auxiliary list.
-                    var source = await reader.AssetSourceAsync(asset);
-                    if (source is null)
-                    {
-                        failed++;
-                        progress?.Report(new WikiProgress("sync-media-source-missing", Detail: asset));
-                    }
-                    else urls.Add(source);
-                }
+                var orphanCount = (await _contentDatabase.GetAllPrimaryKeysAsync<WikiAsset>(token)).Count(asset => !mapped.Contains(asset));
+                if (orphanCount > 0)
+                    progress?.Report(new WikiProgress("sync-orphan-media-retained", Detail: orphanCount.ToString(System.Globalization.CultureInfo.InvariantCulture)));
             }
             var forceUrls = new HashSet<string>(StringComparer.Ordinal);
-            if (previous?.Incomplete == true) forceUrls.UnionWith(urls);
+            if (previous?.Incomplete == true || !mediaQueue.Valid) forceUrls.UnionWith(urls);
             foreach (var file in fileEvents)
             {
                 var name = file[(file.IndexOf(':') + 1)..].Replace(' ', '_');
@@ -287,6 +352,7 @@ public sealed partial class WikiDataLifecycle
                         token.ThrowIfCancellationRequested();
                         if (exists) resourceCount++;
                         urls.ExceptWith(exact);
+                        foreach (var url in exact) mediaQueue.Tasks.Remove(url);
                         foreach (var pageResources in resourcesByPage)
                         {
                             var retained = pageResources.Value.Except(exact, StringComparer.Ordinal).ToArray();
@@ -299,21 +365,56 @@ public sealed partial class WikiDataLifecycle
                 }
                 else { urls.UnionWith(matches); forceUrls.UnionWith(matches); }
             }
-            await Parallel.ForEachAsync(urls,
-                new ParallelOptions { MaxDegreeOfParallelism = options.ResourceConcurrency, CancellationToken = token }, async (url, _) =>
+            var referencedUrls = resourcesByPage.Values.SelectMany(value => value).ToHashSet(StringComparer.Ordinal);
+            var pending = new ConcurrentDictionary<string, bool>(mediaQueue.Tasks.Where(task => referencedUrls.Contains(task.Key)), StringComparer.Ordinal);
+            var previouslyForcedKeys = mediaQueue.Tasks.Where(task => task.Value).Select(task => WikiContentProcessor.GetFileNameFromUrl(task.Key)).ToHashSet(StringComparer.Ordinal);
+            forceUrls.UnionWith(urls.Where(url => previouslyForcedKeys.Contains(WikiContentProcessor.GetFileNameFromUrl(url))));
+            foreach (var url in urls) pending.AddOrUpdate(url, forceUrls.Contains(url), (_, force) => force || forceUrls.Contains(url));
+            // The queue transaction precedes the cursor. A crash in between still
+            // leaves Incomplete=true; a crash afterwards resumes individual media.
+            await _contentDatabase.SaveSyncMediaQueueAsync(reader.Identity, pending, token);
+            if (!pending.IsEmpty) await File.WriteAllLinesAsync(paths.FailedResourceListPath, pending.Keys, token);
+            await CommitPageCursorAsync();
+            var totalMedia = pending.Count;
+            var mediaProcessed = 0;
+            progress?.Report(new WikiProgress("sync-media-start", Total: totalMedia));
+            try
             {
-                token.ThrowIfCancellationRequested();
-                try
+                await Parallel.ForEachAsync(pending.OrderBy(task => task.Key, StringComparer.Ordinal).ToArray(),
+                    new ParallelOptions { MaxDegreeOfParallelism = options.ResourceConcurrency, CancellationToken = token }, async (url, _) =>
                 {
-                    var changed = await RetryAsync(() => DownloadSyncResourceAsync(book, url, forceUrls.Contains(url), token), options.MaxRetryAttempts, token);
-                    if (changed) Interlocked.Increment(ref resourceCount);
-                    progress?.Report(new WikiProgress(changed ? "resource-downloaded" : "resource-skipped", resourceCount, urls.Count,
-                        WikiContentProcessor.GetFileNameFromUrl(url)));
-                }
-                catch (OperationCanceledException) { throw; }
-                catch (HttpRequestException exception) when (exception.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable) { throw; }
-                catch { Interlocked.Increment(ref failed); await AppendFailureAsync(paths.FailedResourceListPath, url, token); }
-            });
+                    token.ThrowIfCancellationRequested();
+                    try
+                    {
+                        var changed = await RetryAsync(() => DownloadResourceAsync(book, url.Key, token, url.Value, progress), options.MaxRetryAttempts, token, progress);
+                        if (changed) Interlocked.Increment(ref resourceCount);
+                        await _contentDatabase.CompleteSyncMediaTaskAsync(url.Key, token);
+                        pending.TryRemove(url.Key, out var completedForce);
+                        progress?.Report(new WikiProgress(changed ? "resource-downloaded" : "resource-skipped", Interlocked.Increment(ref mediaProcessed), totalMedia,
+                            WikiContentProcessor.GetFileNameFromUrl(url.Key)));
+                    }
+                    catch (OperationCanceledException) when (token.IsCancellationRequested) { throw; }
+                    catch (HttpRequestException exception) when (WikiHttpRetry.IsAccessDenied(exception) ||
+                        exception.StatusCode is HttpStatusCode.TooManyRequests or HttpStatusCode.ServiceUnavailable)
+                    {
+                        progress?.Report(new WikiProgress("sync-media-failed", Detail: url.Key, Error: exception));
+                        throw;
+                    }
+                    catch (Exception exception)
+                    {
+                        Interlocked.Increment(ref failed);
+                        progress?.Report(new WikiProgress("sync-media-failed", Interlocked.Increment(ref mediaProcessed), totalMedia,
+                            url.Key, exception));
+                    }
+                });
+            }
+            finally
+            {
+                // This helper list exposes pending work to the existing retry UI;
+                // the database queue is authoritative after process termination.
+                if (pending.IsEmpty) DeleteIfExists(paths.FailedResourceListPath);
+                else await File.WriteAllLinesAsync(paths.FailedResourceListPath, pending.Keys, CancellationToken.None);
+            }
         }
 
         if (resourceMetadataChanged)
@@ -325,15 +426,6 @@ public sealed partial class WikiDataLifecycle
         await RefreshBookStatisticsCoreAsync(book, token);
         if (failed == 0)
         {
-            var anchor = events.LastOrDefault();
-            await SaveSyncStateAsync(new WikiSyncState
-            {
-                Identity = reader.Identity, CoveredThrough = upper,
-                AnchorId = anchor?.Id ?? (full ? 0 : previous!.AnchorId),
-                AnchorTime = anchor?.Time ?? (full ? default : previous!.AnchorTime),
-                LastFullScan = full ? upper : previous!.LastFullScan,
-                Incomplete = false, ResourcesCovered = includeResources
-            }, token);
             DeleteIfExists(paths.FailedPageListPath);
             if (includeResources) DeleteIfExists(paths.FailedResourceListPath);
             CleanTransientFiles(paths);
@@ -342,17 +434,4 @@ public sealed partial class WikiDataLifecycle
             pages + redirectCount + deleted + resourceCount > 0, candidates.Count, skipped, deleted, full);
     }
 
-    private async Task<bool> DownloadSyncResourceAsync(WikiBook book, string url, bool force, CancellationToken token)
-    {
-        if (!force) return await DownloadResourceAsync(book, url, token);
-        var response = await _httpTransport.GetContentAsync(book, new Uri(url), null, token);
-        if (response.IsNotModified) throw new InvalidDataException("Unconditional resource request returned 304.");
-        await _contentDatabase.SaveItemAsync(new WikiAsset
-        {
-            FileName = WikiContentProcessor.GetFileNameFromUrl(url), Data = response.Data,
-            MimeType = response.ContentType, LastModified = response.LastModified?.UtcDateTime ?? DateTime.MinValue
-        }, CancellationToken.None);
-        token.ThrowIfCancellationRequested();
-        return true;
-    }
 }

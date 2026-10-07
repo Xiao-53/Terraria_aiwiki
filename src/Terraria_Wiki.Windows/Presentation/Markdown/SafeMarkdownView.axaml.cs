@@ -21,7 +21,6 @@ internal sealed partial class SafeMarkdownView : UserControl
     {
         AvaloniaXamlLoader.Load(this);
         _documentRoot = this.FindControl<StackPanel>("DocumentRoot")!;
-        AutomationProperties.SetName(this, "AI 回答");
         Render(Document);
     }
 
@@ -105,7 +104,7 @@ internal sealed partial class SafeMarkdownView : UserControl
             FontSize = 13,
             TextWrapping = TextWrapping.Wrap,
         };
-        AutomationProperties.SetName(code, "代码块");
+        code.Classes.Add("localized-code");
         var border = new Border { Child = code };
         border.Classes.Add("markdown-code");
         return border;

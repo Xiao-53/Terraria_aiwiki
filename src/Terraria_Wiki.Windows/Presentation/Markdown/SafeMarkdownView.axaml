@@ -1,7 +1,11 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-             x:Class="Terraria_Wiki.Windows.Presentation.Markdown.SafeMarkdownView">
+             x:Class="Terraria_Wiki.Windows.Presentation.Markdown.SafeMarkdownView"
+             AutomationProperties.Name="{DynamicResource Ui.AIAnswer}">
   <UserControl.Styles>
+    <Style Selector="SelectableTextBlock.localized-code">
+      <Setter Property="AutomationProperties.Name" Value="{DynamicResource Ui.CodeBlock}" />
+    </Style>
     <Style Selector="Border.markdown-code">
       <Setter Property="Background" Value="{DynamicResource SystemControlBackgroundChromeMediumLowBrush}" />
       <Setter Property="CornerRadius" Value="8" />

@@ -119,7 +119,7 @@ public sealed class ApplicationSettingsUseCases
                 ? stored.RetryAttempts
                 : ApplicationPreferences.DefaultRetryAttempts,
             WikiFullScanIntervalDays = stored.WikiFullScanIntervalDays is <= 0
-                ? ApplicationPreferences.DefaultWikiFullScanIntervalDays
+                ? null
                 : stored.WikiFullScanIntervalDays,
         };
     }

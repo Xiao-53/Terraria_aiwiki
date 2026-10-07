@@ -24,11 +24,11 @@ public sealed class WikiDataUseCases
         }, cancellationToken);
     }
 
-    public Task<bool> HasFailuresAsync(CancellationToken cancellationToken = default)
+    public async Task<bool> HasFailuresAsync(CancellationToken cancellationToken = default)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var active = _state.RequireActiveBook();
-        return Task.FromResult(_state.Lifecycle.HasFailures(Paths(active)));
+        return await _state.Lifecycle.HasFailuresAsync(Paths(active), cancellationToken);
     }
 
     public async Task<WikiOperationSummary> DownloadAsync(
@@ -70,7 +70,9 @@ public sealed class WikiDataUseCases
     public async Task<WikiOperationSummary> UpdateAsync(
         bool includeResources,
         IProgress<WikiProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task<bool>>? confirmFullScanAsync = null,
+        WikiUpdateMode updateMode = WikiUpdateMode.Automatic)
     {
         return await RunCoordinatedAsync(async active =>
         {
@@ -78,7 +80,7 @@ public sealed class WikiDataUseCases
                 active,
                 Paths(active),
                 includeResources,
-                Options(),
+                Options() with { ConfirmFullScanAsync = confirmFullScanAsync, UpdateMode = updateMode },
                 progress,
                 cancellationToken);
             await _state.RefreshActiveBookAsync(cancellationToken);
@@ -88,14 +90,15 @@ public sealed class WikiDataUseCases
 
     public async Task<WikiOperationSummary> RetryFailuresAsync(
         IProgress<WikiProgress>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        Func<string, CancellationToken, Task<bool>>? confirmFullScanAsync = null)
     {
         return await RunCoordinatedAsync(async active =>
         {
             var result = await _state.Lifecycle.RetryFailuresAsync(
                 active,
                 Paths(active),
-                Options(),
+                Options() with { ConfirmFullScanAsync = confirmFullScanAsync },
                 progress,
                 cancellationToken);
             await _state.RefreshActiveBookAsync(cancellationToken);

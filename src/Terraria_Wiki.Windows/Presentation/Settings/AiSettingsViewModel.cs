@@ -18,7 +18,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     private readonly Dictionary<string, IReadOnlyList<string>> _modelCatalog = new(StringComparer.OrdinalIgnoreCase);
     private CancellationTokenSource? _operationCancellation;
     private AiRuntimeConfigurationDraft? _savedDraft;
-    private string _statusMessage = "打开此页后载入 AI 配置。";
+    private string _statusMessage = UiTextCatalog.Message("OpenThisPageToLoadAIConfiguration");
     private bool _isAvailable;
     private bool _isBusy;
     private bool _hasLoaded;
@@ -32,12 +32,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     private int _customApiIndex;
     private int _reasoningEffortIndex;
     private bool _disposed;
-    private bool _pageActive = true;
-    private bool _notificationVisible;
-    private double _notificationOpacity = 1;
     private string _configurationError = string.Empty;
-    private CancellationTokenSource? _notificationCancellation;
-    private readonly Func<TimeSpan, CancellationToken, Task> _delay;
 
     public AiSettingsViewModel(
         Func<CancellationToken, Task<AiRuntimeConfigurationDraft>> load,
@@ -50,7 +45,12 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         Func<AiProviderConfiguration, IReadOnlyList<string>, CancellationToken, Task>? saveModelCatalog = null,
         Func<TimeSpan, CancellationToken, Task>? notificationDelay = null)
     {
-        _delay = notificationDelay ?? ((duration, token) => Task.Delay(duration, token));
+        Notification = new StatusNotification(notificationDelay);
+        Notification.PropertyChanged += (_, args) =>
+        {
+            if (args.PropertyName == nameof(StatusNotification.IsVisible)) OnPropertyChanged(nameof(HasStatusMessage));
+            if (args.PropertyName == nameof(StatusNotification.Opacity)) OnPropertyChanged(nameof(NotificationOpacity));
+        };
         _load = load ?? throw new ArgumentNullException(nameof(load));
         _save = save ?? throw new ArgumentNullException(nameof(save));
         _restart = restart ?? throw new ArgumentNullException(nameof(restart));
@@ -75,71 +75,25 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
 
     public string StatusMessage
     {
-        get => _statusMessage;
+        get => Text.Render(_statusMessage);
         private set
         {
-            CancelNotification();
-            SetProperty(ref _statusMessage, value);
-            NotificationOpacity = 1;
-            _notificationVisible = _pageActive && !string.IsNullOrWhiteSpace(value);
-            OnPropertyChanged(nameof(HasStatusMessage));
+            SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value));
+            Notification.Show(!string.IsNullOrWhiteSpace(value));
         }
     }
 
-    public bool HasStatusMessage => _pageActive && _notificationVisible;
-    public double NotificationOpacity
-    {
-        get => _notificationOpacity;
-        private set => SetProperty(ref _notificationOpacity, value);
-    }
+    public StatusNotification Notification { get; }
+    public bool HasStatusMessage => Notification.IsVisible;
+    public double NotificationOpacity => Notification.Opacity;
     public string ConfigurationError
     {
-        get => _configurationError;
-        private set => SetProperty(ref _configurationError, value);
+        get => Text.Render(_configurationError);
+        private set => SetProperty(ref _configurationError, UiTextCatalog.FromSafeMessage(value));
     }
 
-    public void SetPageActive(bool active)
-    {
-        _pageActive = active;
-        if (!active)
-        {
-            CancelNotification();
-            _notificationVisible = false;
-        }
-        if (active && IsBusy) _notificationVisible = true;
-        OnPropertyChanged(nameof(HasStatusMessage));
-    }
+    public void SetPageActive(bool active) => Notification.SetPageActive(active);
 
-    private void CancelNotification()
-    {
-        _notificationCancellation?.Cancel();
-        _notificationCancellation?.Dispose();
-        _notificationCancellation = null;
-    }
-
-    private async Task ExpireNotificationAsync(CancellationTokenSource current)
-    {
-        var token = current.Token;
-        try
-        {
-            await _delay(TimeSpan.FromSeconds(20), token);
-            if (token.IsCancellationRequested || !ReferenceEquals(current, _notificationCancellation)) return;
-            NotificationOpacity = 0;
-            await _delay(TimeSpan.FromMilliseconds(180), token);
-            if (token.IsCancellationRequested || !ReferenceEquals(current, _notificationCancellation)) return;
-            _notificationVisible = false;
-            OnPropertyChanged(nameof(HasStatusMessage));
-        }
-        catch (OperationCanceledException) when (token.IsCancellationRequested) { }
-        finally
-        {
-            if (ReferenceEquals(current, _notificationCancellation))
-            {
-                _notificationCancellation = null;
-                current.Dispose();
-            }
-        }
-    }
     public bool IsAvailable
     {
         get => _isAvailable;
@@ -157,7 +111,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         {
             if (SetProperty(ref _isBusy, value))
             {
-                OnPropertyChanged(nameof(HasStatusMessage));
+                Notification.SetBusy(value);
                 RefreshState();
             }
         }
@@ -203,10 +157,10 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
 
     public bool HasStoredCredential => _hasStoredCredential;
     public bool ShowStoredCredentialMask => HasStoredCredential && ApiKey.Length == 0;
-    public string ApiKeyPlaceholder => HasStoredCredential ? string.Empty : "输入 API Key";
-    public string CredentialStatus => HasStoredCredential
-        ? "已安全保存在 Windows Credential Manager；输入框中的固定遮蔽标记不代表密钥长度，输入新值可替换。"
-        : "尚未保存密钥；输入后将写入 Windows Credential Manager，不写入配置文件。";
+    public string ApiKeyPlaceholder => Text.Render(HasStoredCredential ? string.Empty : UiTextCatalog.Message("EnterAPIKey"));
+    public string CredentialStatus => Text.Render(HasStoredCredential
+        ? UiTextCatalog.Message("SecurelySavedInWindowsCredentialManagerTheFixed")
+        : UiTextCatalog.Message("NoKeySavedYetItWillBeStored"));
 
     public string Model
     {
@@ -262,9 +216,9 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
 
     public bool IsDeepSeek => ProviderIndex == 0;
     public bool IsCustomProvider => ProviderIndex == 1;
-    public string ProviderDescription => IsDeepSeek
-        ? "使用 DeepSeek 官方地址和 Responses API；模型列表从服务实时获取。"
-        : "连接其他兼容 OpenAI Responses 或 Chat Completions 的服务；不支持模型列表时可手填 model id。";
+    public string ProviderDescription => Text.Render(IsDeepSeek
+        ? UiTextCatalog.Message("UsesTheOfficialDeepSeekEndpointAndResponsesAPI")
+        : UiTextCatalog.Message("ConnectToAnotherOpenAIResponsesOrChatCompletions"));
     public bool CanEdit => IsAvailable && !IsBusy;
     public bool CanSave => IsAvailable && !IsBusy && IsDirty;
     public bool CanClearCredential => IsAvailable && !IsBusy && HasStoredCredential;
@@ -287,11 +241,11 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         _operationCancellation?.Cancel();
         _operationCancellation?.Dispose();
         _operationCancellation = null;
-        CancelNotification();
+        Notification.Reset();
         IsAvailable = false;
         IsBusy = false;
         StatusMessage = string.Empty;
-        ConfigurationError = "AI 设置不可用。";
+        ConfigurationError = UiTextCatalog.Message("AISettingsUnavailable");
     }
 
     public Task EnsureLoadedAsync() => _hasLoaded ? Task.CompletedTask : RefreshAsync();
@@ -307,7 +261,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             var catalog = await LoadModelCatalogSafelyAsync(current.Token);
             current.Token.ThrowIfCancellationRequested();
             Apply(draft);
-            ConfigurationError = draft.Exists ? string.Empty : "请填写模型名称和 API Key 后保存配置。";
+            ConfigurationError = draft.Exists ? string.Empty : UiTextCatalog.Message("EnterAModelNameAndAPIKeyThen");
             _modelCatalog.Clear();
             foreach (var entry in catalog)
                 _modelCatalog[entry.Key] = entry.Value;
@@ -315,21 +269,21 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             _hasLoaded = true;
             StatusMessage = draft.Exists
                 ? string.Empty
-                : "尚无 AI 配置；请先获取或手动填写模型，并输入 API Key。";
+                : UiTextCatalog.Message("NoAIConfigurationYetFetchOrEnterA");
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "AI 配置载入已取消。";
+            StatusMessage = UiTextCatalog.Message("LoadingAIConfigurationWasCancelled");
         }
         catch (AiConfigurationException exception)
         {
-            ConfigurationError = exception.Message + " 请修复配置文件后切换到常规设置，再返回 AI 配置。";
-            StatusMessage = "无法载入 AI 配置。";
+            ConfigurationError = UiTextCatalog.Join("", UiTextCatalog.FromSafeMessage(exception.Message), UiTextCatalog.Message("RepairTheConfigurationFileSwitchToGeneralSettings"));
+            StatusMessage = UiTextCatalog.Message("CouldNotLoadAIConfiguration");
         }
         catch
         {
-            ConfigurationError = "无法读取 AI 配置，请切换到常规设置，再返回 AI 配置重试。";
-            StatusMessage = "无法读取 AI 配置。";
+            ConfigurationError = UiTextCatalog.Message("CouldNotReadAIConfigurationSwitchToGeneral");
+            StatusMessage = UiTextCatalog.Message("CouldNotReadAIConfiguration");
         }
         finally
         {
@@ -344,7 +298,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         var current = BeginOperation();
         try
         {
-            StatusMessage = "正在从模型服务获取列表…";
+            StatusMessage = UiTextCatalog.Message("FetchingTheModelList");
             var draft = BuildDraft();
             var models = await _discoverModels(draft, current.Token);
             current.Token.ThrowIfCancellationRequested();
@@ -360,12 +314,12 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             if (selectedFirstModel)
                 Model = DiscoveredModels[0];
             StatusMessage = DiscoveredModels.Count == 0
-                ? "未获取到模型，可手动输入模型名称"
-                : $"已获取 {DiscoveredModels.Count} 个模型";
+                ? UiTextCatalog.Message("NoModelsReturnedYouCanEnterAModel")
+                : UiTextCatalog.Message("FetchedModels", DiscoveredModels.Count);
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "获取模型已取消。";
+            StatusMessage = UiTextCatalog.Message("FetchingModelsWasCancelled");
         }
         catch (Exception exception) when (exception is AiConfigurationException or AiProviderConnectionException)
         {
@@ -374,7 +328,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         }
         catch
         {
-            StatusMessage = "无法获取模型列表；当前配置未被修改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotFetchTheModelListCurrentConfiguration");
         }
         finally
         {
@@ -389,14 +343,14 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         var current = BeginOperation();
         try
         {
-            StatusMessage = "正在测试连接…";
+            StatusMessage = UiTextCatalog.Message("TestingConnection");
             await _testConfiguration(BuildDraft(), current.Token);
             current.Token.ThrowIfCancellationRequested();
-            StatusMessage = "连接成功";
+            StatusMessage = UiTextCatalog.Message("ConnectionSuccessful");
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "测试连接已取消。";
+            StatusMessage = UiTextCatalog.Message("ConnectionTestCancelled");
         }
         catch (Exception exception) when (exception is AiConfigurationException or AiProviderConnectionException)
         {
@@ -405,7 +359,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         }
         catch
         {
-            StatusMessage = "测试连接失败，请检查服务地址、模型和密钥。";
+            StatusMessage = UiTextCatalog.Message("ConnectionTestFailedCheckTheEndpointModelAnd");
         }
         finally
         {
@@ -420,7 +374,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         var current = BeginOperation();
         try
         {
-            StatusMessage = "正在保存配置…";
+            StatusMessage = UiTextCatalog.Message("SavingConfiguration");
             var saved = await _save(BuildDraft(), current.Token);
             current.Token.ThrowIfCancellationRequested();
             Apply(new AiRuntimeConfigurationDraft(
@@ -432,27 +386,27 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
                 HasStoredCredential: true), resetDiscoveredModels: false);
             try
             {
-                StatusMessage = "正在应用配置…";
+                StatusMessage = UiTextCatalog.Message("ApplyingConfiguration");
                 var status = await _restart(current.Token);
                 current.Token.ThrowIfCancellationRequested();
                 ConfigurationError = status.State == WindowsAiRuntimeState.Ready ? string.Empty : status.Message;
                 StatusMessage = status.State == WindowsAiRuntimeState.Ready
-                    ? "AI 配置已保存"
-                    : "AI 配置已保存，暂未应用；" + status.Message;
+                    ? UiTextCatalog.Message("AIConfigurationSaved")
+                    : UiTextCatalog.Join("", UiTextCatalog.Message("AIConfigurationSavedButNotApplied"), UiTextCatalog.FromSafeMessage(status.Message));
             }
             catch (OperationCanceledException) when (current.IsCancellationRequested)
             {
-                StatusMessage = "AI 配置已保存；当前会话应用已因退出而取消。";
+                StatusMessage = UiTextCatalog.Message("AIConfigurationSavedApplicationToThisSessionWas");
             }
             catch
             {
-                ConfigurationError = "AI 暂未应用配置，可稍后在问答页重试。";
-                StatusMessage = "AI 配置已保存，暂未应用；可稍后在问答页重试。";
+                ConfigurationError = UiTextCatalog.Message("AIConfigurationHasNotBeenAppliedRetryLater");
+                StatusMessage = UiTextCatalog.Message("AIConfigurationSavedButNotAppliedRetryLater");
             }
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "AI 配置保存已取消。";
+            StatusMessage = UiTextCatalog.Message("SavingAIConfigurationWasCancelled");
         }
         catch (AiConfigurationException exception)
         {
@@ -460,12 +414,12 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             StatusMessage = exception.Code switch
             {
                 "python-invalid" or "python-missing" or "provider-invalid" or "model_authentication" => exception.Message,
-                _ => "AI 配置保存失败；当前会话继续使用上次有效配置。",
+                _ => UiTextCatalog.Message("SavingAIConfigurationFailedThisSessionContinuesUsing"),
             };
         }
         catch
         {
-            StatusMessage = "AI 配置保存失败；当前会话继续使用上次有效配置。";
+            StatusMessage = UiTextCatalog.Message("SavingAIConfigurationFailedThisSessionContinuesUsing");
         }
         finally
         {
@@ -480,7 +434,7 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         var current = BeginOperation();
         try
         {
-            StatusMessage = "正在清除密钥…";
+            StatusMessage = UiTextCatalog.Message("ClearingKey");
             var status = await _clearCredential(current.Token);
             current.Token.ThrowIfCancellationRequested();
             _apiKey = string.Empty;
@@ -492,18 +446,18 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(CredentialStatus));
             _savedDraft = BuildDraft(_savedDraft?.ConfigurationPath, _savedDraft?.Exists ?? true);
             IsDirty = false;
-            ConfigurationError = "尚未保存密钥，请输入 API Key 后保存配置。";
+            ConfigurationError = UiTextCatalog.Message("NoKeySavedYetEnterAnAPIKey");
             StatusMessage = status.State == WindowsAiRuntimeState.Disabled
-                ? "已从 Windows Credential Manager 清除 API Key；AI 已停用，离线功能不受影响。"
-                : "已清除 API Key；AI Runtime 状态将在下次启动时刷新。";
+                ? UiTextCatalog.Message("APIKeyRemovedFromWindowsCredentialManagerAI")
+                : UiTextCatalog.Message("APIKeyClearedAIStatusWillRefreshOn");
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "清除 API Key 已取消；现有凭据未确认改变。";
+            StatusMessage = UiTextCatalog.Message("ClearingTheAPIKeyWasCancelledAChange");
         }
         catch
         {
-            StatusMessage = "无法清除 Windows 凭据；AI 配置文件未被修改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotClearWindowsCredentialsTheAIConfiguration");
         }
         finally
         {
@@ -517,13 +471,13 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             return;
         _disposed = true;
         Detach();
+        Notification.Dispose();
     }
 
     private CancellationTokenSource BeginOperation()
     {
         var current = new CancellationTokenSource();
         _operationCancellation = current;
-        CancelNotification();
         IsBusy = true;
         return current;
     }
@@ -535,12 +489,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
         _operationCancellation = null;
         current.Dispose();
         IsBusy = false;
-        if (_pageActive && _notificationVisible && !_disposed)
-        {
-            var expiry = new CancellationTokenSource();
-            _notificationCancellation = expiry;
-            _ = ExpireNotificationAsync(expiry);
-        }
     }
 
     private void Apply(AiRuntimeConfigurationDraft draft, bool resetDiscoveredModels = true)

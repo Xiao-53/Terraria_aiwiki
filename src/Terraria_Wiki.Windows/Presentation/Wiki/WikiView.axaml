@@ -9,12 +9,12 @@
              Background="Transparent"
              BorderThickness="0"
              Padding="0"
-             AutomationProperties.Name="Wiki 搜索结果">
+             AutomationProperties.Name="{DynamicResource Ui.WikiSearchResults}">
       <ListBox.ItemTemplate>
         <DataTemplate x:DataType="wiki:WikiSearchResultViewModel">
           <Button Command="{Binding OpenCommand}" Classes="list-row"
                   HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                  AutomationProperties.Name="打开 Wiki 搜索结果">
+                  AutomationProperties.Name="{DynamicResource Ui.OpenWikiSearchResult}">
             <StackPanel Spacing="3">
               <Grid ColumnDefinitions="*,Auto">
                 <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
@@ -35,6 +35,6 @@
     </ListBox>
     <TextBlock Grid.Row="1" Text="{Binding StatusMessage}" Classes="muted"
                Margin="4,8,4,0" TextWrapping="Wrap"
-               AutomationProperties.Name="Wiki 搜索状态" />
+               AutomationProperties.Name="{DynamicResource Ui.WikiSearchStatus}" />
   </Grid>
 </UserControl>

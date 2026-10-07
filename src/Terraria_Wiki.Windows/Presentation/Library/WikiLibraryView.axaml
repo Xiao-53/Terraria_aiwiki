@@ -6,37 +6,37 @@
   <Grid RowDefinitions="Auto,Auto,Auto,*,Auto" Margin="24">
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
       <StackPanel Spacing="4">
-        <TextBlock Text="Wiki 资料库" Classes="page-title" />
+        <TextBlock Text="{DynamicResource Ui.WikiLibrary}" Classes="page-title" />
       </StackPanel>
       <Button Grid.Column="1" Classes="toolbar-action" Command="{Binding RefreshCommand}"
-              VerticalAlignment="Center" AutomationProperties.Name="刷新 Wiki 资料库">
+              VerticalAlignment="Center" AutomationProperties.Name="{DynamicResource Ui.RefreshWikiLibrary}">
         <StackPanel Orientation="Horizontal" Spacing="8">
           <Path Width="16" Height="16" Stretch="Uniform"
                 Data="{StaticResource IconRefresh}"
                 Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
                 StrokeLineCap="Round" StrokeJoin="Round" />
-          <TextBlock Text="刷新" FontSize="13" FontWeight="SemiBold" />
+          <TextBlock Text="{DynamicResource Ui.Refresh}" FontSize="13" FontWeight="SemiBold" />
         </StackPanel>
       </Button>
     </Grid>
 
     <Grid Grid.Row="1" ColumnDefinitions="Auto,Auto,*" ColumnSpacing="4"
           MaxWidth="820" HorizontalAlignment="Stretch" Margin="0,16,0,0">
-      <Button Content="全部页面" Command="{Binding SelectPagesCommand}"
+      <Button Content="{DynamicResource Ui.AllPages}" Command="{Binding SelectPagesCommand}"
               Classes="segment-button" Classes.selected="{Binding IsPagesSelected}"
-              AutomationProperties.Name="查看全部页面" />
-      <Button Grid.Column="1" Content="对话历史" Command="{Binding SelectHistoryCommand}"
+              AutomationProperties.Name="{DynamicResource Ui.ViewAllPages}" />
+      <Button Grid.Column="1" Content="{DynamicResource Ui.ConversationHistory}" Command="{Binding SelectHistoryCommand}"
               Classes="segment-button" Classes.selected="{Binding IsHistorySelected}"
-              AutomationProperties.Name="查看对话历史" />
-      <Button Grid.Column="2" Content="清空未收藏" Command="{Binding RequestClearHistoryCommand}"
+              AutomationProperties.Name="{DynamicResource Ui.ViewConversationHistory}" />
+      <Button Grid.Column="2" Content="{DynamicResource Ui.ClearUnfavorited}" Command="{Binding RequestClearHistoryCommand}"
               Classes="danger-action" IsVisible="{Binding IsHistorySelected}"
-              HorizontalAlignment="Right" AutomationProperties.Name="请求清空未收藏对话" />
+              HorizontalAlignment="Right" AutomationProperties.Name="{DynamicResource Ui.RequestClearingUnfavoritedConversations}" />
     </Grid>
 
     <TextBox Grid.Row="2" Text="{Binding Query, Mode=TwoWay}"
-             PlaceholderText="按标题筛选"
+             PlaceholderText="{DynamicResource Ui.FilterByTitle}"
              MaxWidth="820" HorizontalAlignment="Stretch" Margin="0,12,0,0"
-             AutomationProperties.Name="筛选 Wiki 资料库" />
+             AutomationProperties.Name="{DynamicResource Ui.FilterWikiLibrary}" />
 
     <Grid Grid.Row="3" Margin="0,12,0,0">
       <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled">
@@ -45,7 +45,7 @@
             <ItemsControl.ItemTemplate>
               <DataTemplate x:DataType="library:WikiPageItemViewModel">
                 <Button Command="{Binding OpenCommand}" Classes="list-row"
-                        AutomationProperties.Name="打开全部页面条目">
+                        AutomationProperties.Name="{DynamicResource Ui.OpenPageInLibrary}">
                   <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                     <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
                     <TextBlock Grid.Column="1" Text="{Binding ModifiedText}" Classes="tag" />
@@ -60,7 +60,7 @@
               <DataTemplate x:DataType="library:ConversationHistoryItemViewModel">
                 <Grid ColumnDefinitions="*,Auto">
                   <Button Command="{Binding OpenCommand}" Classes="list-row"
-                          AutomationProperties.Name="打开历史对话">
+                          AutomationProperties.Name="{DynamicResource Ui.OpenConversationFromHistory}">
                     <Grid ColumnDefinitions="*,Auto" ColumnSpacing="16">
                       <StackPanel Spacing="3">
                         <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -71,8 +71,8 @@
                     </Grid>
                   </Button>
                   <Button Grid.Column="1" Classes="icon-button danger-icon" Command="{Binding DeleteCommand}"
-                          Margin="8,0,0,0" ToolTip.Tip="删除对话"
-                          AutomationProperties.Name="删除历史对话">
+                          Margin="8,0,0,0" ToolTip.Tip="{DynamicResource Ui.DeleteConversation2}"
+                          AutomationProperties.Name="{DynamicResource Ui.DeleteConversationFromHistory}">
                     <Grid Width="24" Height="24">
                       <Path Data="{StaticResource IconDelete}" Stretch="None"
                             Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="1.8"
@@ -86,48 +86,19 @@
 
           <StackPanel IsVisible="{Binding IsEmpty}" Margin="20,54" Spacing="8"
                       HorizontalAlignment="Center">
-            <TextBlock Text="没有可显示的内容" Classes="section-title" />
-            <TextBlock Text="可调整筛选条件或稍后刷新。" Classes="page-subtitle" />
+            <TextBlock Text="{DynamicResource Ui.NothingToShow}" Classes="section-title" />
+            <TextBlock Text="{DynamicResource Ui.AdjustTheFilterOrRefreshLater}" Classes="page-subtitle" />
           </StackPanel>
-          <Button Classes="secondary-action" Content="继续加载" Command="{Binding LoadMoreCommand}"
+          <Button Classes="secondary-action" Content="{DynamicResource Ui.LoadMore}" Command="{Binding LoadMoreCommand}"
                   IsVisible="{Binding CanLoadMore}" HorizontalAlignment="Center"
-                  AutomationProperties.Name="继续加载 Wiki 页面" />
+                  AutomationProperties.Name="{DynamicResource Ui.LoadMoreWikiPages}" />
         </StackPanel>
       </ScrollViewer>
 
-      <Border Classes="card confirmation-card" Padding="20" VerticalAlignment="Top"
-              IsVisible="{Binding IsDeleteConfirmationVisible}"
-              MaxWidth="520" HorizontalAlignment="Center" Margin="16,18">
-        <StackPanel Spacing="12">
-          <TextBlock Text="{Binding DeleteConfirmationText}" Classes="section-title" TextWrapping="Wrap" />
-          <TextBlock Text="删除后无法从历史或收藏中打开；当前正在查看的同一对话会切换为空白新对话。"
-                     Classes="page-subtitle" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="取消" Command="{Binding CancelDeleteCommand}" Classes="secondary-action" />
-            <Button Content="确认删除" Command="{Binding ConfirmDeleteCommand}"
-                    Classes="danger-action" AutomationProperties.Name="确认删除对话" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
-
-      <Border Classes="card confirmation-card" Padding="20" VerticalAlignment="Top"
-              IsVisible="{Binding IsClearConfirmationVisible}"
-              MaxWidth="520" HorizontalAlignment="Center" Margin="16,18">
-        <StackPanel Spacing="12">
-          <TextBlock Text="确定清空全部未收藏对话吗？" Classes="section-title" TextWrapping="Wrap" />
-          <TextBlock Text="已收藏对话会保留；此操作不会删除 Wiki 页面或 Wiki 收藏。"
-                     Classes="page-subtitle" TextWrapping="Wrap" />
-          <StackPanel Orientation="Horizontal" HorizontalAlignment="Right" Spacing="8">
-            <Button Content="取消" Command="{Binding CancelClearHistoryCommand}" Classes="secondary-action" />
-            <Button Content="确认清空" Command="{Binding ConfirmClearHistoryCommand}"
-                    Classes="danger-action" AutomationProperties.Name="确认清空未收藏对话" />
-          </StackPanel>
-        </StackPanel>
-      </Border>
     </Grid>
 
     <TextBlock Grid.Row="4" Text="{Binding StatusMessage}" Classes="muted"
                HorizontalAlignment="Center" Margin="0,10,0,0"
-               AutomationProperties.Name="Wiki 资料库状态" />
+               AutomationProperties.Name="{DynamicResource Ui.WikiLibraryStatus}" />
   </Grid>
 </UserControl>

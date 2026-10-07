@@ -12,11 +12,11 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
     private bool? _captureShow;
     private bool _captureReady;
     private int _captureVersion;
-    private int _pageIndex;
-    private string _showHotkey = "F7";
-    private string _hideHotkey = "F8";
-    private bool _closeToTray;
-    private bool _topmost;
+    private int _pageIndex = 1;
+    private string _showHotkey = new QuickAccessPreferences().ShowHotkey;
+    private string _hideHotkey = new QuickAccessPreferences().HideHotkey;
+    private bool _closeToTray = new QuickAccessPreferences().CloseToTray;
+    private bool _topmost = new QuickAccessPreferences().Topmost;
     private string _status = string.Empty;
     private bool _busy;
     private bool _applying;
@@ -51,12 +51,12 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
         set { if (SetProperty(ref _hideHotkey, value ?? string.Empty)) { OnPropertyChanged(nameof(HideHotkeyLabel)); QueueSave(); } }
     }
     public bool IsRecordingHotkey => _captureShow is not null;
-    public string ShowHotkeyLabel => _captureShow == true ? "按下快捷键…" : DisplayHotkey(ShowHotkey);
-    public string HideHotkeyLabel => _captureShow == false ? "按下快捷键…" : DisplayHotkey(HideHotkey);
-    private static string DisplayHotkey(string value) => string.IsNullOrWhiteSpace(value) ? "未设置" : value;
+    public string ShowHotkeyLabel => Text.Render(_captureShow == true ? UiTextCatalog.Message("PressAShortcut") : DisplayHotkey(ShowHotkey));
+    public string HideHotkeyLabel => Text.Render(_captureShow == false ? UiTextCatalog.Message("PressAShortcut") : DisplayHotkey(HideHotkey));
+    private static string DisplayHotkey(string value) => string.IsNullOrWhiteSpace(value) ? UiTextCatalog.Message("NotSet") : value;
     public bool CloseToTray { get => _closeToTray; set { if (SetProperty(ref _closeToTray, value)) QueueSave(); } }
     public bool Topmost { get => _topmost; set { if (SetProperty(ref _topmost, value)) QueueSave(); } }
-    public string Status { get => _status; private set => SetProperty(ref _status, value); }
+    public string Status { get => Text.Render(_status); private set => SetProperty(ref _status, UiTextCatalog.FromSafeMessage(value)); }
     public bool Busy
     {
         get => _busy;
@@ -88,14 +88,14 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
             else
             {
                 await CancelHotkeyCaptureAsync();
-                Status = "无法开始录入快捷键，请重试。";
+                Status = UiTextCatalog.Message("CouldNotStartRecordingTheShortcutRetry");
             }
         }
         catch
         {
             if (version != _captureVersion) return;
             await CancelHotkeyCaptureAsync();
-            Status = "无法开始录入快捷键，请重试。";
+            Status = UiTextCatalog.Message("CouldNotStartRecordingTheShortcutRetry");
         }
     }
 
@@ -113,7 +113,7 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
         if (!(modifiers == KeyModifiers.None && key is Key.Back or Key.Delete)
             && !GlobalHotkey.TryFromKey(key, modifiers, out value))
         {
-            Status = "暂不支持该按键，请使用字母、数字、功能键或导航键。";
+            Status = UiTextCatalog.Message("ThisKeyIsUnsupportedUseALetterNumber");
             return;
         }
         var show = _captureShow == true;
@@ -141,7 +141,7 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
         }
         catch { }
         finally { _finishingCapture = false; RefreshCaptureProperties(); }
-        Status = "原快捷键恢复失败；请重启应用，暂可通过托盘打开。";
+        Status = UiTextCatalog.Message("CouldNotRestoreTheOriginalShortcutsRestartThe");
         return false;
     }
     private void RefreshCaptureProperties()
@@ -168,7 +168,7 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
             Status = string.Empty;
         }
         catch (OperationCanceledException) when (_lifetime.IsCancellationRequested) { }
-        catch { Status = "无法读取 Quick Ask 设置。"; }
+        catch { Status = UiTextCatalog.Message("CouldNotReadQuickAskSettings"); }
         finally { Busy = false; }
         if (_saved is not null && Build(_saved) != _saved) _ = SaveAsync();
     }
@@ -231,7 +231,7 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
                     if (!await _save(requested, _lifetime.Token))
                     {
                         if (version == _editVersion) Apply(saved);
-                        Status = "快捷键无效或已被占用；继续使用原绑定。";
+                        Status = UiTextCatalog.Message("ShortcutInvalidOrAlreadyInUseTheOriginal");
                         if (version == _editVersion) break;
                         continue;
                     }
@@ -243,7 +243,7 @@ internal sealed class QuickAccessSettingsViewModel : ObservableObject, IDisposab
                 catch
                 {
                     if (version == _editVersion) Apply(saved);
-                    Status = "Quick Ask 设置保存失败；已恢复原配置，可重新修改或载入。";
+                    Status = UiTextCatalog.Message("QuickAskSettingsFailedToSaveOriginalSettings");
                     if (version == _editVersion) break;
                 }
             }

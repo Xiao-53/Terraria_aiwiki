@@ -4,6 +4,7 @@ using Terraria_Wiki.Application;
 using Terraria_Wiki.Core.Operations;
 using Terraria_Wiki.Core.Packages;
 using Terraria_Wiki.Windows.Presentation.Infrastructure;
+using Terraria_Wiki.Windows.Hosting;
 
 namespace Terraria_Wiki.Windows.Presentation.Management;
 
@@ -41,8 +42,8 @@ internal sealed record class WikiManagementActions
         (_, _, _) => Unavailable<WikiOperationSummary>();
     public Func<IProgress<WikiProgress>?, CancellationToken, Task<WikiOperationSummary>> DownloadResources { get; init; } =
         (_, _) => Unavailable<WikiOperationSummary>();
-    public Func<bool, IProgress<WikiProgress>?, CancellationToken, Task<WikiOperationSummary>> Update { get; init; } =
-        (_, _, _) => Unavailable<WikiOperationSummary>();
+    public Func<bool, WikiUpdateMode, IProgress<WikiProgress>?, CancellationToken, Task<WikiOperationSummary>> Update { get; init; } =
+        (_, _, _, _) => Unavailable<WikiOperationSummary>();
     public Func<IProgress<WikiProgress>?, CancellationToken, Task<WikiOperationSummary>> RetryFailures { get; init; } =
         (_, _) => Unavailable<WikiOperationSummary>();
     public Func<CancellationToken, Task> ClearFailures { get; init; } =
@@ -66,7 +67,8 @@ internal sealed record class WikiManagementActions
         WikiApplication application,
         Func<CancellationToken, Task<string?>> pickImportDatabase,
         Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>> exportDatabase,
-        Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
+        Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null,
+        Func<string, CancellationToken, Task<bool>>? confirmFullScanAsync = null)
     {
         ArgumentNullException.ThrowIfNull(application);
         return new WikiManagementActions
@@ -79,8 +81,8 @@ internal sealed record class WikiManagementActions
             HasFailures = application.Data.HasFailuresAsync,
             Download = application.Data.DownloadAsync,
             DownloadResources = application.Data.DownloadResourcesAsync,
-            Update = application.Data.UpdateAsync,
-            RetryFailures = application.Data.RetryFailuresAsync,
+            Update = (resources, mode, progress, token) => application.Data.UpdateAsync(resources, progress, token, confirmFullScanAsync, mode),
+            RetryFailures = (progress, token) => application.Data.RetryFailuresAsync(progress, token, confirmFullScanAsync),
             ClearFailures = application.Data.ClearFailuresAsync,
             Vacuum = application.Data.VacuumAsync,
             DeleteResources = application.Data.DeleteResourcesAsync,
@@ -99,7 +101,7 @@ internal sealed record class WikiManagementActions
         Task.FromException(new InvalidOperationException("Wiki management is not attached."));
 }
 
-internal sealed class WikiBookItemViewModel
+internal sealed class WikiBookItemViewModel : ObservableObject
 {
     private readonly Action<WikiBookSnapshot> _select;
 
@@ -116,21 +118,26 @@ internal sealed class WikiBookItemViewModel
     public string Title => Wiki.Title;
     public string Description => Wiki.Description;
     public bool IsActive { get; }
-    public string InstallStatus => Wiki.IsPageDownloaded ? "已安装" : "尚未下载";
+    public string InstallStatus => Text.Render(Wiki.IsPageDownloaded ? UiTextCatalog.Message("Installed") : UiTextCatalog.Message("NotDownloaded"));
     public RelayCommand SelectCommand { get; }
 }
 
 internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        foreach (var item in Wikis) item.UseTextCatalog(Text);
+    }
     private readonly Func<CancellationToken, Task<string?>> _pickImportDatabase;
     private readonly Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>> _exportDatabase;
+    private readonly ProductDiagnostics _diagnostics;
     private WikiManagementActions? _actions;
     private CancellationTokenSource? _operationCancellation;
     private WikiBookSnapshot? _activeWiki;
     private ManagementConfirmation _confirmation;
     private WikiBookSnapshot? _pendingSwitch;
     private WikiDatabaseInspection? _pendingImport;
-    private string _statusMessage = "正在准备数据管理…";
+    private string _statusMessage = UiTextCatalog.Message("PreparingDataManagement");
     private bool _isAvailable;
     private bool _isBusy;
     private bool _hasFailures;
@@ -141,19 +148,22 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 
     public WikiManagementViewModel(
         Func<CancellationToken, Task<string?>>? pickImportDatabase = null,
-        Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>>? exportDatabase = null)
+        Func<WikiBookSnapshot, CancellationToken, Task<WikiDatabaseExportResponse?>>? exportDatabase = null,
+        ProductDiagnostics? diagnostics = null)
     {
         _pickImportDatabase = pickImportDatabase ?? (_ => Task.FromResult<string?>(null));
         _exportDatabase = exportDatabase ?? ((_, _) => Task.FromResult<WikiDatabaseExportResponse?>(null));
-        RefreshCommand = new AsyncCommand(_ => RefreshAsync(), _ => CanOperate);
+        _diagnostics = diagnostics ?? new ProductDiagnostics(null);
+        RefreshCommand = new AsyncCommand(_ => RefreshAsync(showRefreshStatus: true), _ => CanOperate);
         DownloadAllCommand = new AsyncCommand(
             _ => RequestOrStartDownloadAsync(includeResources: true),
-            _ => CanOperate && (!HasPageData || !HasResources));
+            _ => CanOperate && SupportsOnlineDownload && (!HasPageData || !HasResources));
         DownloadPagesCommand = new AsyncCommand(
             _ => RequestOrStartDownloadAsync(includeResources: false),
-            _ => CanOperate && (!HasPageData || HasResources));
-        UpdateCommand = new AsyncCommand(_ => UpdateAsync(), _ => CanOperate && HasPageData);
-        RetryFailuresCommand = new AsyncCommand(_ => RetryFailuresAsync(), _ => CanOperate && HasFailures);
+            _ => CanOperate && SupportsOnlineDownload && (!HasPageData || HasResources));
+        FullUpdateCommand = new AsyncCommand(_ => UpdateAsync(WikiUpdateMode.Full), _ => CanOperate && SupportsOnlineDownload && HasPageData);
+        QuickUpdateCommand = new AsyncCommand(_ => UpdateAsync(WikiUpdateMode.Quick), _ => CanOperate && SupportsOnlineDownload && HasPageData);
+        RetryFailuresCommand = new AsyncCommand(_ => RetryFailuresAsync(), _ => CanOperate && SupportsOnlineDownload && HasFailures);
         RequestClearFailuresCommand = new RelayCommand(
             _ => RequestClearFailures(),
             _ => CanOperate && HasFailures);
@@ -195,6 +205,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             OnPropertyChanged(nameof(NeedsResources));
             OnPropertyChanged(nameof(HasFullDownload));
             OnPropertyChanged(nameof(HasLightDownload));
+            OnPropertyChanged(nameof(SupportsOnlineDownload));
+            OnPropertyChanged(nameof(ShowOnlineDownloadActions));
             OnPropertyChanged(nameof(ShowFullDownloadAction));
             OnPropertyChanged(nameof(ShowLightDownloadAction));
             OnPropertyChanged(nameof(PageCountText));
@@ -208,9 +220,15 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 
     public string StatusMessage
     {
-        get => _statusMessage;
-        private set => SetProperty(ref _statusMessage, value);
+        get => Text.Render(_statusMessage);
+        private set
+        {
+            SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value));
+            Notification.Show(!string.IsNullOrWhiteSpace(value));
+        }
     }
+
+    public StatusNotification Notification { get; } = new();
 
     public bool IsAvailable
     {
@@ -220,6 +238,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             if (SetProperty(ref _isAvailable, value))
             {
                 OnPropertyChanged(nameof(CanOperate));
+                OnPropertyChanged(nameof(ShowOnlineDownloadActions));
                 RefreshCommands();
             }
         }
@@ -232,6 +251,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         {
             if (!SetProperty(ref _isBusy, value))
                 return;
+            Notification.SetBusy(value);
             OnPropertyChanged(nameof(CanOperate));
             OnPropertyChanged(nameof(IsIdle));
             CancelOperationCommand.NotifyCanExecuteChanged();
@@ -274,54 +294,56 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public bool NeedsResources => HasPageData && !HasResources;
     public bool HasFullDownload => HasPageData && HasResources;
     public bool HasLightDownload => HasPageData && !HasResources;
-    public bool ShowFullDownloadAction => NeedsPageData || HasLightDownload;
-    public bool ShowLightDownloadAction => NeedsPageData || HasFullDownload;
+    public bool SupportsOnlineDownload => ActiveWiki is { } wiki && HasDownloadEntry(wiki);
+    public bool ShowOnlineDownloadActions => IsAvailable && SupportsOnlineDownload;
+    public bool ShowFullDownloadAction => SupportsOnlineDownload && (NeedsPageData || HasLightDownload);
+    public bool ShowLightDownloadAction => SupportsOnlineDownload && (NeedsPageData || HasFullDownload);
     public bool CanOperate => IsAvailable && !IsBusy && HasActiveWiki;
     public bool IsIdle => !IsBusy;
-    public string ActiveWikiTitle => ActiveWiki?.Title ?? "未选择 Wiki";
-    public string ActiveWikiDescription => ActiveWiki?.Description ?? "本地 Wiki 数据源不可用。";
-    public string PageCountText => (ActiveWiki?.PageCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
-    public string RedirectCountText => (ActiveWiki?.RedirectCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
-    public string ResourceCountText => (ActiveWiki?.ResourceCount ?? 0).ToString("N0", CultureInfo.CurrentCulture);
+    public string ActiveWikiTitle => Text.Render(ActiveWiki?.Title ?? UiTextCatalog.Message("NoWikiSelected"));
+    public string ActiveWikiDescription => Text.Render(ActiveWiki?.Description ?? UiTextCatalog.Message("TheLocalWikiDataSourceIsUnavailable"));
+    public string PageCountText => (ActiveWiki?.PageCount ?? 0).ToString("N0", Text.Culture);
+    public string RedirectCountText => (ActiveWiki?.RedirectCount ?? 0).ToString("N0", Text.Culture);
+    public string ResourceCountText => (ActiveWiki?.ResourceCount ?? 0).ToString("N0", Text.Culture);
     public string DataSizeText => FormatBytes(ActiveWiki?.DataSize ?? 0);
-    public string UpdateTimeText => ActiveWiki is null || ActiveWiki.UpdateTime == default
-        ? "尚未更新"
-        : ActiveWiki.UpdateTime.ToString("yyyy-MM-dd HH:mm", CultureInfo.CurrentCulture);
+    public string UpdateTimeText => Text.Render(ActiveWiki is null || ActiveWiki.UpdateTime == default
+        ? UiTextCatalog.Message("NotUpdatedYet")
+        : ActiveWiki.UpdateTime.ToString("yyyy-MM-dd HH:mm", Text.Culture));
 
     public bool IsConfirmationVisible => _confirmation != ManagementConfirmation.None;
-    public string ConfirmationTitle => _confirmation switch
+    public string ConfirmationTitle => Text.Render(_confirmation switch
     {
-        ManagementConfirmation.SwitchWiki => "切换活动 Wiki？",
-        ManagementConfirmation.ClearFailures => "清理失败记录？",
-        ManagementConfirmation.DeleteResources => "删除全部资源？",
-        ManagementConfirmation.DeleteWikiData => "删除当前 Wiki 数据？",
-        ManagementConfirmation.ReplaceWithFullDownload => "切换到全量数据？",
-        ManagementConfirmation.ReplaceWithLightDownload => "切换到轻量数据？",
-        ManagementConfirmation.ImportDatabase => "导入此数据库？",
+        ManagementConfirmation.SwitchWiki => UiTextCatalog.Message("SwitchActiveWiki"),
+        ManagementConfirmation.ClearFailures => UiTextCatalog.Message("ClearFailureRecords"),
+        ManagementConfirmation.DeleteResources => UiTextCatalog.Message("DeleteAllResources"),
+        ManagementConfirmation.DeleteWikiData => UiTextCatalog.Message("DeleteCurrentWikiData"),
+        ManagementConfirmation.ReplaceWithFullDownload => UiTextCatalog.Message("SwitchToFullData"),
+        ManagementConfirmation.ReplaceWithLightDownload => UiTextCatalog.Message("SwitchToLightweightData"),
+        ManagementConfirmation.ImportDatabase => UiTextCatalog.Message("ImportThisDatabase"),
         _ => string.Empty,
-    };
-    public string ConfirmationMessage => _confirmation switch
+    });
+    public string ConfirmationMessage => Text.Render(_confirmation switch
     {
-        ManagementConfirmation.SwitchWiki => $"将活动数据源切换为“{_pendingSwitch?.Title}”。当前 Viewer、搜索与资料库会一起切换。",
-        ManagementConfirmation.ClearFailures => "仅清理页面与资源下载失败列表；不会删除已经下载的 Wiki 内容。",
-        ManagementConfirmation.DeleteResources => $"将删除“{ActiveWikiTitle}”的全部本地图片和音频资源，页面文字仍保留。",
-        ManagementConfirmation.DeleteWikiData => $"将删除“{ActiveWikiTitle}”的页面、资源、历史与收藏数据。此操作不可撤销，可稍后重新下载或导入。",
-        ManagementConfirmation.ReplaceWithFullDownload => $"将删除“{ActiveWikiTitle}”的旧数据库，再重新下载页面、图片和音频等全部资源。",
-        ManagementConfirmation.ReplaceWithLightDownload => $"将删除“{ActiveWikiTitle}”的旧数据库，再重新下载基础页面；图片和音频不会保留。",
+        ManagementConfirmation.SwitchWiki => UiTextCatalog.Message("SwitchTheActiveDataSourceToTheViewer", _pendingSwitch?.Title),
+        ManagementConfirmation.ClearFailures => UiTextCatalog.Message("OnlyPageAndResourceDownloadFailureListsWill"),
+        ManagementConfirmation.DeleteResources => UiTextCatalog.Message("AllLocalImagesAndAudioForWillBe", ActiveWikiTitle),
+        ManagementConfirmation.DeleteWikiData => UiTextCatalog.Message("PagesResourcesHistoryAndFavoritesForWillBe", ActiveWikiTitle),
+        ManagementConfirmation.ReplaceWithFullDownload => UiTextCatalog.Message("TheOldDatabaseForWillBeDeletedThen", ActiveWikiTitle),
+        ManagementConfirmation.ReplaceWithLightDownload => UiTextCatalog.Message("TheOldDatabaseForWillBeDeletedThen2", ActiveWikiTitle),
         ManagementConfirmation.ImportDatabase => BuildImportConfirmation(),
         _ => string.Empty,
-    };
-    public string ConfirmationActionText => _confirmation switch
+    });
+    public string ConfirmationActionText => Text.Render(_confirmation switch
     {
-        ManagementConfirmation.SwitchWiki => "确认切换",
-        ManagementConfirmation.ClearFailures => "确认清理",
-        ManagementConfirmation.DeleteResources => "删除资源",
-        ManagementConfirmation.DeleteWikiData => "删除全部数据",
-        ManagementConfirmation.ReplaceWithFullDownload => "删除并全量下载",
-        ManagementConfirmation.ReplaceWithLightDownload => "删除并轻量下载",
-        ManagementConfirmation.ImportDatabase => "确认导入",
-        _ => "确认",
-    };
+        ManagementConfirmation.SwitchWiki => UiTextCatalog.Message("ConfirmSwitch"),
+        ManagementConfirmation.ClearFailures => UiTextCatalog.Message("ConfirmClearing"),
+        ManagementConfirmation.DeleteResources => UiTextCatalog.Message("DeleteResources"),
+        ManagementConfirmation.DeleteWikiData => UiTextCatalog.Message("DeleteAllData"),
+        ManagementConfirmation.ReplaceWithFullDownload => UiTextCatalog.Message("DeleteAndDownloadFullData"),
+        ManagementConfirmation.ReplaceWithLightDownload => UiTextCatalog.Message("DeleteAndDownloadLightweightData"),
+        ManagementConfirmation.ImportDatabase => UiTextCatalog.Message("ConfirmImport"),
+        _ => UiTextCatalog.Message("Confirm"),
+    });
     public bool IsDangerousConfirmation => _confirmation is
         ManagementConfirmation.ClearFailures or
         ManagementConfirmation.DeleteResources or
@@ -334,7 +356,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public AsyncCommand RefreshCommand { get; }
     public AsyncCommand DownloadAllCommand { get; }
     public AsyncCommand DownloadPagesCommand { get; }
-    public AsyncCommand UpdateCommand { get; }
+    public AsyncCommand FullUpdateCommand { get; }
+    public AsyncCommand QuickUpdateCommand { get; }
     public AsyncCommand RetryFailuresCommand { get; }
     public RelayCommand RequestClearFailuresCommand { get; }
     public AsyncCommand VacuumCommand { get; }
@@ -345,21 +368,32 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     public RelayCommand CancelOperationCommand { get; }
     public RelayCommand CancelConfirmationCommand { get; }
     public AsyncCommand ConfirmCommand { get; }
-    internal void ShowEmptyWikiOnboarding() =>
-        StatusMessage = "首次使用：当前 Wiki 尚无页面内容。请选择“全量下载”“轻量下载”或导入 data.db。";
+    private string EmptyWikiStatus => ActiveWiki is null || SupportsOnlineDownload
+        ? UiTextCatalog.Message("ThisWikiHasNoPagesYetChooseFull")
+        : UiTextCatalog.Message("OnlineDownloadsAreCurrentlyUnavailableForThisWiki");
+
+    internal void ShowEmptyWikiOnboarding() => StatusMessage = EmptyWikiStatus;
 
     public void Attach(
         WikiApplication application,
         Func<int, CancellationToken, Task<WikiBookSnapshot>>? switchWiki = null)
     {
-        Attach(WikiManagementActions.From(application, _pickImportDatabase, _exportDatabase, switchWiki));
+        Attach(WikiManagementActions.From(application, _pickImportDatabase, _exportDatabase, switchWiki, ConfirmFullScanAsync));
+    }
+
+    internal Func<string, CancellationToken, Task<bool>>? FullScanApproval { get; set; }
+
+    internal Task<bool> ConfirmFullScanAsync(string reason, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        return FullScanApproval?.Invoke(reason, token) ?? Task.FromResult(false);
     }
 
     internal void Attach(WikiManagementActions actions)
     {
         _actions = actions ?? throw new ArgumentNullException(nameof(actions));
         IsAvailable = true;
-        StatusMessage = "查看并维护本地 Wiki 数据。";
+        StatusMessage = UiTextCatalog.Message("ViewAndMaintainLocalWikiData");
     }
 
     public void Detach()
@@ -372,30 +406,30 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ActiveWiki = null;
         Wikis.Clear();
         CancelConfirmation();
-        StatusMessage = "当前 Wiki 数据库未连接；请恢复默认数据目录后重试。";
+        StatusMessage = UiTextCatalog.Message("TheWikiDatabaseIsDisconnectedRestoreTheDefault");
     }
 
-    internal async Task RefreshAsync()
+    internal async Task RefreshAsync(bool showRefreshStatus = false)
     {
         if (_actions is null || IsBusy)
             return;
-        var current = BeginOperation("正在刷新 Wiki 数据状态…");
+        var current = BeginOperation(showRefreshStatus ? UiTextCatalog.Message("RefreshingWikiDataStatus") : string.Empty);
         if (current is null)
             return;
         try
         {
             await ReloadAsync(current.Token);
             StatusMessage = NeedsPageData
-                ? "首次使用：当前 Wiki 尚无页面内容。请选择“全量下载”“轻量下载”或导入 data.db。"
-                : "Wiki 数据状态已刷新。";
+                ? EmptyWikiStatus
+                : showRefreshStatus ? UiTextCatalog.Message("WikiDataStatusRefreshed") : string.Empty;
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "刷新已取消。";
+            StatusMessage = UiTextCatalog.Message("RefreshCancelled");
         }
         catch
         {
-            StatusMessage = "无法读取 Wiki 数据状态；本地数据未被修改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotReadWikiDataStatusLocalData");
         }
         finally
         {
@@ -410,7 +444,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             return;
         if (wiki.Id == ActiveWiki!.Id)
         {
-            StatusMessage = $"“{wiki.Title}”已经是当前 Wiki。";
+            StatusMessage = UiTextCatalog.Message("IsAlreadyTheCurrentWiki", wiki.Title);
             return;
         }
         _pendingSwitch = wiki;
@@ -470,12 +504,12 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     internal void CancelConfirmation()
     {
         ClearConfirmationState(keepPendingData: false);
-        StatusMessage = IsAvailable ? "操作已取消；本地数据未被修改。" : StatusMessage;
+        StatusMessage = IsAvailable ? UiTextCatalog.Message("OperationCancelledLocalDataIsUnchanged") : StatusMessage;
     }
 
     internal async Task DownloadAsync(bool includeResources)
     {
-        var label = includeResources ? "页面与资源下载" : "页面下载";
+        var label = includeResources ? UiTextCatalog.Message("PageAndResourceDownload") : UiTextCatalog.Message("PageDownload");
         await RunSummaryOperationAsync(
             label,
             (progress, token) => _actions!.Download(includeResources, progress, token),
@@ -485,7 +519,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
 
     internal async Task RequestOrStartDownloadAsync(bool includeResources)
     {
-        if (!CanOperate)
+        if (!CanOperate || !SupportsOnlineDownload)
             return;
         if (!HasPageData)
         {
@@ -497,25 +531,26 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             : ManagementConfirmation.ReplaceWithLightDownload);
     }
 
-    internal async Task UpdateAsync() =>
+    internal async Task UpdateAsync(WikiUpdateMode mode = WikiUpdateMode.Automatic) =>
         await RunSummaryOperationAsync(
-            HasResources ? "页面与资源更新" : "页面更新",
-            (progress, token) => _actions!.Update(HasResources, progress, token),
+            mode == WikiUpdateMode.Full ? UiTextCatalog.Message("FullWikiUpdate") : mode == WikiUpdateMode.Quick ? UiTextCatalog.Message("QuickWikiUpdate") :
+                HasResources ? UiTextCatalog.Message("PageAndResourceUpdate") : UiTextCatalog.Message("PageUpdate"),
+            (progress, token) => _actions!.Update(HasResources, mode, progress, token),
             dataChanged: true,
             requiresViewerRebind: true);
 
     internal async Task RetryFailuresAsync() =>
         await RunSummaryOperationAsync(
-            "失败项重试",
+            UiTextCatalog.Message("RetryFailedItems"),
             (progress, token) => _actions!.RetryFailures(progress, token),
             dataChanged: true,
             requiresViewerRebind: true);
 
     internal async Task VacuumAsync() =>
         await RunSimpleOperationAsync(
-            "数据库维护",
+            UiTextCatalog.Message("DatabaseMaintenance"),
             token => _actions!.Vacuum(token),
-            "数据库整理完成。",
+            UiTextCatalog.Message("DatabaseMaintenanceComplete"),
             dataChanged: true,
             requiresViewerRebind: true);
 
@@ -523,7 +558,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null)
             return;
-        var current = BeginOperation("请选择要导入的 data.db 数据库文件…");
+        var current = BeginOperation(UiTextCatalog.Message("SelectTheDataDbDatabaseFileToImport"));
         if (current is null)
             return;
         try
@@ -532,23 +567,23 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             current.Token.ThrowIfCancellationRequested();
             if (string.IsNullOrWhiteSpace(path))
             {
-                StatusMessage = "未选择数据库；本地数据未被修改。";
+                StatusMessage = UiTextCatalog.Message("NoDatabaseSelectedLocalDataIsUnchanged");
                 return;
             }
-            StatusMessage = "正在检查数据库完整性…";
+            StatusMessage = UiTextCatalog.Message("CheckingDatabaseIntegrity");
             _pendingImport = await _actions.InspectDatabase(path, current.Token);
             current.Token.ThrowIfCancellationRequested();
             SetConfirmation(ManagementConfirmation.ImportDatabase);
-            StatusMessage = "数据库检查通过；确认后才会替换当前 Wiki 数据。";
+            StatusMessage = UiTextCatalog.Message("DatabaseCheckPassedCurrentWikiDataWillOnly");
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "导入检查已取消；本地数据未被修改。";
+            StatusMessage = UiTextCatalog.Message("ImportCheckCancelledLocalDataIsUnchanged");
         }
         catch
         {
             _pendingImport = null;
-            StatusMessage = "无法检查此数据库；本地数据未被修改。";
+            StatusMessage = UiTextCatalog.Message("CouldNotCheckThisDatabaseLocalDataIs");
         }
         finally
         {
@@ -560,7 +595,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null || ActiveWiki is null)
             return;
-        var current = BeginOperation("请选择数据库保存位置…");
+        var current = BeginOperation(UiTextCatalog.Message("ChooseWhereToSaveTheDatabase"));
         if (current is null)
             return;
         try
@@ -568,16 +603,16 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             var result = await _actions.ExportDatabase(ActiveWiki, current.Token);
             current.Token.ThrowIfCancellationRequested();
             StatusMessage = result is null
-                ? "未选择保存位置；没有创建数据库文件。"
-                : $"导出完成：{Path.GetFileName(result.DatabasePath)}（{FormatBytes(result.DatabaseBytes)}）。";
+                ? UiTextCatalog.Message("NoSaveLocationSelectedNoDatabaseFileWas")
+                : UiTextCatalog.Message("ExportComplete", Path.GetFileName(result.DatabasePath), FormatBytes(result.DatabaseBytes));
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = "导出已取消；未完成的临时文件已清理。";
+            StatusMessage = UiTextCatalog.Message("ExportCancelledIncompleteTemporaryFilesWereRemoved");
         }
         catch
         {
-            StatusMessage = "导出失败；原有数据和已有目标文件未被修改。";
+            StatusMessage = UiTextCatalog.Message("ExportFailedOriginalDataAndAnyExistingDestination");
         }
         finally
         {
@@ -591,6 +626,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
             return;
         _disposed = true;
         Detach();
+        Notification.Dispose();
     }
 
     private async Task SwitchWikiAsync()
@@ -600,31 +636,31 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         if (target is null)
             return;
         await RunSimpleOperationAsync(
-            "Wiki 切换",
+            UiTextCatalog.Message("WikiSwitch"),
             async token => { await _actions!.SwitchWiki(target.Id, token); },
-            $"已切换到“{target.Title}”。",
+            UiTextCatalog.Message("SwitchedTo", target.Title),
             dataChanged: true,
             requiresViewerRebind: !_actions!.SwitchIncludesViewerRebind);
     }
 
     private async Task ClearFailuresAsync() =>
         await RunSimpleOperationAsync(
-            "失败记录清理",
+            UiTextCatalog.Message("ClearFailureRecords2"),
             token => _actions!.ClearFailures(token),
-            "下载失败记录已清理。",
+            UiTextCatalog.Message("DownloadFailureRecordsClearedIncompleteSyncTasksWill"),
             dataChanged: true,
             requiresViewerRebind: false);
 
     private async Task DeleteResourcesAsync() =>
         await RunSummaryOperationAsync(
-            "资源删除",
+            UiTextCatalog.Message("ResourceDeletion"),
             (_, token) => _actions!.DeleteResources(token),
             dataChanged: true,
             requiresViewerRebind: true);
 
     private async Task DeleteWikiDataAsync() =>
         await RunSummaryOperationAsync(
-            "Wiki 数据删除",
+            UiTextCatalog.Message("WikiDataDeletion"),
             (_, token) => _actions!.DeleteWikiData(token),
             dataChanged: true,
             requiresViewerRebind: true);
@@ -633,33 +669,39 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null)
             return;
-        var label = includeResources ? "全量数据切换" : "轻量数据切换";
-        var current = BeginOperation($"正在删除旧数据库并准备{(includeResources ? "全量" : "轻量")}下载…");
+        var label = includeResources ? UiTextCatalog.Message("SwitchToFullData2") : UiTextCatalog.Message("SwitchToLightweightData2");
+        var current = BeginOperation(UiTextCatalog.Message("DeletingTheOldDatabaseAndPreparing", (includeResources ? UiTextCatalog.Message("Full") : UiTextCatalog.Message("Lightweight"))));
         if (current is null)
             return;
-        var progress = new Progress<WikiProgress>(value => ApplyProgress(label, value));
+        var operationId = Guid.NewGuid();
+        var wikiId = ActiveWiki?.Id;
+        _diagnostics.WriteWikiOperation(operationId, wikiId, "started", result: label);
+        var progress = CreateOperationProgress(label, current, operationId, wikiId);
         var dataMayHaveChanged = false;
         try
         {
             dataMayHaveChanged = true;
             await _actions.DeleteWikiData(current.Token);
             current.Token.ThrowIfCancellationRequested();
-            StatusMessage = includeResources ? "旧数据库已删除，正在全量下载…" : "旧数据库已删除，正在轻量下载…";
+            StatusMessage = includeResources ? UiTextCatalog.Message("OldDatabaseDeletedDownloadingFullData") : UiTextCatalog.Message("OldDatabaseDeletedDownloadingLightweightData");
             var summary = await _actions.Download(includeResources, progress, current.Token);
             current.Token.ThrowIfCancellationRequested();
             await ReloadAsync(current.Token);
             DataChanged?.Invoke(this, new WikiDataChangedEventArgs(requiresViewerRebind: true));
             StatusMessage = FormatSummary(label, summary);
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "completed", result: StatusMessage);
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
             await RefreshAfterReplacementFailureAsync(dataMayHaveChanged);
-            StatusMessage = $"{label}已取消；旧数据库可能已删除，可重新开始下载或导入 data.db。";
+            StatusMessage = UiTextCatalog.Message("CancelledTheOldDatabaseMayHaveBeenDeleted", label);
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "cancelled", new WikiProgress(progress.Stage));
         }
-        catch
+        catch (Exception exception)
         {
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "failed", new WikiProgress(progress.Stage), exception);
             await RefreshAfterReplacementFailureAsync(dataMayHaveChanged);
-            StatusMessage = $"{label}失败；旧数据库可能已删除，请确认网络和磁盘空间后重试。";
+            StatusMessage = UiTextCatalog.Message("FailedTheOldDatabaseMayHaveBeenDeleted", label, FailureDescription(exception));
         }
         finally
         {
@@ -683,14 +725,14 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         if (inspection is null)
             return;
         await RunOperationAsync(
-            "数据库导入",
+            UiTextCatalog.Message("DatabaseImport"),
             async (_, token) =>
             {
                 var result = await _actions!.ImportDatabase(
                     inspection.DatabasePath,
                     inspection.InspectionToken,
                     token);
-                return ($"已导入“{result.WikiBook.Title}”的数据库。", true);
+                return (UiTextCatalog.Message("DatabaseForImported", result.WikiBook.Title), true);
             },
             dataChanged: true,
             requiresViewerRebind: true,
@@ -741,10 +783,13 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (!CanOperate || _actions is null)
             return;
-        var current = BeginOperation($"正在执行{label}…");
+        var current = BeginOperation(UiTextCatalog.Message("Running2", label));
         if (current is null)
             return;
-        var progress = new Progress<WikiProgress>(value => ApplyProgress(label, value));
+        var operationId = Guid.NewGuid();
+        var wikiId = ActiveWiki?.Id;
+        _diagnostics.WriteWikiOperation(operationId, wikiId, "started", result: label);
+        var progress = CreateOperationProgress(label, current, operationId, wikiId);
         try
         {
             var result = await action(progress, current.Token);
@@ -760,22 +805,85 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
                         requiresViewerRebind && (!rebindPredicateFromResult || result.Rebind)));
             }
             StatusMessage = refreshFailed
-                ? result.Message + " 数据状态暂未刷新，请稍后重试。"
+                ? UiTextCatalog.Join("", result.Message, UiTextCatalog.Message("DataStatusHasNotRefreshedYetTryAgain"))
                 : result.Message;
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "completed", result: StatusMessage);
+        }
+        catch (WikiOperationException exception) when (exception.Code == "full-scan-declined")
+        {
+            StatusMessage = UiTextCatalog.Message("FullScanDeclined");
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "cancelled", new WikiProgress(progress.Stage));
         }
         catch (OperationCanceledException) when (current.IsCancellationRequested)
         {
-            StatusMessage = $"{label}已取消；已完成的安全步骤会被保留。";
+            StatusMessage = UiTextCatalog.Message("CancelledCompletedSafeStepsArePreserved", label);
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "cancelled", new WikiProgress(progress.Stage));
+            if (dataChanged) await RefreshAfterFailureAsync();
         }
-        catch
+        catch (Exception exception)
         {
-            StatusMessage = $"{label}失败；请确认网络、磁盘空间或数据库文件后重试。";
+            _diagnostics.WriteWikiOperation(operationId, wikiId, "failed", new WikiProgress(progress.Stage), exception);
+            StatusMessage = UiTextCatalog.Message("FailedDetailsWereRecordedInWikiSyncLog", label, FailureDescription(exception));
+            if (dataChanged) await RefreshAfterFailureAsync();
         }
         finally
         {
             EndOperation(current);
         }
     }
+
+    private OperationProgress CreateOperationProgress(string label, CancellationTokenSource current, Guid operationId, int? wikiId)
+    {
+        var lastStage = "";
+        var lastLog = DateTimeOffset.MinValue;
+        var gate = new object();
+        IProgress<WikiProgress> ui = new Progress<WikiProgress>(value =>
+        {
+            if (ReferenceEquals(current, _operationCancellation)) ApplyProgress(label, value);
+        });
+        return new OperationProgress(value =>
+        {
+            lock (gate)
+            {
+                var routine = value.Code is "page-download" or "page-skipped" or "resource-downloaded" or "resource-skipped";
+                var stage = routine ? (value.Code.StartsWith("page", StringComparison.Ordinal) ? "pages" : "media") : value.Code;
+                if (stage != lastStage || !routine || (DateTimeOffset.UtcNow - lastLog).TotalSeconds >= 10)
+                {
+                    _diagnostics.WriteWikiOperation(operationId, wikiId, "progress", value);
+                    lastLog = DateTimeOffset.UtcNow;
+                }
+                lastStage = stage;
+            }
+            ui.Report(value);
+        });
+    }
+
+    private sealed class OperationProgress(Action<WikiProgress> report) : IProgress<WikiProgress>
+    {
+        public string Stage { get; private set; } = "";
+        public void Report(WikiProgress value) { Stage = value.Code; report(value); }
+    }
+
+    private async Task RefreshAfterFailureAsync()
+    {
+        try { await ReloadAsync(CancellationToken.None); }
+        catch { }
+        DataChanged?.Invoke(this, new WikiDataChangedEventArgs(requiresViewerRebind: true));
+    }
+
+    private static string FailureDescription(Exception exception) => exception switch
+    {
+        Terraria_Wiki.Core.Net.WikiHttpBrowserVerificationException => UiTextCatalog.Message("TheWikiSiteRequiresBrowserVerificationDownloadsAre"),
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Forbidden } => UiTextCatalog.Message("TheWikiSiteDeniedAccessHTTPCheckThe"),
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.Unauthorized } => UiTextCatalog.Message("TheWikiSiteRequiresAuthorizationHTTP"),
+        HttpRequestException { StatusCode: System.Net.HttpStatusCode.TooManyRequests } => UiTextCatalog.Message("TheWikiServerIsRateLimitingRequestsTry"),
+        HttpRequestException { StatusCode: { } status } => UiTextCatalog.Message("WikiRequestReturnedHTTP", (int)status),
+        WikiOperationException { Code: "quick-update-requires-full" } => UiTextCatalog.Message("QuickUpdateRequiresFull"),
+        HttpRequestException => UiTextCatalog.Message("WikiNetworkConnectionFailed"),
+        OperationCanceledException or TimeoutException => UiTextCatalog.Message("WikiRequestTimedOut"),
+        IOException => UiTextCatalog.Message("FileOrDiskOperationFailed"),
+        _ => UiTextCatalog.Message("AnErrorOccurredDuringSynchronization")
+    };
 
     private async Task ReloadAsync(CancellationToken cancellationToken)
     {
@@ -792,10 +900,17 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         foreach (var wiki in wikis)
         {
             var current = wiki.Id == active.Id ? active : wiki;
-            Wikis.Add(new WikiBookItemViewModel(current, current.Id == active.Id, RequestSwitch));
+            // Keep existing/active offline data manageable, but hide unavailable download targets.
+            if (!HasDownloadEntry(current) && !current.IsPageDownloaded
+                && !current.IsResourceDownloaded && current.Id != active.Id)
+                continue;
+            Wikis.Add(new WikiBookItemViewModel(current, current.Id == active.Id, RequestSwitch).WithText(Text));
         }
         OnPropertyChanged(nameof(HasActiveWiki));
     }
+
+    private static bool HasDownloadEntry(WikiBookSnapshot wiki) =>
+        wiki.DataFolder is "Terraria_Wiki_zh" or "Terraria_Wiki_en";
 
     private CancellationTokenSource? BeginOperation(string status)
     {
@@ -831,17 +946,31 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         ProgressValue = Math.Clamp(progress.Current, 0, (int)ProgressMaximum);
         label = progress.Code switch
         {
-            "sync-discovery" => "发现远端变化",
-            "sync-full-scan" => "核对完整目录",
-            "sync-delete" => "同步删除与重定向",
-            "sync-index-maintenance" => "整理更新后的搜索索引",
-            "page-download" => "下载页面",
-            "resource-downloaded" or "resource-skipped" => "核对媒体资源",
+            "sync-discovery" => UiTextCatalog.Message("DiscoveringRemoteChanges"),
+            "sync-full-scan-approval" => UiTextCatalog.Message("WaitingForFullScanApproval"),
+            "sync-full-scan" => UiTextCatalog.Message("CheckingTheFullDirectory"),
+            "sync-delete" => UiTextCatalog.Message("SynchronizingDeletionsAndRedirects"),
+            "sync-index-maintenance" => UiTextCatalog.Message("MaintainingTheUpdatedSearchIndex"),
+            "page-download" or "page-skipped" or "sync-pages-start" => UiTextCatalog.Message("ProcessingPages"),
+            "resource-downloaded" or "resource-skipped" or "sync-media-start" => UiTextCatalog.Message("ProcessingMediaResources"),
+            "http-retry" => UiTextCatalog.Message("RequestFailedWaitingToRetry"),
+            "sync-page-failed" or "sync-media-failed" or "download-item-failed" => UiTextCatalog.Message("RecordingFailedItemsAndContinuing"),
             _ => label
         };
         StatusMessage = progress.Total > 0
-            ? $"{label}：{progress.Current:N0} / {progress.Total:N0}"
-            : $"{label}正在进行…";
+            ? UiTextCatalog.Message("ProgressCounts", label, progress.Current, progress.Total)
+            : UiTextCatalog.Message("InProgress", label);
+        if (progress.Code == "sync-full-scan")
+            StatusMessage = UiTextCatalog.Join("", _statusMessage, progress.Detail switch
+            {
+                "baseline-missing" => UiTextCatalog.Message("NoIncrementalBaselineYet"),
+                "page-recovery" => UiTextCatalog.Message("RecoveringThePreviousIncompletePageSync"),
+                "identity-changed" => UiTextCatalog.Message("WikiSyncConfigurationHasChanged"),
+                "media-baseline-missing" => UiTextCatalog.Message("EstablishingAMediaSyncBaseline"),
+                "periodic" => UiTextCatalog.Message("ThePeriodicCheckIsDue"),
+                "anchor-unavailable" => UiTextCatalog.Message("TheRemoteLogAnchorHasExpired"),
+                _ => UiTextCatalog.Message("LogCoverageCannotBeConfirmedRunningASafe")
+            });
     }
 
     private void SetConfirmation(ManagementConfirmation confirmation)
@@ -877,7 +1006,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     {
         if (_pendingImport is null)
             return string.Empty;
-        return $"{Path.GetFileName(_pendingImport.DatabasePath)} · {FormatBytes(_pendingImport.DatabaseBytes)}。导入会替换“{ActiveWikiTitle}”的页面、资源、收藏与搜索数据；失败时会恢复原数据库。";
+        return UiTextCatalog.Message("ImportWillReplacePagesResourcesFavoritesAndSearch", Path.GetFileName(_pendingImport.DatabasePath), FormatBytes(_pendingImport.DatabaseBytes), ActiveWikiTitle);
     }
 
     private void RefreshCommands()
@@ -885,7 +1014,8 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
         RefreshCommand.NotifyCanExecuteChanged();
         DownloadAllCommand.NotifyCanExecuteChanged();
         DownloadPagesCommand.NotifyCanExecuteChanged();
-        UpdateCommand.NotifyCanExecuteChanged();
+        FullUpdateCommand.NotifyCanExecuteChanged();
+        QuickUpdateCommand.NotifyCanExecuteChanged();
         RetryFailuresCommand.NotifyCanExecuteChanged();
         RequestClearFailuresCommand.NotifyCanExecuteChanged();
         VacuumCommand.NotifyCanExecuteChanged();
@@ -897,7 +1027,7 @@ internal sealed class WikiManagementViewModel : ObservableObject, IDisposable
     }
 
     private static string FormatSummary(string label, WikiOperationSummary summary) =>
-        $"{label}{(summary.Failed > 0 ? "未完成" : "完成")}：下载页面 {summary.Pages:N0}、跳过 {summary.Skipped:N0}、删除 {summary.Deleted:N0}、重定向 {summary.Redirects:N0}、资源 {summary.Resources:N0}、失败 {summary.Failed:N0}。";
+        UiTextCatalog.Message("PagesDownloadedSkippedDeletedRedirectsResourcesFailures", label, (summary.Failed > 0 ? UiTextCatalog.Message("Incomplete") : UiTextCatalog.Message("Complete")), summary.Pages, summary.Skipped, summary.Deleted, summary.Redirects, summary.Resources, summary.Failed);
 
     private static string FormatBytes(long bytes)
     {

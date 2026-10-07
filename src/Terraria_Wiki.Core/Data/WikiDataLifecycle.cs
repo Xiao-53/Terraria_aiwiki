@@ -48,8 +48,13 @@ public sealed partial class WikiDataLifecycle
             Prepare(paths);
             progress?.Report(new WikiProgress("download-start"));
             await _contentDatabase.WriteSyncMetadataAsync("sync_state", "null", cancellationToken);
+            await _contentDatabase.SaveSyncMediaQueueAsync(WikiSyncState.IdentityFor(book), new Dictionary<string, bool>(), cancellationToken);
+            var syncReader = new WikiSyncReader(book, _httpTransport, options.MaxRetryAttempts, cancellationToken, progress);
+            var baseline = await CaptureDownloadBaselineAsync(syncReader, includeResources);
 
+            progress?.Report(new WikiProgress("download-redirects-start"));
             var redirects = await FetchRedirectsAsync(book, options, progress, cancellationToken);
+            progress?.Report(new WikiProgress("download-page-list-start"));
             var pagesListed = await FetchPageListAsync(book, paths.PageListPath, options, progress, cancellationToken);
             var pages = await DownloadPagesAsync(book, paths.PageListPath, paths.ResourceListPath, paths.FailedPageListPath, options, progress, cancellationToken);
             await _contentDatabase.OptimizeSearchIndexAsync(reclaimSpace: true, cancellationToken);
@@ -63,12 +68,22 @@ public sealed partial class WikiDataLifecycle
             await _managerDatabase.SaveItemAsync(book, cancellationToken);
             await RefreshBookStatisticsCoreAsync(book, cancellationToken);
             CleanTransientFiles(paths);
+            var failed = CountLines(paths.FailedPageListPath) + CountLines(paths.FailedResourceListPath);
+            if (failed == 0 && baseline is not null)
+            {
+                try
+                {
+                    if (await syncReader.VerifyAnchorAsync(baseline))
+                        await SaveSyncStateAsync(baseline, cancellationToken);
+                }
+                catch (SyncCoverageException) { /* Download remains usable without an incremental baseline. */ }
+            }
 
             return new WikiOperationSummary(
                 Pages: pages,
                 Redirects: redirects,
                 Resources: resources,
-                Failed: CountLines(paths.FailedPageListPath) + CountLines(paths.FailedResourceListPath),
+                Failed: failed,
                 Changed: pagesListed > 0 || redirects > 0 || pages > 0 || resources > 0);
         });
 
@@ -112,7 +127,11 @@ public sealed partial class WikiDataLifecycle
         RunExclusiveAsync(async () =>
         {
             options = (options ?? new WikiOperationOptions()).Validate();
-            if ((await ReadSyncStateAsync(cancellationToken))?.Incomplete == true)
+            var mediaQueue = await _contentDatabase.ReadSyncMediaQueueAsync(WikiSyncState.IdentityFor(book), cancellationToken);
+            var state = await ReadSyncStateAsync(cancellationToken);
+            if (options.UpdateMode == WikiUpdateMode.Automatic && state?.DependenciesSkipped == true && !state.ForcePageRefresh)
+                options = options with { UpdateMode = WikiUpdateMode.Quick };
+            if (state?.Incomplete == true || !mediaQueue.Valid || mediaQueue.Tasks.Count > 0)
                 return await SynchronizeAsync(book, paths, book.IsResourceDownloaded, options, progress, cancellationToken);
             Prepare(paths, cleanTransient: false);
             var pages = 0;
@@ -158,6 +177,10 @@ public sealed partial class WikiDataLifecycle
     public bool HasFailures(WikiDataPaths paths) =>
         WikiFileOperations.HasMeaningfulContent(paths.FailedPageListPath)
         || WikiFileOperations.HasMeaningfulContent(paths.FailedResourceListPath);
+
+    public async Task<bool> HasFailuresAsync(WikiDataPaths paths, CancellationToken token = default) =>
+        HasFailures(paths) || (await ReadSyncStateAsync(token))?.Incomplete == true ||
+        (await _contentDatabase.ReadSyncMetadataByPrefixAsync("sync_media_pending:", token)).Count > 0;
 
     public Task ClearFailuresAsync(WikiDataPaths paths) =>
         RunExclusiveAsync(() =>
@@ -275,7 +298,7 @@ public sealed partial class WikiDataLifecycle
                 cancellationToken.ThrowIfCancellationRequested();
                 var baseUrl = $"{book.ApiBaseUrl}?action=query&format=json&prop=info&inprop=url&generator=allpages&gapnamespace={wikiNamespace}&gapfilterredir=nonredirects&gaplimit=max";
                 var url = baseUrl + (string.IsNullOrEmpty(continuation) ? string.Empty : $"&gapcontinue={Uri.EscapeDataString(continuation)}");
-                var json = await RetryAsync(() => _httpTransport.GetStringAsync(book, new Uri(url), cancellationToken), options.MaxRetryAttempts, cancellationToken);
+                var json = await RetryAsync(() => _httpTransport.GetStringAsync(book, new Uri(url), cancellationToken), options.MaxRetryAttempts, cancellationToken, progress);
                 var data = JsonSerializer.Deserialize<RawResponse>(json, JsonOptions);
                 if (data?.Query?.Pages is not null)
                 {
@@ -307,7 +330,7 @@ public sealed partial class WikiDataLifecycle
             var html = await RetryAsync(
                 () => _httpTransport.GetStringAsync(book, new Uri(book.BaseUrl + nextUrl), cancellationToken),
                 options.MaxRetryAttempts,
-                cancellationToken);
+                cancellationToken, progress);
             var document = new HtmlDocument();
             document.LoadHtml(html);
             var items = document.DocumentNode.SelectNodes("//div[@class='mw-spcontent']//ol/li");
@@ -355,7 +378,7 @@ public sealed partial class WikiDataLifecycle
             await DownloadPageAsync(book, page, resourceWriter, cancellationToken);
             var done = Interlocked.Increment(ref current);
             progress?.Report(new WikiProgress("page-download", done, total, page.Title));
-        }, cancellationToken);
+        }, cancellationToken, progress);
 
         if (File.Exists(resourceListPath)) DeduplicateInPlace(resourceListPath);
         return current;
@@ -366,13 +389,7 @@ public sealed partial class WikiDataLifecycle
         var existing = await _contentDatabase.GetItemAsync<WikiPage>(pageInfo.Title, cancellationToken);
         if (existing?.LastModified == pageInfo.LastModified) return;
 
-        var url = new Uri($"{book.ApiBaseUrl}?action=parse&page={Uri.EscapeDataString(pageInfo.Title)}&prop=text&format=xml");
-        var xml = await _httpTransport.GetStringAsync(book, url, cancellationToken);
-        var html = XDocument.Parse(xml).Descendants("text").FirstOrDefault()?.Value;
-        if (html is null)
-            throw new InvalidDataException($"MediaWiki parse response did not contain page HTML for '{pageInfo.Title}'.");
-
-        var processed = WikiContentProcessor.Process(html, book, pageInfo.Title);
+        var processed = await FetchProcessedPageAsync(book, pageInfo.Title, cancellationToken);
         foreach (var resource in processed.ResourceUrls) resourceWriter.Add(resource);
         await _contentDatabase.WriteSyncMetadataAsync("sync_resources:" + pageInfo.Title,
             JsonSerializer.Serialize(processed.ResourceUrls), cancellationToken);
@@ -382,6 +399,15 @@ public sealed partial class WikiDataLifecycle
             Content = processed.Html,
             LastModified = pageInfo.LastModified
         }, processed, cancellationToken);
+    }
+
+    private async Task<ProcessedWikiContent> FetchProcessedPageAsync(WikiBook book, string title, CancellationToken cancellationToken)
+    {
+        var url = new Uri($"{book.ApiBaseUrl}?action=parse&page={Uri.EscapeDataString(title)}&prop=text&format=xml");
+        var xml = await _httpTransport.GetStringAsync(book, url, cancellationToken);
+        var html = XDocument.Parse(xml).Descendants("text").FirstOrDefault()?.Value
+            ?? throw new InvalidDataException($"MediaWiki parse response did not contain page HTML for '{title}'.");
+        return WikiContentProcessor.Process(html, book, title);
     }
 
     private async Task<int> DownloadResourcesAsyncCore(
@@ -406,24 +432,48 @@ public sealed partial class WikiDataLifecycle
         var changed = 0;
         await RunBatchAsync(input, failurePath, options.ResourceConcurrency, options.MaxRetryAttempts, async (_, line) =>
         {
-            var wasChanged = await DownloadResourceAsync(book, line, cancellationToken);
+            var wasChanged = await DownloadResourceAsync(book, line, cancellationToken, progress: progress);
             if (wasChanged) Interlocked.Increment(ref changed);
             var done = Interlocked.Increment(ref current);
             progress?.Report(new WikiProgress(wasChanged ? "resource-downloaded" : "resource-skipped", done, total, WikiContentProcessor.GetFileNameFromUrl(line)));
-        }, cancellationToken);
+        }, cancellationToken, progress);
         return changed;
     }
 
-    private async Task<bool> DownloadResourceAsync(WikiBook book, string url, CancellationToken cancellationToken)
+    private async Task<bool> DownloadResourceAsync(WikiBook book, string url, CancellationToken cancellationToken,
+        bool force = false, IProgress<WikiProgress>? progress = null)
     {
         var fileName = WikiContentProcessor.GetFileNameFromUrl(url);
         var existing = await _contentDatabase.GetItemAsync<WikiAsset>(fileName, cancellationToken);
-        DateTimeOffset? modified = existing?.LastModified is { } value && value != DateTime.MinValue
+        DateTimeOffset? modified = !force && existing?.LastModified is { } value && value != DateTime.MinValue
             ? new DateTimeOffset(DateTime.SpecifyKind(value, DateTimeKind.Utc))
             : null;
-        var response = await _httpTransport.GetContentAsync(book, new Uri(url), modified, cancellationToken);
+        // Alias addresses are optional metadata. Keep the original local key because
+        // stored HTML still references it, even when a shared file has been renamed.
+        var aliasKey = "sync_asset_source:" + WikiSyncMediaTask.Key(url)["sync_media_pending:".Length..];
+        var cached = force ? null : await _contentDatabase.ReadSyncMetadataAsync(aliasKey, cancellationToken);
+        var source = Uri.TryCreate(cached, UriKind.Absolute, out var cachedUri) && cachedUri.Scheme is "http" or "https"
+            ? cachedUri : new Uri(url);
+        WikiHttpContentResponse response;
+        try
+        {
+            response = await _httpTransport.GetContentAsync(book, source, modified, cancellationToken);
+        }
+        catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
+        {
+            var reader = new WikiSyncReader(book, _httpTransport, 0, cancellationToken, progress);
+            var resolved = await reader.AssetSourceAsync(fileName);
+            if (resolved is null || new Uri(resolved) == source) throw;
+            progress?.Report(new WikiProgress("resource-source-resolved", Detail: fileName));
+            // An alias can identify different bytes: never reuse the old file's date
+            // on its first download from the resolved address.
+            response = await _httpTransport.GetContentAsync(book, new Uri(resolved), null, cancellationToken);
+            if (response.IsNotModified) throw new InvalidDataException("Resolved resource returned 304 without an unconditional copy.");
+            await _contentDatabase.WriteSyncMetadataAsync(aliasKey, resolved, cancellationToken);
+        }
         if (response.IsNotModified)
         {
+            if (force) throw new InvalidDataException("Unconditional resource request returned 304.");
             if (existing is null) throw new InvalidDataException("Resource returned 304 without a local copy.");
             return false;
         }
@@ -434,7 +484,8 @@ public sealed partial class WikiDataLifecycle
             Data = response.Data,
             MimeType = response.ContentType,
             LastModified = response.LastModified?.UtcDateTime ?? DateTime.MinValue
-        }, cancellationToken);
+        }, CancellationToken.None);
+        cancellationToken.ThrowIfCancellationRequested();
         return true;
     }
 
@@ -444,7 +495,8 @@ public sealed partial class WikiDataLifecycle
         int concurrency,
         int retryAttempts,
         Func<int, string, Task> processor,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        IProgress<WikiProgress>? progress)
     {
         using var provider = new BatchLineProvider(inputPath);
         var workers = Enumerable.Range(0, concurrency).Select(workerId => Task.Run(async () =>
@@ -456,19 +508,26 @@ public sealed partial class WikiDataLifecycle
                 if (string.IsNullOrWhiteSpace(line)) return;
                 try
                 {
-                    await RetryAsync(() => processor(workerId, line), retryAttempts, cancellationToken);
+                    await RetryAsync(() => processor(workerId, line), retryAttempts, cancellationToken, progress);
+                }
+                catch (Exception exception) when (WikiHttpRetry.IsAccessDenied(exception))
+                {
+                    progress?.Report(new WikiProgress("download-item-failed", Detail: line, Error: exception));
+                    throw;
                 }
                 catch (HttpRequestException exception) when (exception.StatusCode == HttpStatusCode.NotFound)
                 {
                     // Preserve legacy behavior: a missing remote resource is skipped,
                     // not persisted into the retry list.
+                    progress?.Report(new WikiProgress("download-item-missing", Detail: line, Error: exception));
                 }
                 catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
                 {
                     throw;
                 }
-                catch
+                catch (Exception exception)
                 {
+                    progress?.Report(new WikiProgress("download-item-failed", Detail: line, Error: exception));
                     await AppendFailureAsync(failurePath, line, cancellationToken);
                 }
             }
@@ -476,27 +535,30 @@ public sealed partial class WikiDataLifecycle
         await Task.WhenAll(workers);
     }
 
-    private static async Task<T> RetryAsync<T>(Func<Task<T>> action, int retryAttempts, CancellationToken cancellationToken)
+    private static async Task<T> RetryAsync<T>(Func<Task<T>> action, int retryAttempts, CancellationToken cancellationToken,
+        IProgress<WikiProgress>? progress = null)
     {
         var retry = 0;
         while (true)
         {
             cancellationToken.ThrowIfCancellationRequested();
             try { return await action(); }
-            catch (OperationCanceledException) { throw; }
-            catch (Exception exception) when (++retry <= retryAttempts)
+            catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested) { throw; }
+            catch (Exception exception) when (!WikiHttpRetry.IsAccessDenied(exception) && ++retry <= retryAttempts)
             {
+                progress?.Report(new WikiProgress("http-retry", retry, retryAttempts, Error: exception));
                 await WikiHttpRetry.DelayAsync(exception, retry, cancellationToken);
             }
         }
     }
 
-    private static async Task RetryAsync(Func<Task> action, int retryAttempts, CancellationToken cancellationToken) =>
+    private static async Task RetryAsync(Func<Task> action, int retryAttempts, CancellationToken cancellationToken,
+        IProgress<WikiProgress>? progress = null) =>
         await RetryAsync(async () =>
         {
             await action();
             return true;
-        }, retryAttempts, cancellationToken);
+        }, retryAttempts, cancellationToken, progress);
 
     private async Task AppendFailureAsync(string path, string line, CancellationToken cancellationToken)
     {

@@ -8,7 +8,7 @@
     <Grid ColumnDefinitions="*,Auto" Margin="24,20,24,8" MaxWidth="800"
           HorizontalAlignment="Stretch">
       <StackPanel Spacing="3">
-        <TextBlock Text="AI 问答" Classes="page-title" />
+        <TextBlock Text="{DynamicResource Ui.AIChat}" Classes="page-title" />
       </StackPanel>
       <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
         <Button Classes="icon-button" Command="{Binding ToggleFavoriteCommand}"
@@ -26,12 +26,12 @@
         <Button Classes="toolbar-action" Command="{Binding NewConversationCommand}"
                 Click="OnNewConversationClick" MinHeight="44"
                 AutomationProperties.AutomationId="NewConversation"
-                AutomationProperties.Name="新对话">
+                AutomationProperties.Name="{DynamicResource Ui.NewConversation}">
           <StackPanel Orientation="Horizontal" Spacing="7">
             <Path Width="16" Height="16" Data="{StaticResource IconAdd}"
                   Stroke="{Binding $parent[Button].Foreground}"
                   StrokeThickness="1.8" StrokeLineCap="Round" />
-            <TextBlock Text="新对话" FontWeight="SemiBold" />
+            <TextBlock Text="{DynamicResource Ui.NewConversation}" FontWeight="SemiBold" />
           </StackPanel>
         </Button>
       </StackPanel>
@@ -56,8 +56,8 @@
           </Canvas>
         </Border>
         <StackPanel Spacing="6">
-          <TextBlock Text="探索你的 Terraria 世界" Classes="section-title" TextAlignment="Center" />
-          <TextBlock Text="AI 会查阅本地 Wiki，再给出带来源的回答。"
+          <TextBlock Text="{DynamicResource Ui.ExploreYourTerrariaWorld}" Classes="section-title" TextAlignment="Center" />
+          <TextBlock Text="{DynamicResource Ui.AIReadsYourLocalWikiAndAnswersWith}"
                      Classes="page-subtitle" TextAlignment="Center" />
         </StackPanel>
       </StackPanel>
@@ -67,14 +67,14 @@
           <Border Classes="error-card" IsVisible="{Binding IsAiUnavailable}" Padding="14">
             <Grid ColumnDefinitions="*,Auto">
               <StackPanel Spacing="4">
-                <TextBlock Text="AI 当前不可用" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.AICurrentlyUnavailable}" FontWeight="SemiBold" />
                 <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
               <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
-                <Button Content="重试" Command="{Binding RetryCommand}" Classes="secondary-action"
-                        AutomationProperties.Name="重试 AI" />
-                <Button Content="打开 Wiki" Command="{Binding OpenWikiCommand}" Classes="secondary-action"
-                        AutomationProperties.Name="打开 Wiki 阅读" />
+                <Button Content="{DynamicResource Ui.Retry}" Command="{Binding RetryCommand}" Classes="secondary-action"
+                        AutomationProperties.Name="{DynamicResource Ui.RetryAI}" />
+                <Button Content="{DynamicResource Ui.OpenWiki}" Command="{Binding OpenWikiCommand}" Classes="secondary-action"
+                        AutomationProperties.Name="{DynamicResource Ui.OpenWikiReader}" />
               </StackPanel>
             </Grid>
           </Border>
@@ -88,9 +88,9 @@
                           CornerRadius="{DynamicResource RadiusSurface}" Padding="16"
                           HorizontalAlignment="Stretch">
                     <StackPanel Spacing="6">
-                      <TextBlock Text="你" Classes="eyebrow" />
+                      <TextBlock Text="{DynamicResource Ui.You}" Classes="eyebrow" />
                       <SelectableTextBlock Text="{Binding Question}" TextWrapping="Wrap"
-                                           AutomationProperties.Name="用户问题" />
+                                           AutomationProperties.Name="{DynamicResource Ui.UserQuestion}" />
                     </StackPanel>
                   </Border>
 
@@ -126,8 +126,8 @@
                   <Border Classes="answer-card" IsVisible="{Binding HasAnswer}" Padding="18">
                     <StackPanel Spacing="12">
                       <Grid ColumnDefinitions="*,Auto">
-                        <TextBlock Text="AI 结论" Classes="eyebrow" />
-                        <TextBlock Grid.Column="1" Text="正在生成" Classes="muted"
+                        <TextBlock Text="{DynamicResource Ui.AIAnswer}" Classes="eyebrow" />
+                        <TextBlock Grid.Column="1" Text="{DynamicResource Ui.Generating}" Classes="muted"
                                    IsVisible="{Binding IsStreamingAnswer}" />
                       </Grid>
                       <md:SafeMarkdownView Document="{Binding AnswerDocument}" />
@@ -136,7 +136,7 @@
 
                   <Border Classes="tool-trace-card" IsVisible="{Binding IsToolTraceVisible}" Padding="14">
                     <StackPanel Spacing="7">
-                      <TextBlock Text="本轮查阅" FontWeight="SemiBold" FontSize="12" />
+                      <TextBlock Text="{DynamicResource Ui.LookedUpThisTurn}" FontWeight="SemiBold" FontSize="12" />
                       <ItemsControl ItemsSource="{Binding Tools}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="chat:ChatToolProgressViewModel">
@@ -152,13 +152,13 @@
 
                   <Border Classes="sources-card" IsVisible="{Binding HasSources}" Padding="16">
                     <StackPanel Spacing="10">
-                      <TextBlock Text="可信来源" FontWeight="SemiBold" FontSize="13" />
+                      <TextBlock Text="{DynamicResource Ui.Sources}" FontWeight="SemiBold" FontSize="13" />
                       <ItemsControl ItemsSource="{Binding Sources}">
                         <ItemsControl.ItemTemplate>
                           <DataTemplate x:DataType="chat:ChatSourceViewModel">
                             <Button Classes="source-row" Command="{Binding OpenCommand}"
                                     HorizontalAlignment="Stretch" HorizontalContentAlignment="Stretch"
-                                    Margin="0,0,0,6" AutomationProperties.Name="打开可信 Wiki 来源">
+                                    Margin="0,0,0,6" AutomationProperties.Name="{DynamicResource Ui.OpenVerifiedWikiSource}">
                               <Grid ColumnDefinitions="*,Auto">
                                 <StackPanel Spacing="2">
                                   <TextBlock Text="{Binding Title}" FontWeight="SemiBold" TextWrapping="Wrap" />
@@ -175,16 +175,16 @@
 
                   <Border Classes="answer-meta-card" IsVisible="{Binding HasUsage}" Padding="12,9">
                     <Grid ColumnDefinitions="Auto,*">
-                      <TextBlock Text="Token 花费" FontWeight="SemiBold" FontSize="11" />
+                      <TextBlock Text="{DynamicResource Ui.TokenUsage}" FontWeight="SemiBold" FontSize="11" />
                       <SelectableTextBlock Grid.Column="1" Margin="14,0,0,0" Text="{Binding UsageText}"
                                            Classes="muted" TextWrapping="Wrap" FontSize="11"
-                                           AutomationProperties.Name="AI Token 花费" />
+                                           AutomationProperties.Name="{DynamicResource Ui.AITokenUsage}" />
                     </Grid>
                   </Border>
 
                   <TextBlock Text="{Binding StatusMessage}" Classes="muted"
                              IsVisible="{Binding IsTerminalStatusVisible}" TextWrapping="Wrap"
-                             AutomationProperties.Name="本轮 AI 状态" />
+                             AutomationProperties.Name="{DynamicResource Ui.AIStatusForThisTurn}" />
                 </StackPanel>
               </DataTemplate>
             </ItemsControl.ItemTemplate>
@@ -201,14 +201,14 @@
                  Background="Transparent" BorderBrush="Transparent" BorderThickness="0"
                  FocusAdorner="{x:Null}" AcceptsReturn="True" TextWrapping="Wrap"
                  MinHeight="40" MaxHeight="120" VerticalContentAlignment="Center"
-                 PlaceholderText="{Binding ComposerPlaceholder}" AutomationProperties.Name="AI 问题输入" />
-        <TextBlock Grid.Row="1" Margin="10,0,0,2" Text="Enter 发送 · Shift+Enter 换行"
+                 PlaceholderText="{Binding ComposerPlaceholder}" AutomationProperties.Name="{DynamicResource Ui.AIQuestionInput}" />
+        <TextBlock Grid.Row="1" Margin="10,0,0,2" Text="{DynamicResource Ui.EnterToSendShiftEnterForANew}"
                    Classes="muted" FontSize="10" IsVisible="{Binding CanEditQuestion}"
-                   AutomationProperties.Name="输入快捷键提示" />
+                   AutomationProperties.Name="{DynamicResource Ui.InputShortcutHint}" />
         <Button Grid.Column="1" Grid.RowSpan="2" Classes="send-button"
                 VerticalAlignment="Center" IsVisible="{Binding IsSendVisible}"
-                Command="{Binding SendCommand}" ToolTip.Tip="发送（Enter）"
-                AutomationProperties.Name="发送问题">
+                Command="{Binding SendCommand}" ToolTip.Tip="{DynamicResource Ui.SendEnter}"
+                AutomationProperties.Name="{DynamicResource Ui.SendQuestion}">
           <Grid Width="24" Height="24">
             <Path Data="{StaticResource IconSend}" Stretch="None"
                   Stroke="{Binding $parent[Button].Foreground}" StrokeThickness="2.2"
@@ -217,8 +217,8 @@
         </Button>
         <Button Grid.Column="1" Grid.RowSpan="2" Classes="stop-button"
                 VerticalAlignment="Center" IsVisible="{Binding IsStopVisible}"
-                Command="{Binding StopCommand}" ToolTip.Tip="停止"
-                AutomationProperties.Name="停止回答">
+                Command="{Binding StopCommand}" ToolTip.Tip="{DynamicResource Ui.Stop}"
+                AutomationProperties.Name="{DynamicResource Ui.StopAnswer}">
           <Border Width="12" Height="12" CornerRadius="2"
                   Background="{Binding $parent[Button].Foreground}" />
         </Button>

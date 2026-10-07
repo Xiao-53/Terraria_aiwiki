@@ -11,8 +11,8 @@
               BorderThickness="0,0,0,1">
         <Grid ColumnDefinitions="Auto,*,Auto,Auto">
           <Button Classes="icon-button" Command="{Binding Reader.BackCommand}"
-                  ToolTip.Tip="返回上一页"
-                  AutomationProperties.Name="Reader 返回">
+                  ToolTip.Tip="{DynamicResource Ui.BackToPreviousPage}"
+                  AutomationProperties.Name="{DynamicResource Ui.ReaderBack}">
             <PathIcon Width="20" Height="20"
                       Data="{StaticResource IconBack}" />
           </Button>
@@ -41,9 +41,9 @@
           <Button Grid.Column="3" Classes="icon-button"
                   Command="{Binding CloseReaderCommand}"
                   IsVisible="{Binding CanCloseReader}"
-                  ToolTip.Tip="关闭 Wiki Reader"
+                  ToolTip.Tip="{DynamicResource Ui.CloseWikiReader}"
                   AutomationProperties.AutomationId="ReaderClose"
-                  AutomationProperties.Name="关闭 Reader">
+                  AutomationProperties.Name="{DynamicResource Ui.CloseReader}">
             <Canvas Width="20" Height="20">
               <Path Data="{StaticResource IconClose}"
                     Stroke="{Binding $parent[Button].Foreground}"
@@ -55,14 +55,14 @@
       <NativeWebView x:Name="ViewerWebView" Grid.Row="1"
                      HorizontalAlignment="Stretch"
                      VerticalAlignment="Stretch"
-                     AutomationProperties.Name="本地 Wiki Reader" />
+                     AutomationProperties.Name="{DynamicResource Ui.LocalWikiReader}" />
       <Border Grid.Row="2" Classes="reader-status" Padding="12,4"
               BorderBrush="{DynamicResource TerrariaStrokeBrush}"
               BorderThickness="0,1,0,0">
         <TextBlock Text="{Binding Reader.StatusMessage}"
                    FontSize="11" Classes="muted"
                    TextTrimming="CharacterEllipsis"
-                   AutomationProperties.Name="Reader 状态" />
+                   AutomationProperties.Name="{DynamicResource Ui.ReaderStatus}" />
       </Border>
     </Grid>
   </Border>

@@ -44,6 +44,17 @@ internal enum StartupRecoveryKind
 
 internal sealed class ShellViewModel : ObservableObject, IDisposable
 {
+    protected override void OnTextCatalogChanged()
+    {
+        Reader.UseTextCatalog(Text);
+        Chat.UseTextCatalog(Text);
+        Wiki.UseTextCatalog(Text);
+        Favorites.UseTextCatalog(Text);
+        Library.UseTextCatalog(Text);
+        Management.UseTextCatalog(Text);
+        Settings.UseTextCatalog(Text);
+    }
+
     public const double WideReaderThreshold = 1100;
 
     private ShellSection _currentSection = ShellSection.Chat;
@@ -52,7 +63,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     private WikiDisplayMode _wikiMode = WikiDisplayMode.Home;
     private string? _wikiHomeTitle;
     private bool _isWideLayout = true;
-    private string _startupStatus = "正在启动…";
+    private string _startupStatus = UiTextCatalog.Message("Starting");
     private bool _hasStartupError;
     private StartupRecoveryKind _startupRecovery;
     private bool _disposed;
@@ -101,7 +112,8 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
             Chat.MarkConversationDeleted);
         Management = new WikiManagementViewModel(
             pickImportDatabase,
-            exportDatabase);
+            exportDatabase,
+            productDiagnostics);
         Settings = new SettingsViewModel(
             applyPreferences,
             loadAiConfiguration,
@@ -205,7 +217,7 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
 
     public string StartupStatus
     {
-        get => _startupStatus;
+        get => Text.Render(_startupStatus);
         private set => SetProperty(ref _startupStatus, value);
     }
 
@@ -356,10 +368,10 @@ internal sealed class ShellViewModel : ObservableObject, IDisposable
     {
         _wikiHomeTitle = null;
         Reader.Detach();
-        Reader.SetStatus("当前 Wiki 尚未下载页面；请先在数据管理中下载或导入。");
+        Reader.SetStatus(UiTextCatalog.Message("ThisWikiHasNoDownloadedPagesDownloadOr2"));
         CloseReader();
         Management.ShowEmptyWikiOnboarding();
-        SetStartupStatus("当前 Wiki 尚无页面内容 · 请在数据管理中下载或导入");
+        SetStartupStatus(UiTextCatalog.Message("ThisWikiHasNoPagesYetDownloadOr"));
         NavigateManagement();
     }
 

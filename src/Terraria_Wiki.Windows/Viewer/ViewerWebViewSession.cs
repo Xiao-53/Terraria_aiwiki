@@ -76,7 +76,17 @@ internal sealed class ViewerWebViewSession : IAsyncDisposable
             _ready = NewReadyCompletion();
         Interlocked.Exchange(ref _isReady, 0);
         ReadyChanged?.Invoke(this, false);
-        _webView.Source = baseUri;
+        _webView.Source = NavigationUri(baseUri, generation);
+    }
+
+    internal static Uri NavigationUri(Uri baseUri, long generation)
+    {
+        // Source is an Avalonia property: assigning the same URI does not navigate.
+        // A query (not a fragment) starts a fresh document and ViewerReady handshake.
+        var builder = new UriBuilder(baseUri);
+        var query = builder.Query.TrimStart('?');
+        builder.Query = (query.Length == 0 ? "" : query + "&") + "viewerSession=" + generation.ToString(System.Globalization.CultureInfo.InvariantCulture);
+        return builder.Uri;
     }
 
     public Task WaitUntilReadyAsync(

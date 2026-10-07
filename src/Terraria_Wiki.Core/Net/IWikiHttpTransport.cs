@@ -40,6 +40,7 @@ public sealed class HttpClientWikiHttpTransport : IWikiHttpTransport
         ArgumentNullException.ThrowIfNull(book);
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         using var response = await _httpClient.SendAsync(request, HttpCompletionOption.ResponseHeadersRead, cancellationToken);
+        ThrowIfBrowserVerificationRequired(response);
         ThrowIfThrottled(response);
         response.EnsureSuccessStatusCode();
         return await response.Content.ReadAsStringAsync(cancellationToken);
@@ -55,6 +56,7 @@ public sealed class HttpClientWikiHttpTransport : IWikiHttpTransport
         using var request = new HttpRequestMessage(HttpMethod.Get, uri);
         request.Headers.IfModifiedSince = ifModifiedSince;
         using var response = await _httpClient.SendAsync(request, cancellationToken);
+        ThrowIfBrowserVerificationRequired(response);
         ThrowIfThrottled(response);
         if (response.StatusCode != HttpStatusCode.NotModified)
             response.EnsureSuccessStatusCode();
@@ -69,6 +71,13 @@ public sealed class HttpClientWikiHttpTransport : IWikiHttpTransport
             response.Content.Headers.LastModified);
     }
 
+    private static void ThrowIfBrowserVerificationRequired(HttpResponseMessage response)
+    {
+        if (response.Headers.TryGetValues("cf-mitigated", out var values) &&
+            values.Any(value => string.Equals(value, "challenge", StringComparison.OrdinalIgnoreCase)))
+            throw new WikiHttpBrowserVerificationException(response.StatusCode);
+    }
+
     private static void ThrowIfThrottled(HttpResponseMessage response)
     {
         if (response.StatusCode != HttpStatusCode.TooManyRequests &&
@@ -79,6 +88,9 @@ public sealed class HttpClientWikiHttpTransport : IWikiHttpTransport
     }
 }
 
+public sealed class WikiHttpBrowserVerificationException(HttpStatusCode status)
+    : HttpRequestException("The Wiki site requires browser verification.", null, status);
+
 internal sealed class WikiHttpThrottleException(HttpStatusCode status, TimeSpan retryAfter)
     : HttpRequestException("The Wiki server asked the client to retry later.", null, status)
 {
@@ -87,6 +99,9 @@ internal sealed class WikiHttpThrottleException(HttpStatusCode status, TimeSpan 
 
 internal static class WikiHttpRetry
 {
+    public static bool IsAccessDenied(Exception exception) => exception is WikiHttpBrowserVerificationException ||
+        exception is HttpRequestException { StatusCode: HttpStatusCode.Unauthorized or HttpStatusCode.Forbidden };
+
     public static async Task DelayAsync(Exception exception, int attempt, CancellationToken token)
     {
         var delay = exception is WikiHttpThrottleException throttled ? throttled.RetryAfter :

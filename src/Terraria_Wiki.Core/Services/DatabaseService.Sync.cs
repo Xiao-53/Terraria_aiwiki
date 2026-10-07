@@ -6,6 +6,61 @@ namespace Terraria_Wiki.Services;
 
 public partial class DatabaseService
 {
+    internal async Task<IReadOnlyList<WikiDatabaseMetadata>> ReadSyncMetadataByPrefixAsync(string prefix, CancellationToken token)
+    {
+        await Init(cancellationToken: token);
+        return await _db.QueryAsync<WikiDatabaseMetadata>("SELECT Key, Value FROM WikiDatabaseMetadata WHERE Key GLOB ?", prefix + "*").WaitAsync(token);
+    }
+    internal async Task<(Dictionary<string, bool> Tasks, bool Valid)> ReadSyncMediaQueueAsync(string identity, CancellationToken token)
+    {
+        await Init(cancellationToken: token);
+        var header = await ReadSyncMetadataAsync("sync_media_identity", token);
+        var rows = await _db.QueryAsync<WikiDatabaseMetadata>("SELECT Key, Value FROM WikiDatabaseMetadata WHERE Key GLOB 'sync_media_pending:*'").WaitAsync(token);
+        var tasks = new Dictionary<string, bool>(StringComparer.Ordinal);
+        if (rows.Count == 0) return (tasks, header is null || header == "1|" + identity);
+        if (header != "1|" + identity) return (tasks, false);
+        foreach (var row in rows)
+        {
+            try
+            {
+                using var document = JsonDocument.Parse(row.Value);
+                if (document.RootElement.ValueKind != JsonValueKind.Object ||
+                    !document.RootElement.TryGetProperty("Url", out var url) || url.ValueKind != JsonValueKind.String ||
+                    !document.RootElement.TryGetProperty("Force", out var force) || force.ValueKind is not (JsonValueKind.True or JsonValueKind.False)) return ([], false);
+                var task = JsonSerializer.Deserialize<WikiSyncMediaTask>(row.Value);
+                if (task is null || !Uri.TryCreate(task.Url, UriKind.Absolute, out var uri) ||
+                    uri.Scheme is not ("http" or "https") || row.Key != WikiSyncMediaTask.Key(task.Url)) return ([], false);
+                tasks[task.Url] = task.Force;
+            }
+            catch (JsonException) { return ([], false); }
+        }
+        return (tasks, true);
+    }
+
+    internal async Task SaveSyncMediaQueueAsync(string identity, IReadOnlyDictionary<string, bool> tasks, CancellationToken token)
+    {
+        await Init(cancellationToken: token);
+        token.ThrowIfCancellationRequested();
+        await _db.RunInTransactionAsync(connection =>
+        {
+            connection.Execute("DELETE FROM WikiDatabaseMetadata WHERE Key GLOB 'sync_media_pending:*'");
+            connection.InsertOrReplace(new WikiDatabaseMetadata { Key = "sync_media_identity", Value = "1|" + identity });
+            foreach (var task in tasks)
+                connection.InsertOrReplace(new WikiDatabaseMetadata
+                {
+                    Key = WikiSyncMediaTask.Key(task.Key), Value = JsonSerializer.Serialize(new WikiSyncMediaTask(task.Key, task.Value))
+                });
+        });
+        token.ThrowIfCancellationRequested();
+    }
+
+    internal async Task CompleteSyncMediaTaskAsync(string url, CancellationToken token)
+    {
+        token.ThrowIfCancellationRequested();
+        await _db.ExecuteAsync("DELETE FROM WikiDatabaseMetadata WHERE Key = ?", WikiSyncMediaTask.Key(url));
+        token.ThrowIfCancellationRequested();
+    }
+
     internal async Task<Dictionary<string, string[]>> ReadSyncResourceUrlsAsync(IEnumerable<string>? titles, CancellationToken token)
     {
         await Init(cancellationToken: token);
@@ -75,6 +130,7 @@ public partial class DatabaseService
             transaction.Execute("DELETE FROM WikiSearchSection WHERE PageTitle = ?", title);
             transaction.Execute("DELETE FROM WikiPage WHERE Title = ?", title);
             transaction.Execute("DELETE FROM WikiRedirect WHERE FromName = ?", title);
+            transaction.Execute("DELETE FROM WikiDatabaseMetadata WHERE Key = ?", "sync_resources:" + title);
             if (target is not null)
                 transaction.Insert(new WikiRedirect { FromName = title, ToTarget = target });
         });

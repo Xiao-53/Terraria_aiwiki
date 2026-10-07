@@ -9,6 +9,14 @@
     <Setter Property="FontSize" Value="14" />
     <Setter Property="LineHeight" Value="20" />
   </Style>
+  <Style Selector="TextBox">
+    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource TextControlForeground}" />
+  </Style>
+  <Style Selector="SelectableTextBlock">
+    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource TextControlForeground}" />
+  </Style>
   <Style Selector="TextBlock.page-title">
     <Setter Property="FontSize" Value="28" />
     <Setter Property="LineHeight" Value="36" />
@@ -159,6 +167,13 @@
     <Setter Property="BorderThickness" Value="1" />
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
     <Setter Property="Padding" Value="14,10" />
+  </Style>
+  <Style Selector="Border.management-status.floating-status">
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceBrush}" />
+    <Setter Property="BoxShadow" Value="{DynamicResource OverlayShadow}" />
+    <Setter Property="Transitions">
+      <Transitions><DoubleTransition Property="Opacity" Duration="0:0:0.18" /></Transitions>
+    </Setter>
   </Style>
   <Style Selector="Border.path-field">
     <Setter Property="MinHeight" Value="40" />
@@ -414,7 +429,6 @@
     <Setter Property="Padding" Value="10,8" />
     <Setter Property="FontSize" Value="15" />
     <Setter Property="CaretBrush" Value="{DynamicResource TerrariaBrandBrush}" />
-    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
     <Setter Property="FocusAdorner" Value="{x:Null}" />
   </Style>
   <Style Selector="TextBox.composer-input:focus, TextBox.composer-input:focus-within">
@@ -440,7 +454,6 @@
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
     <Setter Property="Padding" Value="10,7" />
     <Setter Property="CaretBrush" Value="{DynamicResource TerrariaBrandBrush}" />
-    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
     <Setter Property="VerticalContentAlignment" Value="Center" />
   </Style>
   <Style Selector="TextBox.api-key-input:pointerover /template/ Border#PART_BorderElement">
@@ -456,15 +469,19 @@
     <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
     <Setter Property="Opacity" Value="0.55" />
   </Style>
+  <Style Selector="ComboBox.ai-selector">
+    <Setter Property="MinHeight" Value="36" />
+    <Setter Property="HorizontalAlignment" Value="Stretch" />
+    <Setter Property="VerticalAlignment" Value="Center" />
+    <Setter Property="HorizontalContentAlignment" Value="Left" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
+  </Style>
   <Style Selector="ComboBox.model-selector /template/ TextBox#PART_EditableTextBox">
     <Setter Property="CaretBrush" Value="{DynamicResource TerrariaBrandBrush}" />
-    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
-    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource TerrariaBrandBrush}" />
   </Style>
   <Style Selector="NumericUpDown.integer-setting /template/ TextBox#PART_TextBox">
     <Setter Property="CaretBrush" Value="{DynamicResource TerrariaBrandBrush}" />
-    <Setter Property="SelectionBrush" Value="{DynamicResource TerrariaBrandSoftBrush}" />
-    <Setter Property="SelectionForegroundBrush" Value="{DynamicResource TerrariaBrandBrush}" />
   </Style>
   <Style Selector="NumericUpDown.integer-setting:pointerover /template/ TextBox#PART_TextBox">
     <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
