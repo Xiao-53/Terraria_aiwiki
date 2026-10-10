@@ -98,8 +98,8 @@ class WikiAgentSettings(_PublicModel):
     reasoning_effort: Literal["none", "low", "medium", "high", "xhigh", "max"] | None = None
     request_limit: int = Field(default=8, ge=1, le=8)
     tool_calls_limit: int = Field(default=8, ge=1, le=8)
-    output_tokens_limit: int = Field(default=4096, ge=1, le=4096)
-    total_tokens_limit: int = Field(default=300_000, ge=1, le=300_000)
+    output_tokens_limit: int | None = Field(default=None, ge=1, le=4096)
+    total_tokens_limit: int | None = Field(default=None, ge=1, le=300_000)
     per_request_input_tokens_limit: int = Field(default=256_000, ge=1, le=256_000)
     timeout_seconds: float = Field(default=120.0, gt=0, le=120.0)
 
@@ -149,17 +149,19 @@ class WikiAgentSettings(_PublicModel):
     def model_settings(self) -> OpenAIResponsesModelSettings | OpenAIChatModelSettings:
         if self.api == "responses":
             responses = OpenAIResponsesModelSettings(
-                max_tokens=self.output_tokens_limit,
                 timeout=self.timeout_seconds,
             )
+            if self.output_tokens_limit is not None:
+                responses["max_tokens"] = self.output_tokens_limit
             if self.reasoning_effort is not None:
                 responses["openai_reasoning_effort"] = self.reasoning_effort
             return responses
 
         chat = OpenAIChatModelSettings(
-            max_tokens=self.output_tokens_limit,
             timeout=self.timeout_seconds,
         )
+        if self.output_tokens_limit is not None:
+            chat["max_tokens"] = self.output_tokens_limit
         if self.reasoning_effort is not None:
             chat["openai_reasoning_effort"] = self.reasoning_effort
         return chat

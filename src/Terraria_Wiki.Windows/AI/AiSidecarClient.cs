@@ -122,9 +122,12 @@ internal sealed class AiSidecarClient : IAsyncDisposable
         string question,
         IReadOnlyList<AiConversationHistoryTurn> history,
         Func<AiRunEvent, ValueTask>? onEvent = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string answerStyle = "detailed")
     {
         if (string.IsNullOrWhiteSpace(question) || question.Length > 32_768)
+            throw new AiRuntimeException("invalid_input");
+        if (answerStyle is not ("detailed" or "concise"))
             throw new AiRuntimeException("invalid_input");
         ArgumentNullException.ThrowIfNull(history);
         if (history.Count > 4 || history.Any(turn => string.IsNullOrWhiteSpace(turn.User)
@@ -159,7 +162,7 @@ internal sealed class AiSidecarClient : IAsyncDisposable
         try
         {
             await _connection.WriteAsync(
-                AiSidecarProtocol.CreateAnswer(requestId, question, history),
+                AiSidecarProtocol.CreateAnswer(requestId, question, history, answerStyle),
                 _lifetime.Token).ConfigureAwait(false);
             while (true)
             {

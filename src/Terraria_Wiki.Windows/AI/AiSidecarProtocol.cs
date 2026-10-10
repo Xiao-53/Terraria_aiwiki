@@ -139,13 +139,15 @@ internal static class AiSidecarProtocol
     public static byte[] CreateAnswer(
         string requestId,
         string question,
-        IReadOnlyList<AiConversationHistoryTurn> history) => Serialize(new
+        IReadOnlyList<AiConversationHistoryTurn> history,
+        string answerStyle = "detailed") => Serialize(new
     {
         version = Version,
         type = "answer",
         requestId,
         question,
         history = history.Select(turn => new { user = turn.User, assistant = turn.Assistant }),
+        answerStyle,
     });
 
     public static byte[] CreateCancel(string requestId, string targetRequestId) => Serialize(new

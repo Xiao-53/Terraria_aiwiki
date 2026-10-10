@@ -58,6 +58,7 @@ class AnswerCommand(_Command):
     type: Literal["answer"]
     question: str = Field(min_length=1, max_length=32_768)
     history: list[SidecarConversationTurn] = Field(max_length=4)
+    answer_style: Literal["detailed", "concise"] = Field(default="detailed", alias="answerStyle")
 
 
 class CancelCommand(_Command):

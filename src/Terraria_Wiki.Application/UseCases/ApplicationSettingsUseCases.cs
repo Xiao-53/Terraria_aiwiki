@@ -91,6 +91,8 @@ public sealed class ApplicationSettingsUseCases
 
         return stored with
         {
+            AiAnswerStyle = stored.AiAnswerStyle is "detailed" or "concise"
+                ? stored.AiAnswerStyle : "detailed",
             Language = Languages.Contains(stored.Language)
                 ? stored.Language
                 : ApplicationPreferences.DefaultLanguage,
@@ -126,6 +128,8 @@ public sealed class ApplicationSettingsUseCases
 
     private static void Validate(ApplicationPreferences preferences)
     {
+        if (preferences.AiAnswerStyle is not ("detailed" or "concise"))
+            throw Invalid(nameof(preferences.AiAnswerStyle));
         if (!Languages.Contains(preferences.Language))
             throw Invalid(nameof(preferences.Language));
         if (!AppThemes.Contains(preferences.AppTheme))

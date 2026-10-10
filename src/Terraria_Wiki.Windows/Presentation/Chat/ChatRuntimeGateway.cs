@@ -60,7 +60,7 @@ internal sealed class WindowsChatRuntimeGateway : IChatRuntimeGateway, IDisposab
         var ai = _runtime.Ai;
         if (ai is null)
             throw new AiRuntimeException(_runtime.AiStatus.ErrorCode ?? "runtime_crashed");
-        return ai.AnswerAsync(question, history, onEvent, cancellationToken);
+        return ai.AnswerAsync(question, history, onEvent, cancellationToken, _runtime.Preferences.AiAnswerStyle);
     }
 
     public Task CancelAsync() => _runtime.Ai?.CancelAsync() ?? Task.CompletedTask;

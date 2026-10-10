@@ -7,7 +7,7 @@ import os
 import sys
 import threading
 from collections.abc import Callable
-from typing import BinaryIO
+from typing import BinaryIO, Literal
 
 from pydantic import ValidationError
 
@@ -203,7 +203,9 @@ class _SidecarRuntime:
 
         self._active_request_id = command.request_id
         self._active_task = asyncio.create_task(
-            self._run_answer(command.request_id, command.question, command.history),
+            self._run_answer(
+                command.request_id, command.question, command.history, command.answer_style
+            ),
             name=f"sidecar-answer-{command.request_id}",
         )
 
@@ -229,6 +231,7 @@ class _SidecarRuntime:
         request_id: str,
         question: str,
         history: list[SidecarConversationTurn],
+        answer_style: Literal["detailed", "concise"],
     ) -> None:
         assert self._agent is not None
         assert self._connection is not None
@@ -263,6 +266,7 @@ class _SidecarRuntime:
                 self._connection,
                 on_event,
                 history=conversation,
+                answer_style=answer_style,
             )
             if "".join(deltas) != answer.markdown:
                 raise SidecarProtocolError("invalid_outgoing_message")

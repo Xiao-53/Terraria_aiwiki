@@ -28,6 +28,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     private Task? _saveTask;
     private int _appThemeIndex;
     private int _languageIndex;
+    private bool _isDetailedAiAnswerEnabled = true;
     private bool _actualThemeIsDark;
     private int _contentThemeIndex;
     private int _startupPageIndex;
@@ -194,6 +195,16 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         {
             if (value is < 0 or > 1 || !IsAvailable || _disposed) return;
             if (SetProperty(ref _languageIndex, value)) MarkDirty();
+        }
+    }
+
+    public bool IsDetailedAiAnswerEnabled
+    {
+        get => _isDetailedAiAnswerEnabled;
+        set
+        {
+            if (!IsAvailable || _disposed) return;
+            if (SetProperty(ref _isDetailedAiAnswerEnabled, value)) MarkDirty();
         }
     }
 
@@ -472,6 +483,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
     private void Apply(ApplicationPreferences preferences)
     {
         _savedPreferences = preferences;
+        _isDetailedAiAnswerEnabled = preferences.AiAnswerStyle != "concise";
         _languageIndex = preferences.Language == "en-us" ? 1 : 0;
         Text.SetLanguage(preferences.Language);
         _appThemeIndex = preferences.AppTheme switch { "light" => 1, "dark" => 2, _ => 0 };
@@ -489,6 +501,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
         _retryAttempts = preferences.RetryAttempts;
         OnPropertyChanged(nameof(AppThemeIndex));
         OnPropertyChanged(nameof(LanguageIndex));
+        OnPropertyChanged(nameof(IsDetailedAiAnswerEnabled));
         OnPropertyChanged(nameof(IsDarkTheme));
         OnPropertyChanged(nameof(ContentThemeIndex));
         OnPropertyChanged(nameof(StartupPageIndex));
@@ -509,6 +522,7 @@ internal sealed class SettingsViewModel : ObservableObject, IDisposable
 
     private ApplicationPreferences BuildPreferences() => (_savedPreferences ?? new ApplicationPreferences()) with
     {
+        AiAnswerStyle = IsDetailedAiAnswerEnabled ? "detailed" : "concise",
         Language = LanguageIndex == 1 ? "en-us" : "zh-cn",
         AppTheme = AppThemeIndex switch { 1 => "light", 2 => "dark", _ => "auto" },
         ContentTheme = ContentThemeIndex == 1 ? "original" : "auto",

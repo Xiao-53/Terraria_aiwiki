@@ -71,7 +71,8 @@ internal sealed class WindowsAiRuntime : IAsyncDisposable
         string question,
         IReadOnlyList<AiConversationHistoryTurn> history,
         Func<AiRunEvent, ValueTask>? onEvent = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        string answerStyle = "detailed")
     {
         ThrowIfDisposed();
         if (Status.State is not WindowsAiRuntimeState.Ready)
@@ -81,7 +82,7 @@ internal sealed class WindowsAiRuntime : IAsyncDisposable
         SetStatus(new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Answering, "AI 正在查询本地 Wiki…"));
         try
         {
-            var answer = await _sidecar.AnswerAsync(question, history, onEvent, cancellationToken)
+            var answer = await _sidecar.AnswerAsync(question, history, onEvent, cancellationToken, answerStyle)
                 .ConfigureAwait(false);
             SetStatus(new WindowsAiRuntimeStatus(WindowsAiRuntimeState.Ready, "AI Runtime 已就绪。"));
             return answer;

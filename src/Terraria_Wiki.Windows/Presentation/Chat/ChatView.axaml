@@ -87,11 +87,8 @@
                           BorderBrush="{DynamicResource TerrariaStrokeBrush}" BorderThickness="1"
                           CornerRadius="{DynamicResource RadiusSurface}" Padding="16"
                           HorizontalAlignment="Stretch">
-                    <StackPanel Spacing="6">
-                      <TextBlock Text="{DynamicResource Ui.You}" Classes="eyebrow" />
-                      <SelectableTextBlock Text="{Binding Question}" TextWrapping="Wrap"
-                                           AutomationProperties.Name="{DynamicResource Ui.UserQuestion}" />
-                    </StackPanel>
+                    <SelectableTextBlock Text="{Binding Question}" TextWrapping="Wrap"
+                                         AutomationProperties.Name="{DynamicResource Ui.UserQuestion}" />
                   </Border>
 
                   <Border Classes="thinking-card" IsVisible="{Binding IsAnswering}" Padding="16">

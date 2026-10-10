@@ -356,6 +356,7 @@
   </Style>
 
   <Style Selector="Border.thinking-card">
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
     <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
     <Setter Property="BorderBrush" Value="{DynamicResource TerrariaBrandHoverBrush}" />
     <Setter Property="BorderThickness" Value="0,0,0,1" />
@@ -370,7 +371,11 @@
     <Setter Property="Background" Value="Transparent" />
     <Setter Property="Padding" Value="0" />
   </Style>
-  <Style Selector="Border.tool-trace-card, Border.answer-meta-card">
+  <Style Selector="Border.tool-trace-card">
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
+    <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
+  </Style>
+  <Style Selector="Border.answer-meta-card">
     <Setter Property="Background" Value="{DynamicResource TerrariaSurfaceAltBrush}" />
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusControl}" />
   </Style>

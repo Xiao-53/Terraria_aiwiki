@@ -95,6 +95,18 @@
             </Grid>
             <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
               <StackPanel Spacing="3" VerticalAlignment="Center">
+                <TextBlock Text="{DynamicResource Ui.AiAnswerStyle}" FontWeight="SemiBold" />
+                <TextBlock Text="{DynamicResource Ui.AiAnswerStyleHint}" Classes="muted" TextWrapping="Wrap" />
+              </StackPanel>
+              <ToggleSwitch Grid.Column="1" Classes="setting-toggle"
+                            IsChecked="{Binding IsDetailedAiAnswerEnabled, Mode=TwoWay}"
+                            OnContent="{DynamicResource Ui.DetailedAnswer}" OffContent="{DynamicResource Ui.ConciseAnswer}"
+                            IsEnabled="{Binding IsAvailable}"
+                            AutomationProperties.AutomationId="AiAnswerStyle"
+                            AutomationProperties.Name="{DynamicResource Ui.AiAnswerStyle}" />
+            </Grid>
+            <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
+              <StackPanel Spacing="3" VerticalAlignment="Center">
                 <TextBlock Text="{DynamicResource Ui.InteractionAnimations}" FontWeight="SemiBold" />
               </StackPanel>
               <ToggleSwitch Grid.Column="1" Classes="setting-toggle"

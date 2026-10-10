@@ -15,6 +15,7 @@ public sealed record ApplicationPreferences
     // Initial interval when the user enables periodic checks.
     public const int DefaultWikiFullScanIntervalDays = 14;
 
+    public string AiAnswerStyle { get; init; } = "detailed";
     public string Language { get; init; } = DefaultLanguage;
     public string AppTheme { get; init; } = DefaultAppTheme;
     public string ContentTheme { get; init; } = DefaultContentTheme;
