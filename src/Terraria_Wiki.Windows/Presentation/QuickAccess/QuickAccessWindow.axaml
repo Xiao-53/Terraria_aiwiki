@@ -89,8 +89,9 @@
                                 CornerRadius="{DynamicResource RadiusControl}" Padding="12">
                           <SelectableTextBlock Text="{Binding Question}" TextWrapping="Wrap" />
                         </Border>
-                        <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap"
-                                   IsVisible="{Binding IsThinking}" />
+                        <chat:ChatActivityView />
+                        <TextBlock Text="{DynamicResource Ui.Generating}" Classes="muted"
+                                   IsVisible="{Binding IsStreamingAnswer}" />
                         <md:SafeMarkdownView Document="{Binding AnswerDocument}"
                                              IsVisible="{Binding HasAnswer}" />
                         <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap"

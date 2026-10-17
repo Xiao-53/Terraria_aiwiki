@@ -514,11 +514,11 @@ internal sealed partial class MainWindow : Window
             _quickRuntimeReady = true;
             if (_quickWindow is { } quickWindow)
                 _ = quickWindow.AttachRuntimeAsync(runtime);
-            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiDispatch))
-                _aiStartupTask = EnableAiInBackgroundAsync(runtime);
             if (!activeWiki.IsPageDownloaded)
             {
                 _shellViewModel.ShowEmptyWikiOnboarding();
+                using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiDispatch))
+                    _aiStartupTask = EnableAiInBackgroundAsync(runtime);
                 StartHiddenWebViewPoc(runtime);
                 return;
             }
@@ -542,6 +542,8 @@ internal sealed partial class MainWindow : Window
                     exception);
             }
 
+            using (WindowsStartupInvestigation.Measure(StartupInvestigationPhase.AiDispatch))
+                _aiStartupTask = EnableAiInBackgroundAsync(runtime);
             var domTimer = Stopwatch.StartNew();
             try
             {
@@ -1109,9 +1111,10 @@ internal sealed partial class MainWindow : Window
 
     private async Task EnableAiInBackgroundAsync(WindowsClientRuntime runtime)
     {
+        _timings.AiDispatchMilliseconds = ElapsedFromProcessStart();
         try
         {
-            await runtime.EnableAiAsync(_lifetime.Token);
+            await Task.Run(() => runtime.EnableAiAsync(_lifetime.Token), _lifetime.Token);
             if (runtime.AiStatus.State == WindowsAiRuntimeState.Ready)
                 _timings.AiReadyMilliseconds = ElapsedFromProcessStart();
         }
@@ -1440,7 +1443,7 @@ internal sealed partial class MainWindow : Window
             if (value is not null)
                 throw new ArgumentException($"{option} may only be supplied once.");
             value = arguments[index].Trim();
-            if (value.Length > 32_768)
+            if (AiTextLimits.IsTooLong(value))
                 throw new ArgumentException($"{option} is too long.");
         }
         return value;
@@ -1572,6 +1575,8 @@ internal sealed class WindowsLifecycleTimings
     public long? AiReadyMilliseconds { get; set; }
     [JsonPropertyName("ai_start_completed_ms")]
     public long AiStartCompletedMilliseconds { get; set; }
+    [JsonPropertyName("ai_dispatch_ms")]
+    public long AiDispatchMilliseconds { get; set; }
     [JsonPropertyName("close_requested_ms")]
     public long CloseRequestedMilliseconds { get; set; }
     [JsonPropertyName("webview_stop_ms")]
@@ -1613,8 +1618,8 @@ internal sealed record WindowsAiSmokeResult(
     int AnswerDeltas,
     int ToolEvents,
     int Sources,
-    int InputTokens,
-    int OutputTokens,
-    int TotalTokens,
+    long InputTokens,
+    long OutputTokens,
+    long TotalTokens,
     long FirstDeltaMilliseconds,
     long TotalMilliseconds);

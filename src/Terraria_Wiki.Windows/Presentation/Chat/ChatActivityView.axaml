@@ -1,0 +1,46 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:chat="clr-namespace:Terraria_Wiki.Windows.Presentation.Chat"
+             xmlns:md="clr-namespace:Terraria_Wiki.Windows.Presentation.Markdown"
+             x:Class="Terraria_Wiki.Windows.Presentation.Chat.ChatActivityView"
+             x:DataType="chat:ChatTurnViewModel" IsVisible="{Binding IsProcessVisible}">
+  <Expander Theme="{StaticResource ChatActivityExpanderTheme}" Header="{Binding ProcessSummary}"
+            IsExpanded="{Binding IsProcessExpanded, Mode=TwoWay}"
+            HorizontalAlignment="Stretch" AutomationProperties.Name="{Binding ProcessSummary}">
+    <Expander.HeaderTemplate>
+      <DataTemplate x:DataType="x:String">
+        <TextBlock Text="{Binding}" FontSize="13" FontWeight="SemiBold" TextWrapping="Wrap" />
+      </DataTemplate>
+    </Expander.HeaderTemplate>
+    <StackPanel Spacing="12">
+      <ProgressBar Height="2" IsIndeterminate="True" IsVisible="{Binding IsAnswering}"
+                   Foreground="{DynamicResource TerrariaBrandBrush}"
+                   Background="{DynamicResource TerrariaStrokeBrush}" />
+      <ItemsControl ItemsSource="{Binding Tools}" IsVisible="{Binding HasTools}">
+        <ItemsControl.ItemTemplate>
+          <DataTemplate x:DataType="chat:ChatToolProgressViewModel">
+            <Grid ColumnDefinitions="20,*,Auto" MinHeight="32" Margin="0,2">
+              <Viewbox Width="16" Height="16" VerticalAlignment="Center">
+                <Grid Width="24" Height="24">
+                  <Ellipse Width="20" Height="20" Stroke="{DynamicResource TerrariaStrokeBrush}" StrokeThickness="1.5"
+                           IsVisible="{Binding IsRunning}" />
+                  <Path Classes="tool-status-icon" Data="{StaticResource IconToolRunning}" IsVisible="{Binding IsRunning}" />
+                  <Path Classes="tool-status-icon" Data="{StaticResource IconToolSucceeded}" IsVisible="{Binding IsSucceeded}" />
+                  <Path Classes="tool-status-icon neutral" Data="{StaticResource IconToolNotFound}" IsVisible="{Binding IsNotFound}" />
+                  <Path Classes="tool-status-icon neutral" Data="{StaticResource IconToolCancelled}" IsVisible="{Binding IsCancelled}" />
+                  <Path Classes="tool-status-icon failed" Data="{StaticResource IconToolFailed}" IsVisible="{Binding IsFailed}" />
+                </Grid>
+              </Viewbox>
+              <TextBlock Grid.Column="1" Text="{Binding DisplayName}" Margin="8,0,12,0"
+                         FontSize="13" TextWrapping="Wrap" VerticalAlignment="Center" />
+              <TextBlock Grid.Column="2" Text="{Binding Status}" Classes="muted"
+                         Classes.tool-failed="{Binding IsFailed}" FontSize="12" VerticalAlignment="Center" />
+            </Grid>
+          </DataTemplate>
+        </ItemsControl.ItemTemplate>
+      </ItemsControl>
+      <md:SafeMarkdownView Document="{Binding ProcessDocument}" IsVisible="{Binding HasProcessText}"
+                           Foreground="{DynamicResource TerrariaTextSecondaryBrush}" />
+    </StackPanel>
+  </Expander>
+</UserControl>

@@ -33,8 +33,29 @@ internal sealed class ChatToolProgressViewModel : ObservableObject
     public string Name { get; }
     private readonly string _displayName;
     public string DisplayName => Text.Render(_displayName);
-    public bool IsRunning { get; set; }
-    public string Status { get => Text.Render(_status); set => SetProperty(ref _status, UiTextCatalog.FromSafeMessage(value)); }
+    public bool IsRunning => _status == "running";
+    public bool IsSucceeded => _status == "succeeded";
+    public bool IsNotFound => _status == "not_found";
+    public bool IsCancelled => _status == "cancelled";
+    public bool IsFailed => !IsRunning && !IsSucceeded && !IsNotFound && !IsCancelled;
+    public string Status => Text.Render(UiTextCatalog.Message(_status switch
+    {
+        "running" => "Running",
+        "succeeded" => "Complete",
+        "not_found" => "NotFound",
+        "cancelled" => "ToolCancelled",
+        _ => "Failed",
+    }));
+
+    public void SetStatus(string status)
+    {
+        if (!SetProperty(ref _status, status, nameof(Status))) return;
+        OnPropertyChanged(nameof(IsRunning));
+        OnPropertyChanged(nameof(IsSucceeded));
+        OnPropertyChanged(nameof(IsNotFound));
+        OnPropertyChanged(nameof(IsCancelled));
+        OnPropertyChanged(nameof(IsFailed));
+    }
 }
 
 internal sealed class ChatSourceViewModel : ObservableObject
@@ -82,6 +103,9 @@ internal sealed class ChatTurnViewModel : ObservableObject
     private readonly SafeMarkdownParser _parser;
     private readonly Func<AiAgentSource, Task> _openSource;
     private readonly StringBuilder _streamingMarkdown = new();
+    private readonly StringBuilder _processMarkdown = new();
+    private SafeMarkdownDocument _processDocument = SafeMarkdownDocument.Empty;
+    private bool _isProcessExpanded;
     private CancellationTokenSource? _scheduledRender;
     private DateTimeOffset _lastRender = DateTimeOffset.MinValue;
     private SafeMarkdownDocument _answerDocument;
@@ -102,16 +126,37 @@ internal sealed class ChatTurnViewModel : ObservableObject
         _usageText = model.Usage is null ? string.Empty : ChatViewModel.FormatTokenSpend(model.Usage);
         _runState = MapRunState(model.Status);
         _statusMessage = StatusFor(model.Status);
+        _isProcessExpanded = model.Status == ChatConversationTurnStatus.Pending;
         foreach (var source in model.Sources)
             Sources.Add(new ChatSourceViewModel(source, openSource).WithText(Text));
         foreach (var call in model.ToolTrace)
-            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)).WithText(Text));
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), call.Status).WithText(Text));
     }
 
     public ChatConversationTurn Model { get; private set; }
     public string Question => Model.Question;
     public ObservableCollection<ChatToolProgressViewModel> Tools { get; } = [];
     public ObservableCollection<ChatSourceViewModel> Sources { get; } = [];
+    public SafeMarkdownDocument ProcessDocument
+    {
+        get => _processDocument;
+        private set
+        {
+            if (SetProperty(ref _processDocument, value))
+            {
+                OnPropertyChanged(nameof(HasProcessText));
+                OnPropertyChanged(nameof(HasProcess));
+                OnPropertyChanged(nameof(IsProcessVisible));
+            }
+        }
+    }
+    public bool HasProcessText => ProcessDocument.Source.Length != 0;
+    public bool HasProcess => HasTools || HasProcessText;
+    public bool IsProcessVisible => IsAnswering || HasProcess;
+    public bool IsProcessExpanded { get => _isProcessExpanded; set => SetProperty(ref _isProcessExpanded, value); }
+    public string ProcessSummary => RunState == ChatRunState.Completed
+        ? Text.Render(UiTextCatalog.Message("CompletedToolCalls", Model.Usage?.ToolCalls ?? Tools.Count))
+        : IsAnswering ? Text.Render(UiTextCatalog.Message("SearchingTheLocalWiki")) : StatusMessage;
     public SafeMarkdownDocument AnswerDocument
     {
         get => _answerDocument;
@@ -125,7 +170,15 @@ internal sealed class ChatTurnViewModel : ObservableObject
             OnPropertyChanged(nameof(ActivityTitle));
         }
     }
-    public string StatusMessage { get => Text.Render(_statusMessage); private set => SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)); }
+    public string StatusMessage
+    {
+        get => Text.Render(_statusMessage);
+        private set
+        {
+            if (SetProperty(ref _statusMessage, UiTextCatalog.FromSafeMessage(value)))
+                OnPropertyChanged(nameof(ProcessSummary));
+        }
+    }
     public string UsageText
     {
         get => Text.Render(_usageText);
@@ -148,6 +201,8 @@ internal sealed class ChatTurnViewModel : ObservableObject
             OnPropertyChanged(nameof(IsToolTraceVisible));
             OnPropertyChanged(nameof(IsTerminalStatusVisible));
             OnPropertyChanged(nameof(IsAttentionStatusVisible));
+            OnPropertyChanged(nameof(ProcessSummary));
+            OnPropertyChanged(nameof(IsProcessVisible));
         }
     }
     public bool IsAnswering => RunState == ChatRunState.Answering;
@@ -173,24 +228,34 @@ internal sealed class ChatTurnViewModel : ObservableObject
                 break;
             case AiRunEventKind.ToolStarted:
                 Tools.Add(new ChatToolProgressViewModel(
-                    value.Name ?? "wiki_tool", DisplayToolName(value.Name), UiTextCatalog.Message("Running")) { IsRunning = true }.WithText(Text));
+                    value.Name ?? "wiki_tool", DisplayToolName(value.Name), "running").WithText(Text));
                 RaiseToolProperties();
                 break;
             case AiRunEventKind.ToolFinished:
                 var item = Tools.LastOrDefault(tool => tool.Name == value.Name && tool.IsRunning);
                 if (item is null)
                     Tools.Add(new ChatToolProgressViewModel(
-                        value.Name ?? "wiki_tool", DisplayToolName(value.Name), DisplayToolStatus(value.Status)).WithText(Text));
+                        value.Name ?? "wiki_tool", DisplayToolName(value.Name), value.Status ?? "failed").WithText(Text));
                 else
-                {
-                    item.IsRunning = false;
-                    item.Status = DisplayToolStatus(value.Status);
-                }
+                    item.SetStatus(value.Status ?? "failed");
                 RaiseToolProperties();
                 break;
             case AiRunEventKind.AnswerDelta:
                 if (!string.IsNullOrEmpty(value.Delta))
                     AppendMarkdown(value.Delta);
+                break;
+            case AiRunEventKind.AnswerReclassified:
+                CancelScheduledRender();
+                if (_processMarkdown.Length > 0) _processMarkdown.AppendLine().AppendLine();
+                _processMarkdown.Append(_streamingMarkdown);
+                _streamingMarkdown.Clear();
+                _lastRender = DateTimeOffset.MinValue;
+                AnswerDocument = SafeMarkdownDocument.Empty;
+                RenderProcessMarkdown();
+                break;
+            case AiRunEventKind.ProcessDelta:
+                _processMarkdown.Append(value.Delta);
+                RenderProcessMarkdown();
                 break;
         }
     }
@@ -206,7 +271,7 @@ internal sealed class ChatTurnViewModel : ObservableObject
             Sources.Add(new ChatSourceViewModel(source, _openSource).WithText(Text));
         Tools.Clear();
         foreach (var call in answer.ToolTrace)
-            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), DisplayToolStatus(call.Status)).WithText(Text));
+            Tools.Add(new ChatToolProgressViewModel(call.Name, DisplayToolName(call.Name), call.Status).WithText(Text));
         RaiseToolProperties();
         OnPropertyChanged(nameof(HasSources));
         UsageText = ChatViewModel.FormatTokenSpend(answer.Usage);
@@ -223,6 +288,8 @@ internal sealed class ChatTurnViewModel : ObservableObject
             UpdatedAt = now,
         };
         RunState = ChatRunState.Completed;
+        IsProcessExpanded = false;
+        OnPropertyChanged(nameof(ProcessSummary));
         StatusMessage = status == ChatConversationTurnStatus.Completed
             ? UiTextCatalog.Message("AnswerComplete")
             : UiTextCatalog.Message("NotEnoughLocalEvidenceTryAMoreSpecific");
@@ -231,10 +298,13 @@ internal sealed class ChatTurnViewModel : ObservableObject
     public void FinishNonSuccess(ChatConversationTurnStatus status, string message, DateTimeOffset now)
     {
         CancelScheduledRender();
+        foreach (var tool in Tools.Where(tool => tool.IsRunning))
+            tool.SetStatus(status == ChatConversationTurnStatus.Cancelled ? "cancelled" : "failed");
         var markdown = _streamingMarkdown.ToString();
         if (markdown.Length > 0)
             AnswerDocument = _parser.Parse(markdown);
-        Model = Model with { Markdown = markdown, Status = status, UpdatedAt = now };
+        // Keep partial text visible, but only typed completion can persist a final body.
+        Model = Model with { Markdown = string.Empty, Status = status, UpdatedAt = now };
         RunState = status == ChatConversationTurnStatus.Cancelled ? ChatRunState.Cancelled : ChatRunState.Failed;
         StatusMessage = message;
     }
@@ -254,6 +324,9 @@ internal sealed class ChatTurnViewModel : ObservableObject
         _scheduledRender = new CancellationTokenSource();
         _ = ScheduleRenderAsync(RenderInterval - elapsed, _scheduledRender);
     }
+
+    private void RenderProcessMarkdown() => ProcessDocument = _parser.Parse(_processMarkdown.ToString(),
+        AiTextLimits.MaximumCharacters * (AiTextLimits.MaximumToolAttempts + 1) + 2 * AiTextLimits.MaximumToolAttempts);
 
     private async Task ScheduleRenderAsync(TimeSpan delay, CancellationTokenSource scheduled)
     {
@@ -291,6 +364,9 @@ internal sealed class ChatTurnViewModel : ObservableObject
     private void RaiseToolProperties()
     {
         OnPropertyChanged(nameof(HasTools));
+        OnPropertyChanged(nameof(HasProcess));
+        OnPropertyChanged(nameof(IsProcessVisible));
+        OnPropertyChanged(nameof(ProcessSummary));
         OnPropertyChanged(nameof(IsToolTraceVisible));
         OnPropertyChanged(nameof(ActivityTitle));
     }
@@ -320,12 +396,6 @@ internal sealed class ChatTurnViewModel : ObservableObject
         _ => UiTextCatalog.Message("WikiTool"),
     };
 
-    private static string DisplayToolStatus(string? status) => status switch
-    {
-        "succeeded" => UiTextCatalog.Message("Complete"),
-        "not_found" => UiTextCatalog.Message("NotFound"),
-        _ => UiTextCatalog.Message("Failed"),
-    };
 }
 
 internal sealed class ChatViewModel : ObservableObject, IDisposable
@@ -528,7 +598,7 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
             var answer = await runtime.AnswerAsync(
                 question,
                 history,
-                value => ApplyRunEventAsync(turnViewModel, value),
+                value => ApplyRunEventAsync(turnViewModel, value, current.Token),
                 current.Token);
             turnViewModel.Complete(answer, DateTimeOffset.Now);
             StatusMessage = turnViewModel.StatusMessage;
@@ -671,18 +741,22 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
         return (split > limit / 2 ? candidate[..split] : candidate).TrimEnd();
     }
 
-    private ValueTask ApplyRunEventAsync(ChatTurnViewModel turn, AiRunEvent value)
+    private ValueTask ApplyRunEventAsync(ChatTurnViewModel turn, AiRunEvent value, CancellationToken cancellationToken)
     {
+        if (_disposed || cancellationToken.IsCancellationRequested) return ValueTask.CompletedTask;
         if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
         {
             turn.ApplyEvent(value);
             return ValueTask.CompletedTask;
         }
-        return DispatchRunEventAsync(turn, value);
+        return DispatchRunEventAsync(turn, value, cancellationToken);
     }
 
-    private static async ValueTask DispatchRunEventAsync(ChatTurnViewModel turn, AiRunEvent value) =>
-        await Dispatcher.UIThread.InvokeAsync(() => turn.ApplyEvent(value));
+    private async ValueTask DispatchRunEventAsync(ChatTurnViewModel turn, AiRunEvent value, CancellationToken cancellationToken) =>
+        await Dispatcher.UIThread.InvokeAsync(() =>
+        {
+            if (!_disposed && !cancellationToken.IsCancellationRequested) turn.ApplyEvent(value);
+        });
 
     private async Task TrySaveAsync()
     {
@@ -706,10 +780,14 @@ internal sealed class ChatViewModel : ObservableObject, IDisposable
     private void OnRuntimeStatusChanged(object? sender, ChatAvailability availability)
     {
         var startupAttempt = WindowsStartupInvestigation.CurrentAiAttempt;
+        void ApplyCurrent()
+        {
+            if (!_disposed && ReferenceEquals(sender, _runtime)) ApplyAvailability(availability, startupAttempt);
+        }
         if (Avalonia.Application.Current is null || Dispatcher.UIThread.CheckAccess())
-            ApplyAvailability(availability, startupAttempt);
+            ApplyCurrent();
         else
-            Dispatcher.UIThread.Post(() => ApplyAvailability(availability, startupAttempt));
+            Dispatcher.UIThread.Post(ApplyCurrent);
     }
 
     private void ApplyAvailability(ChatAvailability availability, int startupAttempt = 0)

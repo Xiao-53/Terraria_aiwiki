@@ -17,11 +17,11 @@ internal enum StartupInvestigationPhase
     TrayInitialization, HotkeyInitialization, RuntimeCreation, ThemeApplication,
     RuntimeAttachment, ActiveWiki, AiDispatch, AiAttempt, AiGateWait,
     AiConfiguration, AiConfigurationDocument, AiCredentialProbe, AiCredentialRead,
-    AiPreviousRuntimeDispose, WikiTools, SidecarStart,
-    SidecarProcessStart, InitializeWrite, ReadyRead, ReadyValidated,
+    AiPreviousRuntimeDispose, WikiTools, AgentInitialization,
+    ReadyValidated,
     HandshakeTimeout, AiStarting, AiReady, AiDisabled, AiFailed, AiStopped,
     AiUiStarting, AiUiReady, AiUiDisabled, AiUiFailed, AiUiStopped,
-    PythonLauncherEntered, PythonSidecarImportStarted, PythonSidecarImportFinished,
+
     ClientLifetimeEnded,
 }
 
@@ -114,34 +114,6 @@ internal static class WindowsStartupInvestigation
     {
         if (!Enabled) return;
         Record(WindowsStartupClock.Name(stage), "ExistingStage", "ProcessWall", duration, CurrentAiAttempt, 0, elapsed);
-    }
-
-    internal static void PythonMarker(string line, int attempt)
-    {
-        if (Enabled && TryParsePythonMarker(line, out var phase, out var duration))
-            Record(phase.ToString(), "Checkpoint", "PythonDurationHostReceipt", duration, attempt, 0);
-    }
-
-    internal static bool TryParsePythonMarker(string line, out StartupInvestigationPhase phase, out long duration)
-    {
-        phase = default;
-        duration = 0;
-        if (line.Length > 128) return false;
-        var parts = line.Split('|');
-        if (parts.Length != 3 || parts[0] != "TERRARIA_STARTUP_DIAGNOSTIC"
-            || !long.TryParse(parts[2], NumberStyles.None, CultureInfo.InvariantCulture, out duration)
-            || duration > 86_400_000)
-            return false;
-        var selected = parts[1] switch
-        {
-            "launcher-entered" => StartupInvestigationPhase.PythonLauncherEntered,
-            "sidecar-import-started" => StartupInvestigationPhase.PythonSidecarImportStarted,
-            "sidecar-import-finished" => StartupInvestigationPhase.PythonSidecarImportFinished,
-            _ => (StartupInvestigationPhase?)null,
-        };
-        if (selected is null) return false;
-        phase = selected.Value;
-        return true;
     }
 
     internal static void Complete()

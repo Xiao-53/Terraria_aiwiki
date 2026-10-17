@@ -6,7 +6,7 @@
              x:DataType="settings:SettingsViewModel">
   <Grid RowDefinitions="Auto,*" Margin="24">
     <Grid ColumnDefinitions="*,Auto" MaxWidth="820" HorizontalAlignment="Stretch">
-      <StackPanel Orientation="Horizontal" Spacing="32"
+      <StackPanel Orientation="Horizontal" Spacing="0"
                   AutomationProperties.Name="{DynamicResource Ui.SettingsTabs}">
         <Button Content="{DynamicResource Ui.GeneralSettings}" Classes="segment-button page-heading" Width="200"
                 Classes.selected="{Binding IsGeneralSelected}"
@@ -86,7 +86,7 @@
                            Classes="muted" TextWrapping="Wrap" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding LanguageIndex, Mode=TwoWay}"
-                        Width="200" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                         IsEnabled="{Binding IsAvailable}" AutomationProperties.AutomationId="InterfaceLanguage"
                         AutomationProperties.Name="{DynamicResource Ui.InterfaceLanguage}">
                 <ComboBoxItem Content="简体中文" />
@@ -142,7 +142,7 @@
                 <TextBlock Text="{DynamicResource Ui.WikiContentTheme}" FontWeight="SemiBold" />
               </StackPanel>
               <ComboBox Grid.Column="1" SelectedIndex="{Binding ContentThemeIndex, Mode=TwoWay}"
-                        Width="200" HorizontalAlignment="Left" VerticalAlignment="Center"
+                        Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                         IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.WikiContentTheme}">
                 <ComboBoxItem Content="{DynamicResource Ui.FollowApp}" />
                 <ComboBoxItem Content="{DynamicResource Ui.OriginalWikiStyle}" />
@@ -207,7 +207,7 @@
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="{DynamicResource Ui.MaximumSearchResults}" FontWeight="SemiBold" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding SearchLimit, Mode=TwoWay}"
                                Minimum="1" Maximum="100" Increment="1" FormatString="0"
                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.MaximumSearchResults}" />
@@ -218,7 +218,7 @@
                   <TextBlock Text="{DynamicResource Ui.LocalWikiCandidatesRetrievedForEachAIQuestion}"
                              Classes="muted" TextWrapping="Wrap" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding AiSearchLimit, Mode=TwoWay}"
                                Minimum="1" Maximum="100" Increment="1" FormatString="0"
                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.AISearchCandidates}" />
@@ -237,7 +237,7 @@
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="{DynamicResource Ui.FullCheckIntervalDays}" FontWeight="SemiBold" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding WikiFullScanIntervalDays, Mode=TwoWay}"
                                Minimum="1" Increment="1" FormatString="0"
                                IsEnabled="{Binding CanEditWikiFullScanInterval}"
@@ -253,7 +253,7 @@
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="{DynamicResource Ui.ConcurrentPages}" FontWeight="SemiBold" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding PageConcurrency, Mode=TwoWay}"
                                Minimum="1" Maximum="3" Increment="1" FormatString="0"
                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.ConcurrentPageDownloads}" />
@@ -262,7 +262,7 @@
                 <StackPanel Spacing="3" VerticalAlignment="Center">
                   <TextBlock Text="{DynamicResource Ui.ConcurrentResources}" FontWeight="SemiBold" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding ResourceConcurrency, Mode=TwoWay}"
                                Minimum="1" Maximum="20" Increment="1" FormatString="0"
                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.ConcurrentResourceDownloads}" />
@@ -272,7 +272,7 @@
                   <TextBlock Text="{DynamicResource Ui.RetryAttempts}" FontWeight="SemiBold" />
                   <TextBlock Text="{DynamicResource Ui.AllowedRangeZeroDisablesAutomaticRetries}" Classes="muted" />
                 </StackPanel>
-                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="120" HorizontalAlignment="Left" VerticalAlignment="Center"
+                <settings:IntegerSettingUpDown Classes="integer-setting" Grid.Column="1" Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                                Value="{Binding RetryAttempts, Mode=TwoWay}"
                                Minimum="0" Maximum="20" Increment="1" FormatString="0"
                                IsEnabled="{Binding IsAvailable}" AutomationProperties.Name="{DynamicResource Ui.DownloadRetryAttempts}" />
@@ -327,10 +327,11 @@
                                        AutomationProperties.Name="{DynamicResource Ui.WebViewRuntimeStatus}" />
                 </StackPanel>
               </Grid>
-              <Grid ColumnDefinitions="*,Auto" ColumnSpacing="12">
+              <Grid Classes="setting-row" ColumnDefinitions="*,220" ColumnSpacing="24">
                 <TextBlock Text="{Binding Diagnostics.Description}" TextWrapping="Wrap"
                            VerticalAlignment="Center" />
                 <Button Grid.Column="1" Content="{DynamicResource Ui.OpenLogFolder}" Classes="secondary-action"
+                        Width="140" HorizontalAlignment="Left" VerticalAlignment="Center"
                         Command="{Binding Diagnostics.OpenLogFolderCommand}"
                         IsVisible="{Binding Diagnostics.CanOpenLogFolder}"
                         AutomationProperties.Name="{DynamicResource Ui.OpenLocalDiagnosticLogFolder}" />

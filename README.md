@@ -1,53 +1,85 @@
 # Terraria AI Wiki
 
-一个面向 Terraria 玩家的 Windows 应用，将本地 Wiki、离线阅读与 AI 问答结合起来。你可以搜索物品、Boss 和合成配方，也可以用自然语言提问，让 AI 查阅本地 Wiki 并给出资料来源。
+Terraria AI Wiki 是一个面向 Terraria 玩家的 Windows 应用。
+ **Quick Ask 快捷查询**：游玩时按下快捷键，就能在小窗口里查询物品、Boss、合成配方和攻略，让 AI 查阅本地 Wiki 回答，或直接打开 Wiki 原文。
 
-## 功能与使用
+## Quick Ask：游玩时的快捷查询窗口
 
-### Wiki 数据管理
+遇到不认识的物品、忘记合成路线，或想查特殊世界的规则时，默认按 **Ctrl+O** 唤起 Quick Ask，点击小窗口即可输入。窗口内支持 **AI / Wiki** 两种模式，无需先切回完整主窗口。
 
-首次使用时，进入「数据」页面，选择要使用的 Wiki，下载数据或导入兼容的本地 `.db` 数据库。全量下载包含页面和媒体资源；轻量下载只包含页面。你可以执行全量更新或快速更新，也可以通过单个 `.db` 文件备份、交换 Wiki 数据。
+### 用自然语言问 AI
 
-![Wiki 数据管理](./assets/readme/data-management.png)
+例如「天顶空岛世界会有什么不同？」。AI 会搜索、读取本地 Wiki，并显示查询过程，再整理成回答；回答附带的 Wiki 来源可以直接在小窗口内打开核对。
 
-![Wiki 下载与更新](./assets/readme/data-update.png)
+![Quick Ask 游戏中 AI 问答](./assets/readme/Snipaste_2026-10-17_10-06-15.png)
 
-### 搜索与离线阅读
+### 直接搜索和阅读 Wiki
 
-在「Wiki」页面输入关键词，查看匹配的词条与章节，点击结果打开正文。已下载的页面可以离线阅读；图片和音频是否可用取决于下载的数据。常用页面可以加入收藏。
+切换到 **Wiki**，输入关键词即可查看匹配的词条与章节，点击结果打开正文。已下载的内容可以离线阅读；图片与音频是否可用取决于下载的数据。
 
-![Quick Ask Wiki 搜索结果](./assets/readme/wiki-search.png)
+![Quick Ask 游戏中 Wiki 阅读](./assets/readme/Snipaste_2026-10-17_10-07-35.png)
 
-### AI 问答
+<details>
+<summary>查看 AI 查询过程与 Wiki 搜索结果</summary>
 
-在「设置 → AI 配置」中选择模型服务并保存配置，然后用自然语言提问。AI 会搜索并读取本地 Wiki，再组织回答；点击回答附带的来源即可核对原文。对话会保存在本机，也可以收藏整段对话。
+![Quick Ask 游戏中查询本地 Wiki](./assets/readme/Snipaste_2026-10-17_10-05-39.png)
+
+![Quick Ask 游戏中 Wiki 搜索](./assets/readme/Snipaste_2026-10-17_10-07-20.png)
+
+</details>
+
+### 唤起、隐藏与继续查询
+
+| 操作 | 默认方式 |
+|---|---|
+| 唤起 Quick Ask | **Ctrl+O**，或托盘菜单 → Quick Ask |
+| 隐藏小窗口 | **Ctrl+P**、窗口内按 **Esc**，或点击关闭按钮 |
+| 调整快捷键与窗口偏好 | 设置 → 常规设置 → Quick Ask |
+| 完全退出应用 | 托盘菜单 → 退出 |
+
+隐藏窗口会保留草稿、对话与阅读位置，也不会中断正在生成的回答。Quick Ask 与主窗口各自保留当前对话；同一时间只能在一个窗口生成 AI 回答。
+
+可以设置默认打开 AI 或 Wiki、是否置顶，以及关闭主窗口后是否留在托盘。已有自定义快捷键时，以设置中的绑定为准。游戏建议使用窗口或无边框模式；独占全屏下的显示效果不作保证。
+
+## 开始使用
+
+1. **准备本地 Wiki**：进入「数据」页面，选择 Wiki 后下载数据，或导入格式与 Wiki 身份匹配的 `.db` 数据库。全量下载包含页面及媒体资源，轻量下载只包含页面；后续可以全量更新、快速更新，或导出数据库备份。
+2. **配置 AI（使用 AI 问答时）**：进入「设置 → AI 配置」，选择模型服务，填写 API Key 和模型；自定义服务还需填写服务地址与 API 类型，确认后保存配置。
+3. **开始查询**：让应用保持运行，游玩时按 **Ctrl+O** 唤起 Quick Ask，选择 AI 或 Wiki 模式。
+
+![Wiki 数据管理与下载进度](./assets/readme/Snipaste_2026-10-17_00-18-18.png)
 
 AI 问答需要联网访问所配置的模型服务，服务可能收费；问题、近期对话和相关 Wiki 摘录会发送给该服务。AI 回答可能有误，请结合引用资料判断。
 
-![AI 问答与 Wiki 来源](./assets/readme/ai-answer.png)
+## 主窗口：阅读与整理资料
 
-### Quick Ask 快捷查询
+主窗口提供更宽的 Wiki 阅读区域，也可以直接搜索词条与章节、收藏常用页面，并查看保存在本机的对话历史或收藏整段对话。设置中支持浅色／暗色主题和简体中文／English (US) 界面；界面语言不会改变 Wiki 原文。
 
-Quick Ask 是一个可随时唤起的小窗口，方便在游玩时提问或查询 Wiki。窗口支持 AI 与 Wiki 模式切换；AI 来源可以直接在小窗口内打开。默认按 **Ctrl+O** 唤起，也可以从托盘菜单打开。快捷键可在设置中修改。
+<details>
+<summary>查看主窗口截图</summary>
 
-![Quick Ask 游戏中 AI 问答](./assets/readme/quick-ask-ai.png)
+Wiki 首页：
 
-![Quick Ask 游戏中 Wiki 阅读](./assets/readme/quick-ask-wiki.png)
+![Wiki 首页](./assets/readme/Snipaste_2026-10-17_10-01-34.png)
 
-## 源码目录
+搜索「猪鲨」：
 
-- `src/`：C# Wiki Core、Application、Wiki Tools、Avalonia Windows 客户端和 Viewer 宿主源码。
-- `agent/`：Python AI Agent 与 Sidecar 源码。
-- `assets/windows/Viewer/`：内嵌 Wiki Viewer 的 HTML、JavaScript 和 CSS 源码。
+![Wiki 搜索结果](./assets/readme/Snipaste_2026-10-17_10-01-53.png)
 
-当前客户端使用 .NET、Avalonia 和 WebView2；AI 部分使用 Python 与 Pydantic AI。当前产品目标为 Windows，Android 尚未实现。
+AI 搜索和读取本地 Wiki：
 
-## 仓库范围
+![AI 查询本地 Wiki](./assets/readme/Snipaste_2026-10-17_09-42-05.png)
 
-此远程仓库当前提供产品源码、本 README 和上面的界面截图。开发计划、测试、构建脚本、项目与依赖配置、数据库和发布制品不在发布范围内，因此该源码快照不能直接构建或运行。
+AI 回答与侧栏 Wiki 阅读：
+
+![AI 问答与侧栏 Wiki 阅读](./assets/readme/Snipaste_2026-10-17_09-42-19.png)
+
+</details>
 
 ## 来源与权利
 
-本项目基于 [BigBearKing/terraria-wiki-offline](https://github.com/BigBearKing/terraria-wiki-offline) 演进，Viewer 资产来源快照对应上游提交 `a1dd899`。第三方源码、组件和素材保留各自适用的许可与权利声明。项目自有源码采用与上游相同的 [CC BY-NC-SA 4.0](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans) 协议。
+本项目基于 [BigBearKing 的 Terraria Wiki Offline](https://github.com/BigBearKing/terraria-wiki-offline) 发展而来，复用部分原有代码与资源，并开发了新的 Windows 界面、AI 问答与 Quick Ask 快捷查询功能。感谢原作者、[Terraria Wiki](https://terraria.wiki.gg/) 社区贡献者和第三方组件作者的工作。
 
-本项目为非官方项目，与 Re-Logic、wiki.gg 或 Calamity Mod 团队无隶属或背书关系。Terraria 及相关名称、商标和游戏素材属于各自权利人。
+项目自有源码采用与上游相同的 [CC BY-NC-SA 4.0（署名—非商业性使用—相同方式共享）](https://creativecommons.org/licenses/by-nc-sa/4.0/deed.zh-hans) 协议。分享和修改时须保留署名、注明修改，不得用于商业用途，衍生作品须按相同协议分享；第三方组件、Wiki 内容、图片与音频保留各自适用的许可与权利声明。
+
+本应用为非官方爱好者项目，与 Re-Logic、wiki.gg 无隶属或背书关系。《Terraria》及相关名称、商标和游戏素材属于各自权利人。

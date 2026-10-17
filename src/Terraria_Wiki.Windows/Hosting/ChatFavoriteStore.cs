@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Terraria_Wiki.Windows.AI;
 using Terraria_Wiki.Windows.Presentation.Favorites;
 
 namespace Terraria_Wiki.Windows.Hosting;
@@ -176,7 +177,7 @@ internal sealed class ChatFavoriteStore : IChatFavoriteStore
             || string.IsNullOrWhiteSpace(favorite.Question)
             || favorite.Question.Length > MaxQuestionLength
             || string.IsNullOrWhiteSpace(favorite.Markdown)
-            || favorite.Markdown.Length > MaxMarkdownLength
+            || AiTextLimits.Count(favorite.Markdown) > MaxMarkdownLength
             || favorite.Sources.Count > MaxSources
             || favorite.Sources.Any(source => string.IsNullOrWhiteSpace(source.ResolvedTitle)))
         {

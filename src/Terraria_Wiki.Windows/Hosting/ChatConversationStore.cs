@@ -384,9 +384,9 @@ internal sealed class ChatConversationStore : IChatConversationStore
     private static bool IsInvalidTurn(ChatConversationTurn? turn) => turn is null
         || turn.Id == Guid.Empty
         || string.IsNullOrWhiteSpace(turn.Question)
-        || turn.Question.Length > 32_768
+        || AiTextLimits.IsTooLong(turn.Question)
         || turn.Markdown is null
-        || turn.Markdown.Length > 32_768
+        || AiTextLimits.IsTooLong(turn.Markdown)
         || turn.Status is ChatConversationTurnStatus.Completed or ChatConversationTurnStatus.InsufficientEvidence
             && string.IsNullOrWhiteSpace(turn.Markdown)
         || turn.Sources is null
@@ -398,7 +398,7 @@ internal sealed class ChatConversationStore : IChatConversationStore
             || source.ResolvedTitle.Length > 1024
             || source.Anchor?.Length > 2048)
         || turn.ToolTrace is null
-        || turn.ToolTrace.Count > 8
+        || turn.ToolTrace.Count > AiTextLimits.MaximumToolAttempts
         || turn.ToolTrace.Any(call => call is null
             || call.Name is not ("search_wiki" or "read_wiki")
             || call.Status is not ("succeeded" or "not_found" or "failed"))

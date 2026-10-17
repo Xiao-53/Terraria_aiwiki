@@ -110,6 +110,68 @@
       </ControlTemplate>
     </Setter>
   </ControlTheme>
+  <ControlTheme x:Key="ChatActivityToggleTheme" TargetType="ToggleButton"
+                BasedOn="{StaticResource ChromeLessButtonTheme}">
+    <Setter Property="MinHeight" Value="44" />
+    <Setter Property="Padding" Value="12,8" />
+    <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
+    <Setter Property="Background" Value="Transparent" />
+    <Setter Property="BorderBrush" Value="Transparent" />
+    <Setter Property="BorderThickness" Value="1" />
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="VerticalContentAlignment" Value="Center" />
+    <Setter Property="FocusAdorner" Value="{x:Null}" />
+    <Style Selector="^:pointerover">
+      <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />
+    </Style>
+    <Style Selector="^:pressed">
+      <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
+    </Style>
+    <Style Selector="^:focus-visible /template/ Border#PART_ButtonFocusRing">
+      <Setter Property="IsVisible" Value="True" />
+    </Style>
+    <Style Selector="^:disabled">
+      <Setter Property="Opacity" Value="0.55" />
+    </Style>
+  </ControlTheme>
+  <ControlTheme x:Key="ChatActivityExpanderTheme" TargetType="Expander">
+    <Setter Property="HorizontalContentAlignment" Value="Stretch" />
+    <Setter Property="Template">
+      <ControlTemplate>
+        <Border Background="{DynamicResource TerrariaSurfaceBrush}"
+                BorderBrush="{DynamicResource TerrariaStrokeBrush}" BorderThickness="1"
+                CornerRadius="{DynamicResource RadiusSurface}">
+          <Grid RowDefinitions="Auto,Auto">
+            <ToggleButton Name="PART_toggle" Theme="{StaticResource ChatActivityToggleTheme}"
+                          IsChecked="{Binding IsExpanded, Mode=TwoWay, RelativeSource={RelativeSource TemplatedParent}}"
+                          AutomationProperties.Name="{Binding Header, RelativeSource={RelativeSource TemplatedParent}}">
+              <Grid ColumnDefinitions="20,*,20">
+                <Path Name="ActivityChevron" Data="{StaticResource IconChevronRight}"
+                      Width="14" Height="14" StrokeThickness="1.6" StrokeLineCap="Round" StrokeJoin="Round"
+                      Stroke="{DynamicResource TerrariaTextSecondaryBrush}" VerticalAlignment="Center" />
+                <ContentPresenter Grid.Column="1" Margin="8,0"
+                                  Content="{TemplateBinding Header}" ContentTemplate="{TemplateBinding HeaderTemplate}"
+                                  VerticalContentAlignment="Center" />
+                <PathIcon Grid.Column="2" Data="{StaticResource IconSearch}" Width="16" Height="16"
+                          Foreground="{DynamicResource TerrariaBrandBrush}" VerticalAlignment="Center" />
+              </Grid>
+            </ToggleButton>
+            <Border Grid.Row="1" IsVisible="{TemplateBinding IsExpanded}"
+                    Background="{DynamicResource TerrariaSurfaceAltBrush}" CornerRadius="{DynamicResource RadiusControl}"
+                    Padding="12" Margin="12,0,12,12">
+              <ContentPresenter Name="PART_ContentPresenter" Content="{TemplateBinding Content}"
+                                ContentTemplate="{TemplateBinding ContentTemplate}"
+                                HorizontalContentAlignment="Stretch" />
+            </Border>
+          </Grid>
+        </Border>
+      </ControlTemplate>
+    </Setter>
+    <Style Selector="^:expanded /template/ Path#ActivityChevron">
+      <Setter Property="Data" Value="{StaticResource IconChevronDown}" />
+    </Style>
+  </ControlTheme>
   <ControlTheme x:Key="ReaderSplitterTheme" TargetType="GridSplitter">
     <Setter Property="Template">
       <ControlTemplate>

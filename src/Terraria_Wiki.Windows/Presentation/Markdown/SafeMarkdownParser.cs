@@ -2,6 +2,7 @@ using Markdig;
 using Markdig.Extensions.Tables;
 using Markdig.Syntax;
 using Markdig.Syntax.Inlines;
+using Terraria_Wiki.Windows.AI;
 
 namespace Terraria_Wiki.Windows.Presentation.Markdown;
 
@@ -15,10 +16,10 @@ internal sealed class SafeMarkdownParser
         .UsePipeTables()
         .Build();
 
-    public SafeMarkdownDocument Parse(string? markdown)
+    public SafeMarkdownDocument Parse(string? markdown, int maximumCharacters = MaxMarkdownLength)
     {
         markdown ??= string.Empty;
-        if (markdown.Length > MaxMarkdownLength)
+        if (AiTextLimits.Count(markdown) > maximumCharacters)
             throw new ArgumentOutOfRangeException(nameof(markdown), "Markdown exceeds the 32 KiB answer boundary.");
         if (markdown.Length == 0)
             return SafeMarkdownDocument.Empty;

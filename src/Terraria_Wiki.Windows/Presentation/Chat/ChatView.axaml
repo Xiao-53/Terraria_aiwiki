@@ -91,34 +91,7 @@
                                          AutomationProperties.Name="{DynamicResource Ui.UserQuestion}" />
                   </Border>
 
-                  <Border Classes="thinking-card" IsVisible="{Binding IsAnswering}" Padding="16">
-                    <StackPanel Spacing="10">
-                      <Grid ColumnDefinitions="Auto,*">
-                        <Border Width="30" Height="30" CornerRadius="15"
-                                Background="{DynamicResource TerrariaBrandSoftBrush}">
-                          <PathIcon Width="18" Height="18"
-                                    Foreground="{DynamicResource TerrariaBrandBrush}"
-                                    Data="M 3,5 L 15,5 L 15,13 L 9,13 L 6,16 L 6,13 L 3,13 Z" />
-                        </Border>
-                        <StackPanel Grid.Column="1" Margin="10,0,0,0" Spacing="2">
-                          <TextBlock Text="{Binding ActivityTitle}" FontWeight="SemiBold" />
-                          <TextBlock Text="{Binding StatusMessage}" Classes="muted" TextWrapping="Wrap" />
-                        </StackPanel>
-                      </Grid>
-                      <ProgressBar Height="3" IsIndeterminate="True"
-                                   Foreground="{DynamicResource TerrariaBrandBrush}" />
-                      <ItemsControl ItemsSource="{Binding Tools}" IsVisible="{Binding HasTools}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="chat:ChatToolProgressViewModel">
-                            <Grid ColumnDefinitions="*,Auto" Margin="4,3">
-                              <TextBlock Text="{Binding DisplayName}" FontSize="12" />
-                              <TextBlock Grid.Column="1" Text="{Binding Status}" Classes="muted" FontSize="11" />
-                            </Grid>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
-                    </StackPanel>
-                  </Border>
+                  <chat:ChatActivityView />
 
                   <Border Classes="answer-card" IsVisible="{Binding HasAnswer}" Padding="18">
                     <StackPanel Spacing="12">
@@ -128,22 +101,6 @@
                                    IsVisible="{Binding IsStreamingAnswer}" />
                       </Grid>
                       <md:SafeMarkdownView Document="{Binding AnswerDocument}" />
-                    </StackPanel>
-                  </Border>
-
-                  <Border Classes="tool-trace-card" IsVisible="{Binding IsToolTraceVisible}" Padding="14">
-                    <StackPanel Spacing="7">
-                      <TextBlock Text="{DynamicResource Ui.LookedUpThisTurn}" FontWeight="SemiBold" FontSize="12" />
-                      <ItemsControl ItemsSource="{Binding Tools}">
-                        <ItemsControl.ItemTemplate>
-                          <DataTemplate x:DataType="chat:ChatToolProgressViewModel">
-                            <Grid ColumnDefinitions="*,Auto" Margin="3,2">
-                              <TextBlock Text="{Binding DisplayName}" FontSize="11" />
-                              <TextBlock Grid.Column="1" Text="{Binding Status}" Classes="muted" FontSize="11" />
-                            </Grid>
-                          </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                      </ItemsControl>
                     </StackPanel>
                   </Border>
 

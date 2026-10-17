@@ -355,6 +355,22 @@
     <Setter Property="Background" Value="{DynamicResource TerrariaBrandPressedBrush}" />
   </Style>
 
+  <Style Selector="Path.tool-status-icon">
+    <Setter Property="Stretch" Value="None" />
+    <Setter Property="Stroke" Value="{DynamicResource TerrariaBrandBrush}" />
+    <Setter Property="StrokeThickness" Value="1.6" />
+    <Setter Property="StrokeLineCap" Value="Round" />
+    <Setter Property="StrokeJoin" Value="Round" />
+  </Style>
+  <Style Selector="Path.tool-status-icon.neutral">
+    <Setter Property="Stroke" Value="{DynamicResource TerrariaTextSecondaryBrush}" />
+  </Style>
+  <Style Selector="Path.tool-status-icon.failed">
+    <Setter Property="Stroke" Value="{DynamicResource TerrariaDangerBrush}" />
+  </Style>
+  <Style Selector="TextBlock.tool-failed">
+    <Setter Property="Foreground" Value="{DynamicResource TerrariaDangerBrush}" />
+  </Style>
   <Style Selector="Border.thinking-card">
     <Setter Property="CornerRadius" Value="{DynamicResource RadiusSurface}" />
     <Setter Property="Background" Value="{DynamicResource TerrariaBrandSoftBrush}" />

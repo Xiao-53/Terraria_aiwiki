@@ -414,7 +414,11 @@ internal sealed class WindowsClientRuntime : IAsyncDisposable
         }
     }
 
-    private void OnAiStatusChanged(object? sender, WindowsAiRuntimeStatus status) => PublishAiStatus(status);
+    private void OnAiStatusChanged(object? sender, WindowsAiRuntimeStatus status)
+    {
+        if (ReferenceEquals(sender, _ai) && Volatile.Read(ref _disposed) == 0)
+            PublishAiStatus(status);
+    }
 
     private void PublishAiStatus(WindowsAiRuntimeStatus status)
     {

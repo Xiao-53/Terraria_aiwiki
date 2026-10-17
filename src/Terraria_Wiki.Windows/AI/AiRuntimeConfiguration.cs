@@ -9,13 +9,12 @@ internal sealed record AiProviderConfiguration(
     string? ReasoningEffort);
 
 internal sealed record AiRuntimeConfiguration(
-    string PythonExecutable,
     AiProviderConfiguration Provider,
     string ApiKey,
     string ConfigurationPath)
 {
     public override string ToString() =>
-        $"AiRuntimeConfiguration {{ PythonExecutable = {PythonExecutable}, Provider = {Provider}, " +
+        $"AiRuntimeConfiguration {{ Provider = {Provider}, " +
         $"ApiKey = [REDACTED], ConfigurationPath = {ConfigurationPath} }}";
 
     public static async Task<AiRuntimeConfiguration> LoadAsync(
@@ -25,15 +24,13 @@ internal sealed record AiRuntimeConfiguration(
         var path = ParseConfigurationPath(arguments) ?? DefaultConfigurationPath();
         return await new AiRuntimeConfigurationStore(
                 path,
-                new WindowsAiCredentialStore(),
-                AiRuntimePaths.BundledPythonExecutable)
+                new WindowsAiCredentialStore())
             .LoadRequiredAsync(cancellationToken)
             .ConfigureAwait(false);
     }
 
     internal static AiRuntimeConfiguration Create(
         string configurationPath,
-        string pythonExecutable,
         AiProviderConfiguration provider,
         string apiKey)
     {
@@ -41,7 +38,6 @@ internal sealed record AiRuntimeConfiguration(
         if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
             throw new AiConfigurationException("ai-config-path-invalid", "AI 配置路径无效。");
         return new AiRuntimeConfiguration(
-            ValidatePythonExecutable(pythonExecutable),
             ValidateProvider(provider),
             ValidateApiKey(apiKey),
             Path.GetFullPath(configurationPath));
@@ -69,32 +65,6 @@ internal sealed record AiRuntimeConfiguration(
         Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
         "Terraria AI Wiki",
         "ai-runtime.json");
-
-    private static string ValidatePythonExecutable(string value)
-    {
-        if (string.IsNullOrWhiteSpace(value)
-            || value != value.Trim()
-            || !Path.IsPathFullyQualified(value))
-        {
-            throw new AiConfigurationException("python-invalid", "Python 路径必须是绝对路径。");
-        }
-
-        string fullPath;
-        try
-        {
-            fullPath = Path.GetFullPath(value);
-        }
-        catch (Exception exception) when (exception is ArgumentException or NotSupportedException or PathTooLongException)
-        {
-            throw new AiConfigurationException("python-invalid", "Python 路径无效。");
-        }
-        if (!string.Equals(Path.GetFileName(fullPath), "python.exe", StringComparison.OrdinalIgnoreCase)
-            || !File.Exists(fullPath))
-        {
-            throw new AiConfigurationException("python-missing", "未找到配置的 python.exe。");
-        }
-        return fullPath;
-    }
 
     internal static AiProviderConfiguration ValidateProvider(AiProviderConfiguration provider)
     {

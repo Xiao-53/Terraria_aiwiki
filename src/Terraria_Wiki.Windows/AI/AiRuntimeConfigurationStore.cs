@@ -5,7 +5,6 @@ using Terraria_Wiki.Windows.Hosting;
 namespace Terraria_Wiki.Windows.AI;
 
 internal sealed record AiRuntimeConfigurationDraft(
-    string PythonExecutable,
     AiProviderConfiguration Provider,
     string ApiKey,
     string ConfigurationPath,
@@ -13,7 +12,7 @@ internal sealed record AiRuntimeConfigurationDraft(
     bool HasStoredCredential)
 {
     public override string ToString() =>
-        $"AiRuntimeConfigurationDraft {{ PythonExecutable = {PythonExecutable}, Provider = {Provider}, " +
+        $"AiRuntimeConfigurationDraft {{ Provider = {Provider}, " +
         $"ApiKey = [REDACTED], ConfigurationPath = {ConfigurationPath}, Exists = {Exists}, " +
         $"HasStoredCredential = {HasStoredCredential} }}";
 }
@@ -33,18 +32,15 @@ internal sealed class AiRuntimeConfigurationStore
     };
 
     private readonly IAiCredentialStore _credentialStore;
-    private readonly Func<string> _pythonExecutable;
 
     public AiRuntimeConfigurationStore(
         string configurationPath,
-        IAiCredentialStore? credentialStore = null,
-        Func<string>? pythonExecutable = null)
+        IAiCredentialStore? credentialStore = null)
     {
         if (string.IsNullOrWhiteSpace(configurationPath) || !Path.IsPathFullyQualified(configurationPath))
             throw new AiConfigurationException("ai-config-path-invalid", "AI 配置路径无效。");
         ConfigurationPath = Path.GetFullPath(configurationPath);
         _credentialStore = credentialStore ?? new WindowsAiCredentialStore();
-        _pythonExecutable = pythonExecutable ?? AiRuntimePaths.BundledPythonExecutable;
     }
 
     public string ConfigurationPath { get; }
@@ -55,7 +51,6 @@ internal sealed class AiRuntimeConfigurationStore
         if (!File.Exists(ConfigurationPath))
         {
             return new AiRuntimeConfigurationDraft(
-                _pythonExecutable(),
                 DefaultProvider(),
                 string.Empty,
                 ConfigurationPath,
@@ -68,7 +63,6 @@ internal sealed class AiRuntimeConfigurationStore
             document = await MigrateVersionTwoAsync(document, cancellationToken).ConfigureAwait(false);
         var provider = ValidateProvider(document.Provider);
         return new AiRuntimeConfigurationDraft(
-            _pythonExecutable(),
             provider,
             string.Empty,
             ConfigurationPath,
@@ -85,7 +79,6 @@ internal sealed class AiRuntimeConfigurationStore
         var apiKey = ReadRequiredCredential();
         return AiRuntimeConfiguration.Create(
             ConfigurationPath,
-            draft.PythonExecutable,
             draft.Provider,
             apiKey);
     }
@@ -126,7 +119,6 @@ internal sealed class AiRuntimeConfigurationStore
 
         return AiRuntimeConfiguration.Create(
             ConfigurationPath,
-            _pythonExecutable(),
             provider,
             replacementCredential);
     }

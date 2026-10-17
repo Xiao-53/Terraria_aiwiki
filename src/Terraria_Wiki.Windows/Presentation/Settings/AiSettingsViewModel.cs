@@ -24,7 +24,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     private bool _hasLoaded;
     private bool _isDirty;
     private int _providerIndex;
-    private string _pythonExecutable = string.Empty;
     private string _apiKey = string.Empty;
     private bool _hasStoredCredential;
     private string _model = string.Empty;
@@ -378,7 +377,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
             var saved = await _save(BuildDraft(), current.Token);
             current.Token.ThrowIfCancellationRequested();
             Apply(new AiRuntimeConfigurationDraft(
-                saved.PythonExecutable,
                 saved.Provider,
                 string.Empty,
                 saved.ConfigurationPath,
@@ -495,7 +493,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
     {
         var isDeepSeek = IsDeepSeekPreset(draft.Provider);
         _providerIndex = isDeepSeek ? 0 : 1;
-        _pythonExecutable = draft.PythonExecutable;
         _apiKey = draft.ApiKey;
         _hasStoredCredential = draft.HasStoredCredential;
         _model = draft.Provider.Model;
@@ -545,7 +542,6 @@ internal sealed class AiSettingsViewModel : ObservableObject, IDisposable
                 CustomApiIndex == 1 ? "chat_completions" : "responses",
                 MapReasoningEffort());
         return new AiRuntimeConfigurationDraft(
-            _pythonExecutable,
             provider,
             ApiKey,
             configurationPath ?? _savedDraft?.ConfigurationPath ?? string.Empty,
